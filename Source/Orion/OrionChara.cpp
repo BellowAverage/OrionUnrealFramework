@@ -54,6 +54,8 @@ AOrionChara::AOrionChara()
 
     // 3) Weapon equipment logics
     SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
+
+    
 }
 
 // Called when the game starts or when spawned
@@ -147,6 +149,8 @@ void AOrionChara::BeginPlay()
 void AOrionChara::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    UE_LOG(LogTemp, Log, TEXT("DoOnceInteractWithActor: %s"), DoOnceInteractWithActor ? TEXT("True") : TEXT("False"));
 
     //FVector Velocity = GetCharacterMovement()->Velocity;
     //if (Velocity.Size() > 0 && Velocity.Size() < 400.0f)
@@ -356,7 +360,6 @@ bool AOrionChara::PickUpItem(float DeltaTime, AOrionActor* InTarget)
             bMontagePlaying = true;
             bMontageFinished = false;
 
-			OrionPickup(InTarget);
         }
     }
 
@@ -369,6 +372,9 @@ bool AOrionChara::PickUpItem(float DeltaTime, AOrionActor* InTarget)
             // 如果动画播放完成，返回 true
             bMontagePlaying = false;
             bMontageFinished = true;
+
+            OrionPickup(InTarget);
+
             // 设置角色状态为 Carrying
             CharaState = ECharaState::Carrying;
 			InTarget->Destroy();
@@ -405,6 +411,29 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		}
 
         IsInteractWithActor = true;
+
+		// Determine the type of interaction
+
+		FString TargetInteractType = InTarget->GetInteractType();
+        if (TargetInteractType == "Mining")
+        {
+			InteractType = EInteractType::Mining;
+        }
+        else
+        {
+			InteractType = EInteractType::Unavailable;
+			UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: Unavailable interact type."));
+			IsInteractWithActor = false;
+			return true;
+        }
+
+		if (!DoOnceInteractWithActor)
+		{
+			DoOnceInteractWithActor = true;
+            CurrentInteractActor = InTarget;
+            InTarget->CurrWorkers += 1;
+		}
+
         if (AIController)
         {
             AIController->StopMovement();
@@ -486,6 +515,10 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 void AOrionChara::InteractWithActorStop()
 {
     IsInteractWithActor = false;
+	DoOnceInteractWithActor = false;
+	CurrentInteractActor->CurrWorkers -= 1;
+	CurrentInteractActor = nullptr;
+	InteractType = EInteractType::Unavailable;
 }
 
 bool AOrionChara::AttackOnChara(float DeltaTime, AOrionChara* InTarget, FVector HitOffset)
@@ -1119,3 +1152,14 @@ AOrionChara* AOrionChara::GetClosestOrionChara()
     return ClosestOrionChara;
 }
 
+void AOrionChara::AddItemToInventory(int ItemID, int Quantity)
+{
+	if (CharaInventoryMap.contains(ItemID))
+	{
+		CharaInventoryMap[ItemID] += Quantity;
+	}
+	else
+	{
+		CharaInventoryMap[ItemID] = Quantity;
+	}
+}

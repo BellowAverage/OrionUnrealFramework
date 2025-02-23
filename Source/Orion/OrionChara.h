@@ -3,6 +3,7 @@
 // OrionChara.h
 
 #include "AIController.h"
+#include <unordered_map>
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include <Perception/AIPerceptionStimuliSourceComponent.h>
@@ -20,6 +21,13 @@ enum class ECharaState : uint8
 	Dead UMETA(DisplayName = "Dead"),
 	Incapacitated UMETA(DisplayName = "Incapacitated"),
 	Carrying UMETA(DisplayName = "Carrying")
+};
+
+UENUM(BlueprintType)
+enum class EInteractType : uint8
+{
+	Unavailable UMETA(DisplayName = "Unavailable"),
+	Mining UMETA(DisplayName = "Mining"),
 };
 
 UENUM(BlueprintType)
@@ -117,28 +125,32 @@ public:
     void InteractWithActorStop();
     UFUNCTION(BlueprintImplementableEvent)
 	void OrionPickup(AOrionActor* InTarget);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | InteractWithActor")
+	EInteractType InteractType = EInteractType::Unavailable;
 
-    // 动画蒙太奇
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
     UAnimMontage* PickupMontage;
 
-    // 附加到的骨骼名称
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Pickup")
     FName AttachBoneName;
 
-    // 判断动画是否完成的布尔变量
     UPROPERTY(BlueprintReadOnly, Category = "Pickup")
     bool bMontageFinished;
 
-    // 内部用于检测蒙太奇状态
     bool bMontagePlaying;
-
-    // 记录动画实例
     UAnimInstance* AnimInstance;
 
 	bool PickUpItem(float DeltaTime, AOrionActor* InTarget);
+	AOrionActor* CurrentInteractActor = nullptr;
+
+    bool DoOnceInteractWithActor = false;
 
     /* Inventory */
+    std::unordered_map<int, int> CharaInventoryMap;
+    UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void AddItemToInventory(int ItemID, int Quantity);
+
+    /* Equipment */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
     TSubclassOf<AOrionWeapon> PrimaryWeaponClass;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
@@ -153,7 +165,6 @@ public:
 	void AttackOnCharaLongRangeStop();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
     float FireRange;
-
 
     UFUNCTION(BlueprintCallable, Category = "Action | AttackOnChara")
     void SpawnBulletActor(const FVector& TargetLocation, float DeltaTime);
