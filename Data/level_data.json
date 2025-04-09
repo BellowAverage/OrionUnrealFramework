@@ -1,0 +1,502 @@
+[
+    {
+        "name": "StaticMeshActor_1",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_1",
+        "location": {
+            "x": 341.0,
+            "y": -963.0,
+            "z": 105.0
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_4",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_4",
+        "location": {
+            "x": 310.0,
+            "y": 117.0,
+            "z": 105.0
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_6",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_6",
+        "location": {
+            "x": 358.0,
+            "y": -850.0,
+            "z": 105.0
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_8",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_8",
+        "location": {
+            "x": 240.00000031870007,
+            "y": -948.0,
+            "z": 105.00012092322623
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_10",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_10",
+        "location": {
+            "x": 238.0,
+            "y": -572.0,
+            "z": 112.0
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 44.99999965141367,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 4.999999046325684,
+            "y": 1.5999999046325684,
+            "z": 1.7000012397766113
+        }
+    },
+    {
+        "name": "StaticMeshActor_0",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_0",
+        "location": {
+            "x": -1070.0,
+            "y": -780.0,
+            "z": 100.0
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_3",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_3",
+        "location": {
+            "x": -660.0,
+            "y": -350.0,
+            "z": 125.00009999999747
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_7",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_7",
+        "location": {
+            "x": -760.0,
+            "y": -350.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_9",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_9",
+        "location": {
+            "x": -860.0,
+            "y": -350.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_11",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_11",
+        "location": {
+            "x": -960.0,
+            "y": -350.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_12",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_12",
+        "location": {
+            "x": -1060.0,
+            "y": -350.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_13",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_13",
+        "location": {
+            "x": -1160.0,
+            "y": -350.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_14",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_14",
+        "location": {
+            "x": -660.0,
+            "y": -250.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_15",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_15",
+        "location": {
+            "x": -760.0,
+            "y": -250.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_16",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_16",
+        "location": {
+            "x": -860.0,
+            "y": -250.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_17",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_17",
+        "location": {
+            "x": -960.0,
+            "y": -250.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_18",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_18",
+        "location": {
+            "x": -1060.0,
+            "y": -250.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_19",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_19",
+        "location": {
+            "x": -1160.0,
+            "y": -250.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_20",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_20",
+        "location": {
+            "x": -660.0,
+            "y": -150.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_21",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_21",
+        "location": {
+            "x": -760.0,
+            "y": -150.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_22",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_22",
+        "location": {
+            "x": -860.0,
+            "y": -150.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_23",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_23",
+        "location": {
+            "x": -960.0,
+            "y": -150.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_24",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_24",
+        "location": {
+            "x": -1060.0,
+            "y": -150.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_25",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_25",
+        "location": {
+            "x": -1160.0,
+            "y": -150.0,
+            "z": 125.0001
+        },
+        "rotation": {
+            "pitch": 0.0,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+        }
+    },
+    {
+        "name": "StaticMeshActor_5",
+        "class": "StaticMeshActor",
+        "path": "/Game/_Orion/Maps/Playground.Playground:PersistentLevel.StaticMeshActor_5",
+        "location": {
+            "x": 37.218212931344624,
+            "y": -184.6324416615639,
+            "z": 107.84420308526245
+        },
+        "rotation": {
+            "pitch": 9.999999922536329,
+            "yaw": 0.0,
+            "roll": 0.0
+        },
+        "scale": {
+            "x": 15.0,
+            "y": 15.0,
+            "z": 15.0
+        }
+    }
+]
