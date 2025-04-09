@@ -31,4 +31,8 @@ public:
     UUserWidget* ActiveCharaSelectionMenu = nullptr;
     void ListenChangeCharaSelection();
     static std::vector<AOrionChara*> PreviousCharaSelection;
+
+    TArray<FString> InfoLines;
+    bool bShowActorInfo;
+    void ShowInfoAtMouse(const TArray<FString>& InLines);
 };

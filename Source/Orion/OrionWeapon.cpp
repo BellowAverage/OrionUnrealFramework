@@ -5,6 +5,7 @@
 #include "OrionProjectile.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include <Kismet/GameplayStatics.h>
+#include "Kismet/KismetMathLibrary.h"
 
 // Sets default values
 AOrionWeapon::AOrionWeapon()
@@ -53,13 +54,28 @@ void AOrionWeapon::SpawnOrionBulletActor(const FVector& TargetLocation, const FV
 
     FVector SpawnLocation = MuzzleLocation;
 
-    // Calculate direction
+    // Calculate ideal direction
     FVector DirectionToTarget = (TargetLocation - SpawnLocation).GetSafeNormal();
 
-    // Offset to avoid collision with the weapon
-    SpawnLocation += DirectionToTarget * 20.f;
 
-    FRotator SpawnRotation = (DirectionToTarget + FVector(0.f, 0.f, SpawnZOffset)).Rotation();
+    // 这里插入“散布逻辑”
+    float Accuracy = 0.7f; // 假设，这个值可在你的Weapon类或其他地方配置
+    float MaxSpreadAngle = 5.0f; // 最大散布角（度）
+    float CurrentSpreadAngle = (1.f - Accuracy) * MaxSpreadAngle;
+
+    // 借助蓝图库函数，在DirectionToTarget周围（±CurrentSpreadAngle）的圆锥里随机选一个方向
+    FVector FinalDirection = UKismetMathLibrary::RandomUnitVectorInConeInDegrees(DirectionToTarget, CurrentSpreadAngle);
+
+    // 偏移一下，避免子弹和武器自身碰撞（原有逻辑）
+    SpawnLocation += FinalDirection * 20.f;
+
+    // 生成一个Rotation
+    FRotator SpawnRotation = (FinalDirection + FVector(0.f, 0.f, SpawnZOffset)).Rotation();
+
+    //// Offset to avoid collision with the weapon
+    //SpawnLocation += DirectionToTarget * 20.f;
+
+    //FRotator SpawnRotation = (DirectionToTarget + FVector(0.f, 0.f, SpawnZOffset)).Rotation();
 
     UE_LOG(LogTemp, Warning, TEXT("SpawnLocation: %s, SpawnRotation: %s"),
         *SpawnLocation.ToString(), *SpawnRotation.ToString());
@@ -89,10 +105,17 @@ void AOrionWeapon::SpawnOrionBulletActor(const FVector& TargetLocation, const FV
     // Set launch direction and velocity
     if (SpawnedProjectile && SpawnedProjectile->ProjectileMovement)
     {
-        FVector LaunchDirection = DirectionToTarget; // Use the calculated direction
-        LaunchDirection.Normalize();
-        SpawnedProjectile->ProjectileMovement->Velocity = LaunchDirection * SpawnedProjectile->ProjectileMovement->InitialSpeed;
+        FinalDirection.Normalize(); // 常规安全做法
+        SpawnedProjectile->ProjectileMovement->Velocity =
+            FinalDirection * SpawnedProjectile->ProjectileMovement->InitialSpeed;
     }
+
+    //if (SpawnedProjectile && SpawnedProjectile->ProjectileMovement)
+    //{
+    //    FVector LaunchDirection = DirectionToTarget; // Use the calculated direction
+    //    LaunchDirection.Normalize();
+    //    SpawnedProjectile->ProjectileMovement->Velocity = LaunchDirection * SpawnedProjectile->ProjectileMovement->InitialSpeed;
+    //}
 
     UE_LOG(LogTemp, Log, TEXT("FireProjectileForward: Spawned BP_OrionProjectile at %s"), *SpawnLocation.ToString());
 

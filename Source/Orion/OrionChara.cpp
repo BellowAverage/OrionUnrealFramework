@@ -514,6 +514,11 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 
 void AOrionChara::InteractWithActorStop()
 {
+    if (!CurrentInteractActor) // 已经清理过了
+    {
+        return;
+    }
+
     IsInteractWithActor = false;
 	DoOnceInteractWithActor = false;
 	CurrentInteractActor->CurrWorkers -= 1;
@@ -579,7 +584,7 @@ bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AOrionChara* InTarget,
 
     // 遮挡判断：线 Trace
     bool bLineOfSight = false;
-    DrawDebugLine(GetWorld(), GetActorLocation(), InTarget->GetActorLocation() + HitOffset, FColor::Green, false, 5.0f, 2.0f);
+    //DrawDebugLine(GetWorld(), GetActorLocation(), InTarget->GetActorLocation() + HitOffset, FColor::Green, false, 5.0f, 2.0f);
 
     if (bInRange)
     {
@@ -674,27 +679,70 @@ void AOrionChara::AttackOnCharaLongRangeStop()
 
 void AOrionChara::RemoveAllActions(const FString& Except)
 {
-    FString OngoingActionNameBeforeCleared;
+    //FString OngoingActionNameBeforeCleared;
+    //if (CurrentAction)
+    //{
+    //    OngoingActionNameBeforeCleared = CurrentAction->Name;
+    //}
+
+
+    //if (OngoingActionNameBeforeCleared.Contains("ForceMoveToLocation") || OngoingActionNameBeforeCleared.Contains("MoveToLocation"))
+    //{
+    //    if (!Except.Contains("TempDoNotStopMovement"))
+    //    {
+    //        MoveToLocationStop();
+    //    }
+    //    else
+    //    {
+
+    //    }
+
+    //}
+
+    //if (OngoingActionNameBeforeCleared.Contains("ForceAttackOnCharaLongRange") || OngoingActionNameBeforeCleared.Contains("AttackOnCharaLongRange"))
+    //{
+    //    AttackOnCharaLongRangeStop();
+    //}
+
+    //if (OngoingActionNameBeforeCleared.Contains("ForceInteractWithActor") || OngoingActionNameBeforeCleared.Contains("InteractWithActor"))
+    //{
+    //    InteractWithActorStop();
+    //}
+
+    //CharacterActionQueue.Actions.clear();
+
+	// ==========================
+
+    // 如果有正在执行的动作，先把动作名称记录下来
     if (CurrentAction)
     {
-        OngoingActionNameBeforeCleared = CurrentAction->Name;
+        FString OngoingActionName = CurrentAction->Name;
+
+        // 根据动作名称，先调用相应的 Stop 函数
+        if (OngoingActionName.Contains("ForceMoveToLocation") || OngoingActionName.Contains("MoveToLocation"))
+        {
+            if (!Except.Contains("TempDoNotStopMovement"))
+            {
+                MoveToLocationStop();
+            }
+        }
+
+        if (OngoingActionName.Contains("ForceAttackOnCharaLongRange") || OngoingActionName.Contains("AttackOnCharaLongRange"))
+        {
+            AttackOnCharaLongRangeStop();
+        }
+
+        if (OngoingActionName.Contains("ForceInteractWithActor") || OngoingActionName.Contains("InteractWithActor"))
+        {
+            InteractWithActorStop();
+        }
+
+        // 停止完之后，把 CurrentAction 置空，防止后续误用
+        CurrentAction = nullptr;
     }
 
+    // 现在再清空动作队列
     CharacterActionQueue.Actions.clear();
-    if (OngoingActionNameBeforeCleared.Contains("ForceMoveToLocation") || OngoingActionNameBeforeCleared.Contains("MoveToLocation"))
-    {
-        if (!Except.Contains("TempDoNotStopMovement")) MoveToLocationStop();
-    }
-
-    if (OngoingActionNameBeforeCleared.Contains("ForceAttackOnCharaLongRange") || OngoingActionNameBeforeCleared.Contains("AttackOnCharaLongRange"))
-    {
-        AttackOnCharaLongRangeStop();
-    }
-
-    if (OngoingActionNameBeforeCleared.Contains("ForceInteractWithActor") || OngoingActionNameBeforeCleared.Contains("InteractWithActor"))
-    {
-        InteractWithActorStop();
-    }
 }
 
 /* discarded: used blueprintImplementableEvent instead

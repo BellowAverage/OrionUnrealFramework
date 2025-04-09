@@ -196,6 +196,52 @@ void AOrionHUD::DrawHUD()
             // 如果需要再次换别的颜色，就再次 SetDrawColor(...) 后再绘制
         }
     }
+
+    // ==========================================================
+
+    // 如果没有 PlayerOwner 或无法获得鼠标位置，就不绘制
+    if (!PlayerOwner) return;
+
+    if (!bShowActorInfo) return;
+
+    float MouseX = 0.f, MouseY = 0.f;
+    bool bGotMouse = PlayerOwner->GetMousePosition(MouseX, MouseY);
+
+    if (!bGotMouse) return;
+
+    // 在鼠标位置右侧绘制
+    // 给一点偏移量，让文本不要“压”在鼠标上
+    float XOffset = 15.f;
+    float YOffsetBetweenLines = 20.f;
+
+    // 从 Engine 获取一个合适的字体，或者你也可以自定义
+    UFont* RenderFont = GEngine->GetMediumFont();
+
+    float CurrentY = MouseY;
+    for (const FString& Line : InfoLines)
+    {
+        // DrawText 参数依次是：
+        //  *Text
+        //  *TextColor
+        //  X, Y
+        //  *Font
+        //  Scale（1.0表示正常大小）
+        //  bScalePosition（是否将X/Y应用缩放）
+        DrawText(Line,
+            FLinearColor::Red,
+            MouseX + XOffset,
+            CurrentY,
+            RenderFont,
+            1.5f /*Scale*/,
+            false /*bScalePosition*/);
+
+        CurrentY += YOffsetBetweenLines;
+    }
 }
 
+
+void AOrionHUD::ShowInfoAtMouse(const TArray<FString>& InLines)
+{
+    InfoLines = InLines;
+}
 

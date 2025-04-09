@@ -66,6 +66,53 @@ void AOrionPlayerController::Tick(float DeltaTime)
             bHasDragged = true;
         }
     }
+
+    FHitResult HoveringOver;
+	GetHitResultUnderCursorByChannel(UEngineTypes::ConvertToTraceType(ECC_Visibility), false, HoveringOver);
+
+	AActor* HoveringActor = HoveringOver.GetActor();
+    if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+    {
+        if (AOrionHUD* ActorInfoHUD = Cast<AOrionHUD>(PC->GetHUD()))
+        {
+            if (HoveringActor)
+            {
+                if (AOrionActor* OrionActor = Cast<AOrionActor>(HoveringActor))
+                {
+                    ActorInfoHUD->bShowActorInfo = true;
+                    TArray<FString> Lines;
+
+                    float Progress = OrionActor->GetProductionProgress();  // e.g. 72.5
+                    int32 TotalBars = 20;  // 总共显示多少格
+                    int32 FilledBars = FMath::RoundToInt((Progress / 100.0f) * TotalBars);
+
+                    FString Bar;
+                    for (int32 i = 0; i < TotalBars; ++i)
+                    {
+                        Bar += (i < FilledBars) ? TEXT("#") : TEXT("-");
+                    }
+
+                    Lines.Add(FString::Printf(TEXT("Name: %s"), *OrionActor->GetName()));
+                    Lines.Add(FString::Printf(TEXT("CurrNumOfWorkers: %d"), OrionActor->GetCurrWorkers()));
+                    Lines.Add(FString::Printf(TEXT("ProductionProgress: [%s] %.1f%%"), *Bar, Progress));
+                    Lines.Add(FString::Printf(TEXT("CurrInventory: %d"), OrionActor->GetCurrInventory()));
+                    ActorInfoHUD->ShowInfoAtMouse(Lines);
+                }
+                //else if (AOrionChara* OrionChara = Cast<AOrionChara>(HoveringActor))
+                //{
+                //    TArray<FString> Lines;
+                //    Lines.Add(FString::Printf(TEXT("Name: %s"), *OrionChara->GetName()));
+                //    Lines.Add(FString::Printf(TEXT("Location: %s"), *OrionChara->GetActorLocation().ToString()));
+                //    Lines.Add(FString::Printf(TEXT("Rotation: %s"), *OrionChara->GetActorRotation().ToString()));
+                //    ActorInfoHUD->ShowInfoAtMouse(Lines);
+                //}
+            }
+            else
+            {
+				ActorInfoHUD->bShowActorInfo = false;
+            }
+        }
+	}
 }
 
 // discarded
