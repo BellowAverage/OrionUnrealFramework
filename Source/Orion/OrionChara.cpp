@@ -150,7 +150,7 @@ void AOrionChara::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
-    UE_LOG(LogTemp, Log, TEXT("DoOnceInteractWithActor: %s"), DoOnceInteractWithActor ? TEXT("True") : TEXT("False"));
+    // UE_LOG(LogTemp, Log, TEXT("DoOnceInteractWithActor: %s"), DoOnceInteractWithActor ? TEXT("True") : TEXT("False"));
 
     //FVector Velocity = GetCharacterMovement()->Velocity;
     //if (Velocity.Size() > 0 && Velocity.Size() < 400.0f)
