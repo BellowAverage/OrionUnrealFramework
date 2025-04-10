@@ -35,6 +35,8 @@ void AOrionPlayerController::SetupInputComponent()
         InputComponent->BindAction("LeftMouseClick", IE_Released, this, &AOrionPlayerController::OnLeftMouseUp);
         InputComponent->BindAction("RightMouseClick", IE_Pressed, this, &AOrionPlayerController::OnRightMouseDown);
         InputComponent->BindAction("CtrlA", IE_Pressed, this, &AOrionPlayerController::SelectAll);
+
+		InputComponent->BindAction("RightMouseClick", IE_Released, this, &AOrionPlayerController::OnRightMouseUp);
     }
 }
 
@@ -312,8 +314,65 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
     }
 }
 
+void AOrionPlayerController::OnRightMouseUp()
+{
+	const float PressDuration = GetWorld()->GetTimeSeconds() - RightMouseDownTime;
+
+	if (OrionCharaSelection.empty() || !CachedRightClickedOrionActor)
+	{
+		return;
+	}
+
+    if (PressDuration < RightClickHoldThreshold)
+    {
+        // 短按：执行 InteractWithActor
+        UE_LOG(LogTemp, Log, TEXT("Short Press on OrionActor => InteractWithActor."));
+
+        for (auto& each : OrionCharaSelection)
+        {
+            if (!each) continue;
+
+            FString ActionName = FString::Printf(TEXT("ForceInteractWithActor|%s"), *CachedRightClickedOrionActor->GetName());
+            each->RemoveAllActions();
+            each->CharacterActionQueue.Actions.push_back(
+                Action(ActionName,
+                    [charPtr = each, targetActor = CachedRightClickedOrionActor](float DeltaTime) -> bool
+                    {
+                        return charPtr->InteractWithActor(DeltaTime, targetActor);
+                    }
+                )
+            );
+        }
+    }
+    else
+    {
+        // -- 长按 --
+        // 这里写你要的“长按不执行 InteractWithActor，改为执行另一个逻辑”
+        UE_LOG(LogTemp, Warning, TEXT("Long Press on OrionActor => do something else (not InteractWithActor)."));
+
+        AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
+        if (OrionHUD)
+        {
+            std::vector<std::string> ArrOptionNames;
+            std::string OptionName1 = "AttackOn" + std::string(TCHAR_TO_UTF8(*CachedRightClickedOrionActor->GetName()));
+            ArrOptionNames.push_back(OptionName1);
+            ArrOptionNames.push_back("Operation2");
+            ArrOptionNames.push_back("Operation3");
+            OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, FHitResult(), ArrOptionNames);
+        }
+    }
+
+    // 清空缓存，避免下一次按下时仍旧拿到旧的Actor
+    CachedRightClickedOrionActor = nullptr;
+}
+
+
 void AOrionPlayerController::OnRightMouseDown()
 {
+	RightMouseDownTime = GetWorld()->GetTimeSeconds();
+
+	CachedRightClickedOrionActor = nullptr;
+
     // 1. 获取 HitResult
     FHitResult HitResult;
     GetHitResultUnderCursorByChannel(
@@ -392,6 +451,14 @@ void AOrionPlayerController::OnRightMouseDown()
         // 2.3 如果点到的是 OrionActor
         else if (AOrionActor* HitActor = Cast<AOrionActor>(HitWorldActor))
         {
+
+            // ★ 把它存起来，等 OnRightMouseUp 时再做区分：短按=Interact，长按=其他逻辑
+            CachedRightClickedOrionActor = HitActor;
+
+            // 不要立即执行 InteractWithActor，也不要清除角色 action
+            // 因为可能要判断玩家究竟是不是长按。
+
+            /*
             if (!OrionCharaSelection.empty())
             {
                 for (auto& each : OrionCharaSelection)
@@ -408,6 +475,7 @@ void AOrionPlayerController::OnRightMouseDown()
                     );
                 }
             }
+            */
         }
         else
         {
@@ -458,7 +526,12 @@ void AOrionPlayerController::OnRightMouseDown()
                 AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
                 if (OrionHUD)
                 {
-                    OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult);
+					std::vector<std::string> ArrOptionNames;
+                    ArrOptionNames.push_back("SpawnOrionCharacterHere");
+					ArrOptionNames.push_back("Operation2");
+					ArrOptionNames.push_back("Operation3");
+
+                    OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
                 }
             }
         }

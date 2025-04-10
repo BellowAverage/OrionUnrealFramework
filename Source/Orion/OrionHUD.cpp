@@ -21,32 +21,34 @@ void AOrionHUD::BeginPlay()
 }
 void AOrionHUD::Tick(float DeltaTime)
 {
-    ListenChangeCharaSelection();
+    //ListenChangeCharaSelection();
 }
 
-void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, FHitResult HitResult)
-{
+void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult, const std::vector<std::string>& ArrOptionNames)
+{   
     TArray<FName> NamesToPass;
-    NamesToPass.Add(FName(TEXT("SpawnCharaInstance")));
-    NamesToPass.Add(FName(TEXT("Operation2")));
-    NamesToPass.Add(FName(TEXT("Operation3")));
+    for (auto& each : ArrOptionNames)
+    {
+        FString OptionName = FString(UTF8_TO_TCHAR(each.c_str()));
+        NamesToPass.Add(FName(*OptionName));
+    }
 
     if (WB_PlayerOperationMenu)
     {
         UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu);
         if (PlayerOperationMenu)
         {
-			UFunction* SetFunction = PlayerOperationMenu->FindFunction(FName(TEXT("SetArrOperationAvailable")));
+            UFunction* SetFunction = PlayerOperationMenu->FindFunction(FName(TEXT("SetArrOperationAvailable")));
             if (SetFunction)
             {
                 struct
                 {
-					TArray<FName> ArrOperationAvailable;
-					FHitResult InHitResult;
-				} Params;
-				Params.ArrOperationAvailable = NamesToPass;
+                    TArray<FName> ArrOperationAvailable;
+                    FHitResult InHitResult;
+                } Params;
+                Params.ArrOperationAvailable = NamesToPass;
                 Params.InHitResult = HitResult;
-				PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
+                PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
             }
 
             PlayerOperationMenu->AddToViewport();
@@ -54,6 +56,8 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, FHitResult H
         }
     }
 }
+
+/*
 
 std::vector<AOrionChara*> AOrionHUD::PreviousCharaSelection;
 
@@ -120,7 +124,7 @@ void AOrionHUD::ListenChangeCharaSelection()
     PreviousCharaSelection = OrionPlayerController->OrionCharaSelection;
 }
 
-
+*/
 
 void AOrionHUD::DrawHUD()
 {

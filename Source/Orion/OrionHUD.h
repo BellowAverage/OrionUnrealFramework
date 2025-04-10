@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
@@ -23,16 +23,24 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UUserWidget> WB_PlayerOperationMenu;
-	void ShowPlayerOperationMenu(float MouseX, float MouseY, FHitResult HitResult);
+    void ShowPlayerOperationMenu(
+        float MouseX,
+        float MouseY,
+        const FHitResult& HitResult = FHitResult(),  // 一个空的HitResult作为默认
+        const std::vector<std::string>& ArrOptionNames = {}
+    );
 
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-    TSubclassOf<UUserWidget> WB_CharaSelectionMenu;
-    UUserWidget* ActiveCharaSelectionMenu = nullptr;
-    void ListenChangeCharaSelection();
-    static std::vector<AOrionChara*> PreviousCharaSelection;
+    //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    //TSubclassOf<UUserWidget> WB_CharaSelectionMenu;
+    //UUserWidget* ActiveCharaSelectionMenu = nullptr;
+    //void ListenChangeCharaSelection();
+    //static std::vector<AOrionChara*> PreviousCharaSelection;
 
     TArray<FString> InfoLines;
     bool bShowActorInfo;
     void ShowInfoAtMouse(const TArray<FString>& InLines);
+
+	//UFUNCTION(BlueprintCallable, Category = "UI Command")
+ //   void PlayerOperationOptionDispatcher(const FString& InOptionName);
+
 };
