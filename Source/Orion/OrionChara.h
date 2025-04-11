@@ -157,11 +157,11 @@ public:
     TSubclassOf<AOrionWeapon> SecondaryWeaponClass;
 
     /* AttackOnChara */
-    bool AttackOnChara(float DeltaTime, AOrionChara* InTarget, FVector HitOffset);
+    bool AttackOnChara(float DeltaTime, AActor* InTarget, FVector HitOffset);
     float AttackOnCharaAccumulatedTime = 0;
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
     bool IsAttackOnCharaLongRange = false;
-    bool AttackOnCharaLongRange(float DeltaTime, AOrionChara* InTarget, FVector HitOffset);
+    bool AttackOnCharaLongRange(float DeltaTime, AActor* InTarget, FVector HitOffset);
 	void AttackOnCharaLongRangeStop();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
     float FireRange;

@@ -100,14 +100,6 @@ void AOrionPlayerController::Tick(float DeltaTime)
                     Lines.Add(FString::Printf(TEXT("CurrInventory: %d"), OrionActor->GetCurrInventory()));
                     ActorInfoHUD->ShowInfoAtMouse(Lines);
                 }
-                //else if (AOrionChara* OrionChara = Cast<AOrionChara>(HoveringActor))
-                //{
-                //    TArray<FString> Lines;
-                //    Lines.Add(FString::Printf(TEXT("Name: %s"), *OrionChara->GetName()));
-                //    Lines.Add(FString::Printf(TEXT("Location: %s"), *OrionChara->GetActorLocation().ToString()));
-                //    Lines.Add(FString::Printf(TEXT("Rotation: %s"), *OrionChara->GetActorRotation().ToString()));
-                //    ActorInfoHUD->ShowInfoAtMouse(Lines);
-                //}
             }
             else
             {
@@ -115,6 +107,7 @@ void AOrionPlayerController::Tick(float DeltaTime)
             }
         }
 	}
+
 }
 
 // discarded
@@ -354,18 +347,18 @@ void AOrionPlayerController::OnRightMouseUp()
         if (OrionHUD)
         {
             std::vector<std::string> ArrOptionNames;
-            std::string OptionName1 = "AttackOn" + std::string(TCHAR_TO_UTF8(*CachedRightClickedOrionActor->GetName()));
-            ArrOptionNames.push_back(OptionName1);
+            std::string StringAttackOnOrionActor = "AttackOn" + std::string(TCHAR_TO_UTF8(*CachedRightClickedOrionActor->GetName()));
+            ArrOptionNames.push_back(StringAttackOnOrionActor);
             ArrOptionNames.push_back("Operation2");
             ArrOptionNames.push_back("Operation3");
-            OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, FHitResult(), ArrOptionNames);
+            OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, FHitResult(), ArrOptionNames, OrionCharaSelection.front(), CachedRightClickedOrionActor);
         }
+
     }
 
     // 清空缓存，避免下一次按下时仍旧拿到旧的Actor
     CachedRightClickedOrionActor = nullptr;
 }
-
 
 void AOrionPlayerController::OnRightMouseDown()
 {
@@ -390,15 +383,7 @@ void AOrionPlayerController::OnRightMouseDown()
         // 2.2 如果点到的是 OrionChara
         if (AOrionChara* HitChara = Cast<AOrionChara>(HitWorldActor))
         {
-            // （按需）决定要不要播放 Niagara 特效
-            // if (NiagaraHitResultEffect)
-            // {
-            //     UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-            //         GetWorld(),
-            //         NiagaraHitResultEffect,
-            //         HitChara->GetActorLocation()
-            //     );
-            // }
+
             FVector HitOffset = HitResult.ImpactPoint - HitChara->GetActorLocation();
             // 向控制选中的角色下达“攻击”指令
             if (!OrionCharaSelection.empty())
@@ -528,6 +513,9 @@ void AOrionPlayerController::OnRightMouseDown()
                 {
 					std::vector<std::string> ArrOptionNames;
                     ArrOptionNames.push_back("SpawnOrionCharacterHere");
+
+
+
 					ArrOptionNames.push_back("Operation2");
 					ArrOptionNames.push_back("Operation3");
 

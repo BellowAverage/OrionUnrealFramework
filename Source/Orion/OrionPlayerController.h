@@ -53,5 +53,4 @@ public:
 	AOrionActor* CachedRightClickedOrionActor = nullptr;
     void OnRightMouseUp();
 
-
 };

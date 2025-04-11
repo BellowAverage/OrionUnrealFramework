@@ -46,15 +46,7 @@ public:
     void Tick(float DeltaTime) override;
 
 	/* Gameplay Stats */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Gameplay")
-	TArray<FCharaStats> CharaStats;
 
-	void ReloadCharaStates();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Developer")
-	TArray<AOrionChara*> CharaSelection;
-
-	void ReloadCharaSelection();
 
 	/* Developer */
 

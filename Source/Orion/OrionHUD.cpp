@@ -24,7 +24,7 @@ void AOrionHUD::Tick(float DeltaTime)
     //ListenChangeCharaSelection();
 }
 
-void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult, const std::vector<std::string>& ArrOptionNames)
+void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult, const std::vector<std::string>& ArrOptionNames, AOrionChara* InTarget, AOrionActor* InTargetActor)
 {   
     TArray<FName> NamesToPass;
     for (auto& each : ArrOptionNames)
@@ -45,9 +45,14 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitRe
                 {
                     TArray<FName> ArrOperationAvailable;
                     FHitResult InHitResult;
+					AOrionChara* InTarget;
+					AOrionActor* InTargetActor;
+
                 } Params;
                 Params.ArrOperationAvailable = NamesToPass;
                 Params.InHitResult = HitResult;
+				Params.InTarget = InTarget;
+				Params.InTargetActor = InTargetActor;
                 PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
             }
 

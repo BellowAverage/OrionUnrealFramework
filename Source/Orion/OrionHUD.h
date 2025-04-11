@@ -27,7 +27,9 @@ public:
         float MouseX,
         float MouseY,
         const FHitResult& HitResult = FHitResult(),  // 一个空的HitResult作为默认
-        const std::vector<std::string>& ArrOptionNames = {}
+        const std::vector<std::string>& ArrOptionNames = {},
+        AOrionChara* InTarget = nullptr,
+		AOrionActor* InTargetActor = nullptr
     );
 
     //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")

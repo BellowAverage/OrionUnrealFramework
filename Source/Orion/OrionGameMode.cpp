@@ -19,65 +19,14 @@ AOrionGameMode::AOrionGameMode()
 void AOrionGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-
-	//ReloadCharaStates();
 }
 
 void AOrionGameMode::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
-
-    //ReloadCharaStates();
-    //ReloadCharaSelection();
 }
 
-void AOrionGameMode::ReloadCharaStates()
-{
-    // 清空现有的统计信息
-    CharaStats.Empty();
 
-    // 获取所有OrionCharacter类的实例
-    TArray<AActor*> FoundActors;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
-
-    for (AActor* Actor : FoundActors)
-    {
-        AOrionChara* OrionChara = Cast<AOrionChara>(Actor);
-        if (OrionChara)
-        {
-            FCharaStats CharaStat;
-
-            FString InCharaID = OrionChara->GetName().Right(1);
-
-            if (InCharaID.IsNumeric())
-            {
-                int32 Int_InCharaID = FCString::Atoi(*InCharaID);
-                CharaStat.CharaID = Int_InCharaID;
-            }
-
-            CharaStat.CharaSnapshot = nullptr;
-            CharaStat.CharaName = FName(*OrionChara->GetName());
-			CharaStat.Health = OrionChara->CurrHealth;
-			CharaStat.level = 1;
-
-            CharaStats.Add(CharaStat);
-        }
-    }
-}
-
-void AOrionGameMode::ReloadCharaSelection()
-{
-	CharaSelection.Empty();
-
-	AOrionPlayerController* OrionPlayerController = Cast<AOrionPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
-    if (OrionPlayerController)
-    {
-        for (auto& CharaSelected : OrionPlayerController->OrionCharaSelection)
-        {
-			CharaSelection.Add(CharaSelected);
-        }
-    }
-}
 
 void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 {

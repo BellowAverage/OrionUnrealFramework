@@ -526,56 +526,39 @@ void AOrionChara::InteractWithActorStop()
 	InteractType = EInteractType::Unavailable;
 }
 
-bool AOrionChara::AttackOnChara(float DeltaTime, AOrionChara* InTarget, FVector HitOffset)
+bool AOrionChara::AttackOnChara(float DeltaTime, AActor* InTarget, FVector HitOffset)
 {
 
-	if (this->CharaState == ECharaState::Carrying)
-	{
-		UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Cannot attack while carrying an item.");
-		return true;
-	}
+    if (!InTarget) return true;
 
-    // 检查目标是否还存在
-    if (!InTarget)
+    if (AOrionChara* TargetChara = Cast<AOrionChara>(InTarget))
     {
-        UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Target is invalid. Stop attacking.");
-        IsAttackOnCharaLongRange = false;
-        return true;
-    }
+	    if (this->CharaState == ECharaState::Carrying)
+	    {
+		    UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Cannot attack while carrying an item.");
+		    return true;
+	    }
 
-    if (InTarget->CharaState == ECharaState::Incapacitated || InTarget->CharaState == ECharaState::Dead)
-    {
-        UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Target is Incapacitated. Stop attacking.");
-        IsAttackOnCharaLongRange = false;
-        return true;
-    }
+        if (TargetChara->CharaState == ECharaState::Incapacitated || TargetChara->CharaState == ECharaState::Dead)
+        {
+            UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Target is Incapacitated. Stop attacking.");
+            IsAttackOnCharaLongRange = false;
+            return true;
+        }
     
-    // 不允许攻击自己
-    if (InTarget == this)
-    {
-        UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Attacking on oneself is not supported.");
-        IsAttackOnCharaLongRange = false;
-        return true;
+        // 不允许攻击自己
+        if (TargetChara == this)
+        {
+            UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Attacking on oneself is not supported.");
+            IsAttackOnCharaLongRange = false;
+            return true;
+        }
     }
 
     return AttackOnCharaLongRange(DeltaTime, InTarget, HitOffset);
-
-    
 }
 
-void AOrionChara::SpawnBulletActor(const FVector& TargetLocation, float DeltaTime)
-{
-
-    SpawnBulletActorAccumulatedTime += DeltaTime;
-    if (SpawnBulletActorAccumulatedTime > AttackFrequencyLongRange)
-    {
-
-		SpawnOrionBulletActor(TargetLocation, FVector((0, 0, 0)));
-        SpawnBulletActorAccumulatedTime = 0;
-    }
-}
-
-bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AOrionChara* InTarget, FVector HitOffset)
+bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AActor* InTarget, FVector HitOffset)
 {   
     // 3. 检测射程&遮挡
     float DistToTarget = FVector::Dist(GetActorLocation(), InTarget->GetActorLocation() + HitOffset);
@@ -677,41 +660,21 @@ void AOrionChara::AttackOnCharaLongRangeStop()
     SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
 }
 
+void AOrionChara::SpawnBulletActor(const FVector& TargetLocation, float DeltaTime)
+{
+
+    SpawnBulletActorAccumulatedTime += DeltaTime;
+    if (SpawnBulletActorAccumulatedTime > AttackFrequencyLongRange)
+    {
+
+        SpawnOrionBulletActor(TargetLocation, FVector((0, 0, 0)));
+        SpawnBulletActorAccumulatedTime = 0;
+    }
+}
+
+
 void AOrionChara::RemoveAllActions(const FString& Except)
 {
-    //FString OngoingActionNameBeforeCleared;
-    //if (CurrentAction)
-    //{
-    //    OngoingActionNameBeforeCleared = CurrentAction->Name;
-    //}
-
-
-    //if (OngoingActionNameBeforeCleared.Contains("ForceMoveToLocation") || OngoingActionNameBeforeCleared.Contains("MoveToLocation"))
-    //{
-    //    if (!Except.Contains("TempDoNotStopMovement"))
-    //    {
-    //        MoveToLocationStop();
-    //    }
-    //    else
-    //    {
-
-    //    }
-
-    //}
-
-    //if (OngoingActionNameBeforeCleared.Contains("ForceAttackOnCharaLongRange") || OngoingActionNameBeforeCleared.Contains("AttackOnCharaLongRange"))
-    //{
-    //    AttackOnCharaLongRangeStop();
-    //}
-
-    //if (OngoingActionNameBeforeCleared.Contains("ForceInteractWithActor") || OngoingActionNameBeforeCleared.Contains("InteractWithActor"))
-    //{
-    //    InteractWithActorStop();
-    //}
-
-    //CharacterActionQueue.Actions.clear();
-
-	// ==========================
 
     // 如果有正在执行的动作，先把动作名称记录下来
     if (CurrentAction)
