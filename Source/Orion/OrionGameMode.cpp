@@ -1,0 +1,435 @@
+﻿#include "OrionGameMode.h"
+#include "OrionChara.h"
+#include "OrionAIController.h"
+#include "Components/CapsuleComponent.h"
+#include "Engine/World.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Kismet/GameplayStatics.h"
+#include "Engine/DamageEvents.h" // For Testing Purpose
+#include "PhysicsEngine/RadialForceComponent.h"
+
+#define ORION_CHARA_HALF_HEIGHT 88.f
+
+AOrionGameMode::AOrionGameMode()
+{
+    PrimaryActorTick.bCanEverTick = true;
+}
+
+void AOrionGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+    if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
+    {
+        InputComponent = NewObject<UInputComponent>(this);
+        InputComponent->RegisterComponent();
+        InputComponent->BindAction("TestKey1", IE_Pressed, this, &AOrionGameMode::OnTestKey1Pressed);
+        InputComponent->BindAction("TestKey2", IE_Pressed, this, &AOrionGameMode::OnTestKey2Pressed);
+
+
+        PlayerController->PushInputComponent(InputComponent);
+    }
+}
+
+
+
+void AOrionGameMode::OnTestKey1Pressed()
+{
+    APlayerController* PlayerController = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (PlayerController)
+    {
+        FHitResult HitResult;
+        PlayerController->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+        if (HitResult.bBlockingHit)
+        {
+            AActor* ClickedActor = HitResult.GetActor();
+            if (ClickedActor)
+            {
+                if (AOrionActor* TestOrionActor = Cast<AOrionActor>(ClickedActor))
+                {
+                    FDamageEvent DamageEvent; // Temporary FDamageEvent for testing purposes
+					TestOrionActor->TakeDamage(10.f, FDamageEvent(), PlayerController->GetInstigatorController(), this);
+
+				}
+				else if (AOrionChara* TestOrionChara = Cast<AOrionChara>(ClickedActor))
+				{
+                    FDamageEvent DamageEvent; // Temporary FDamageEvent for testing purposes
+					TestOrionChara->TakeDamage(10.f, FDamageEvent(), PlayerController->GetInstigatorController(), this);
+                }
+            }
+        }
+    }
+}
+
+void AOrionGameMode::OnTestKey2Pressed()
+{
+	UE_LOG(LogTemp, Log, TEXT("TestKey2 Pressed!"));
+
+    APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    if (!PC) return;
+
+    FHitResult HitResult;
+    PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+	FVector TempLocation = HitResult.Location;
+    bool bHit = PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+    if (bHit && HitResult.bBlockingHit)
+    {
+        FVector ImpactPoint = HitResult.ImpactPoint;
+
+        float Radius = 500.f;   // 范围
+        float Strength = 2000.f;  // 强度
+        bool  bVelChange = true;
+
+        // 1) 创建一个 RadialForceComponent
+        URadialForceComponent* RadialForceComponent = NewObject<URadialForceComponent>(this);
+
+        // 2) 注册到游戏世界，使其生效
+        RadialForceComponent->RegisterComponent();
+
+        // 3) 设置它的世界位置为点击点
+        RadialForceComponent->SetWorldLocation(ImpactPoint);
+
+        // 4) 配置半径、强度、是否忽略质量等
+        RadialForceComponent->Radius = Radius;
+        RadialForceComponent->ImpulseStrength = Strength;
+        RadialForceComponent->bImpulseVelChange = bVelChange;
+        RadialForceComponent->Falloff = ERadialImpulseFalloff::RIF_Linear;
+
+        // 5) 发射脉冲
+        RadialForceComponent->FireImpulse();
+
+		// 6) 应用范围伤害 ===========================
+
+        //float DamageAmount = 0.0f; // 根据需要设置伤害值
+        //float DamageRadius = Radius; // 范围
+
+        //UGameplayStatics::ApplyRadialDamage(
+        //    GetWorld(),
+        //    DamageAmount,
+        //    ImpactPoint,
+        //    DamageRadius,
+        //    UDamageType::StaticClass(),
+        //    TArray<AActor*>(), // 忽略的 Actors，可留空
+        //    this, // Damage Causer
+        //    nullptr, // Instigator
+        //    true // 全伤害，不随距离衰减
+        //);
+
+		// ===========================================
+
+        UE_LOG(LogTemp, Log, TEXT("Fired radial impulse at %s"), *ImpactPoint.ToString());
+    }
+
+    if (ExplosionClass)
+    {
+        UWorld* World = GetWorld();
+        if (World)
+        {
+            FActorSpawnParameters SpawnParams;
+            SpawnParams.Owner = this;
+            SpawnParams.Instigator = nullptr; // GameMode 通常没有 Instigator
+            SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+            AActor* DeathEffect = World->SpawnActor<AActor>(ExplosionClass, TempLocation, FRotator::ZeroRotator, SpawnParams);
+        }
+    }
+}
+
+
+
+void AOrionGameMode::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+}
+
+
+
+void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
+{
+    if (!SubclassOfOrionChara)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("SubclassOfOrionChara is not set."));
+        return;
+    }
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("World is null."));
+        return;
+    }
+
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Owner = this;
+    SpawnParams.Instigator = nullptr; // GameMode 通常没有 Instigator
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+    
+    float CapsuleHalfHeight = ORION_CHARA_HALF_HEIGHT;
+    FVector SpawnLocationWithOffset = SpawnLocation + FVector(0.f, 0.f, CapsuleHalfHeight);
+    
+    AOrionChara* OrionChara = World->SpawnActor<AOrionChara>(
+        SubclassOfOrionChara,
+        SpawnLocationWithOffset,
+        FRotator::ZeroRotator,
+        SpawnParams
+    );
+
+    if (OrionChara)
+    {
+        UE_LOG(LogTemp, Log, TEXT("Successfully spawned AOrionChara at location: %s"), *SpawnLocation.ToString());
+
+        // Ensure AIControllerClass is set
+        if (OrionChara->AIControllerClass)
+        {
+            // Use SpawnDefaultController to handle AI controller assignment
+            OrionChara->SpawnDefaultController();
+            AController* Controller = OrionChara->GetController();
+            AOrionAIController* AIController = Cast<AOrionAIController>(Controller);
+            if (AIController)
+            {
+                UE_LOG(LogTemp, Log, TEXT("AIController possessed the character successfully."));
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Failed to assign AOrionAIController."));
+            }
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("OrionChara's AIControllerClass is not set."));
+        }
+
+		OrionChara->MaxHealth = 10.0f;
+        OrionChara->FireRange = 0;
+        OrionChara->CharaSide = 1;
+		OrionChara->CharaAIState = EAIState::AttackingEnemies;
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Failed to spawn AOrionChara."));
+    }
+}
+
+
+void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCharasRequested, AActor* TargetActor, FVector HitOffset, CommandType inCommandType)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Server: ApproveCharaAttackOnActor called."));
+
+    if (TargetActor)
+    {
+        if (inCommandType == CommandType::Force)
+        {
+            // 向控制选中的角色下达“攻击”指令
+            if (!OrionCharasRequested.empty())
+            {
+                for (auto& each : OrionCharasRequested)
+                {
+                    FString ActionName = FString::Printf(TEXT("ForceAttackOnCharaLongRange|%s"), *TargetActor->GetName());
+
+                    if (each->CurrentAction)
+                    {
+                        if (each->CurrentAction->Name == ActionName)
+                        {
+                            UE_LOG(LogTemp, Warning, TEXT("Already attacking chara selected as target. "), *ActionName);
+                            continue;
+                        }
+
+                        // switch target
+                        else if (each->CurrentAction->Name.Contains("AttackOnCharaLongRange"))
+                        {
+                            each->CharacterActionQueue.Actions.clear();
+
+                            each->CharacterActionQueue.Actions.push_back(
+                                Action(ActionName,
+                                    // 捕获: 攻击者(each) + 目标(HitChara)
+                                    [charPtr = each, targetChara = TargetActor, inHitOffset = HitOffset](float DeltaTime) -> bool
+                                    {
+                                        return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
+                                    }
+                                )
+                            );
+                            continue;
+                        }
+                    }
+
+                    each->RemoveAllActions();
+                    // 添加“ForceAttackOnChara”的 Action
+                    each->CharacterActionQueue.Actions.push_back(
+                        Action(ActionName,
+                            // 捕获: 攻击者(each) + 目标(HitChara)
+                            [charPtr = each, targetChara = TargetActor, inHitOffset = HitOffset](float DeltaTime) -> bool
+                            {
+                                // AOrionChara::AttackOnChara(AOrionChara* InTarget) 返回 bool
+                                return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
+                            }
+                        )
+                    );
+                }
+            }
+        }
+        else if (inCommandType == CommandType::Append)
+        {
+            // 向控制选中的角色下达“攻击”指令
+            if (!OrionCharasRequested.empty())
+            {
+                for (auto& each : OrionCharasRequested)
+                {
+                    FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange|%s"), *TargetActor->GetName());
+                    each->CharacterActionQueue.Actions.push_back(
+                        Action(ActionName,
+                            // 捕获: 攻击者(each) + 目标(HitChara)
+                            [charPtr = each, targetChara = TargetActor, inHitOffset = HitOffset](float DeltaTime) -> bool
+                            {
+                                // AOrionChara::AttackOnChara(AOrionChara* InTarget) 返回 bool
+                                return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
+                            }
+                        )
+                    );
+                }
+            }
+        }
+    }
+}
+
+bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionCharasRequested, FVector TargetLocation, CommandType inCommandType)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Server: ApproveCharaMoveToLocation called."));
+
+    if (inCommandType == CommandType::Force)
+    {
+        if (!OrionCharasRequested.empty())
+        {
+            for (auto& each : OrionCharasRequested)
+            {
+
+                if (each->CurrentAction)
+                {
+                    if (each->CurrentAction->Name.Contains("MoveToLocation"))
+                    {
+                        each->RemoveAllActions("TempDoNotStopMovement");
+                    }
+                    else
+                    {
+                        each->RemoveAllActions();
+                    }
+                }
+                else
+                {
+                    each->RemoveAllActions();
+                }
+
+                each->CharacterActionQueue.Actions.push_back(
+                    Action(TEXT("ForceMoveToLocation"),
+                        [charPtr = each, location = TargetLocation](float DeltaTime) -> bool
+                        {
+                            return charPtr->MoveToLocation(location);
+                        }
+                    )
+                );
+            }
+            return true;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No AOrionChara selected."));
+            return false;
+        }
+    }
+    else if (inCommandType == CommandType::Append)
+    {
+        if (!OrionCharasRequested.empty())
+        {
+            for (auto& each : OrionCharasRequested)
+            {
+
+                each->CharacterActionQueue.Actions.push_back(
+                    Action(TEXT("MoveToLocation"),
+                        [charPtr = each, location = TargetLocation](float DeltaTime) -> bool
+                        {
+                            return charPtr->MoveToLocation(location);
+                        }
+                    )
+                );
+            }
+            return true;
+        }
+    }
+	return false;
+}
+
+bool AOrionGameMode::ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*> OrionPawnsRequested, FVector TargetLocation, CommandType inCommandType)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Server: ApprovePawnMoveToLocation called."));
+
+    if (inCommandType == CommandType::Force)
+    {
+        if (!OrionPawnsRequested.empty())
+        {
+            for (auto& each : OrionPawnsRequested)
+            {
+				OrionVehicleMoveToLocation(each, TargetLocation);
+            }
+            return true;
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("No APawn selected."));
+            return false;
+        }
+    }
+    else if (inCommandType == CommandType::Append)
+    {
+        if (!OrionPawnsRequested.empty())
+        {
+            for (auto& each : OrionPawnsRequested)
+            {
+
+                OrionVehicleMoveToLocation(each, TargetLocation);
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor, CommandType inCommandType)
+{
+	UE_LOG(LogTemp, Warning, TEXT("Server: ApproveInteractWithActor called."));
+
+    if (inCommandType == CommandType::Force)
+    {
+        for (auto& each : OrionCharasRequested)
+        {
+            if (!each) continue;
+
+            FString ActionName = FString::Printf(TEXT("ForceInteractWithActor|%s"), *TargetActor->GetName());
+            each->RemoveAllActions();
+            each->CharacterActionQueue.Actions.push_back(
+                Action(ActionName,
+                    [charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
+                    {
+                        return charPtr->InteractWithActor(DeltaTime, targetActor);
+                    }
+                )
+            );
+        }
+    }
+	else if (inCommandType == CommandType::Append)
+	{
+		for (auto& each : OrionCharasRequested)
+		{
+			if (!each) continue;
+
+			FString ActionName = FString::Printf(TEXT("InteractWithActor|%s"), *TargetActor->GetName());
+			each->CharacterActionQueue.Actions.push_back(
+				Action(ActionName,
+					[charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
+					{
+						return charPtr->InteractWithActor(DeltaTime, targetActor);
+					}
+				)
+			);
+		}
+	}
+}
