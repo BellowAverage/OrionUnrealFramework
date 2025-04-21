@@ -4,6 +4,7 @@
 #include "GameFramework/FloatingPawnMovement.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "OrionPlayerController.h"
 
 void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)  
 {  
@@ -18,6 +19,9 @@ void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
    PlayerInputComponent->BindAction(TEXT("CameraRotate"), IE_Pressed, this, &AOrionCameraPawn::StartRotate);  
    PlayerInputComponent->BindAction(TEXT("CameraRotate"), IE_Released, this, &AOrionCameraPawn::StopRotate);  
+
+   PlayerInputComponent->BindAction("CameraToggleFollow", IE_Pressed,
+	   this, &AOrionCameraPawn::ToggleFollow);
 }
 
 AOrionCameraPawn::AOrionCameraPawn()
@@ -68,13 +72,28 @@ void AOrionCameraPawn::Tick(float DeltaSeconds)
 	const float Current = SpringArm->TargetArmLength;
 	const float NewLength = FMath::FInterpTo(Current, TargetArmLength, DeltaSeconds, ZoomInterpSpeed);
 	SpringArm->TargetArmLength = NewLength;
+
+
+	// 1. 若目标失效则自动脱锁
+	StopFollowIfTargetInvalid();
+
+	// 2. 执行位置跟随
+	if (bIsFollowing && FollowTarget)
+	{
+		const FVector Desired =
+			FollowTarget->GetActorLocation() + FollowOffset;
+
+		SetActorLocation(
+			FMath::VInterpTo(GetActorLocation(),
+				Desired,
+				DeltaSeconds,
+				FollowInterpSpeed));
+	}
 }
 
 /* ------------ 移动 ------------ */
 void AOrionCameraPawn::MoveForward(float Value)
 {
-	UE_LOG(LogTemp, Warning, TEXT("MoveForward: %f"), Value);
-
 	if (!FMath::IsNearlyZero(Value))
 	{
 		AddMovementInput(GetActorForwardVector(), Value);
@@ -83,8 +102,6 @@ void AOrionCameraPawn::MoveForward(float Value)
 
 void AOrionCameraPawn::MoveRight(float Value)
 {
-
-	UE_LOG(LogTemp, Warning, TEXT("MoveRight: %f"), Value);
 
 	if (!FMath::IsNearlyZero(Value))
 	{
@@ -144,5 +161,45 @@ void AOrionCameraPawn::CameraPitch(float Value)
 		const FRotator CurRel = SpringArm->GetRelativeRotation();
 		const float NewPitch = FMath::Clamp(CurRel.Pitch + Value * RotateSpeed, -89.f, -10.f);
 		SpringArm->SetRelativeRotation(FRotator(NewPitch, CurRel.Yaw, CurRel.Roll));
+	}
+}
+
+void AOrionCameraPawn::ToggleFollow()
+{
+	if (bIsFollowing)            // 已锁定 → 解除
+	{
+		bIsFollowing = false;
+		FollowTarget = nullptr;
+		return;
+	}
+
+	// 尚未锁定：检查当前是否只有 1 个选中的角色
+	if (AOrionPlayerController* PC = Cast<AOrionPlayerController>(GetController()))
+	{
+		if (PC->OrionCharaSelection.size() == 1)
+		{
+			FollowTarget = PC->OrionCharaSelection[0];
+			if (IsValid(FollowTarget))
+			{
+				bIsFollowing = true;
+			}
+		}
+		else if (PC->OrionPawnSelection.size() == 1)
+		{
+			FollowTarget = PC->OrionPawnSelection[0];
+			if (IsValid(FollowTarget))
+			{
+				bIsFollowing = true;
+			}
+		}
+	}
+}
+
+void AOrionCameraPawn::StopFollowIfTargetInvalid()
+{
+	if (bIsFollowing && (!FollowTarget))
+	{
+		bIsFollowing = false;
+		FollowTarget = nullptr;
 	}
 }

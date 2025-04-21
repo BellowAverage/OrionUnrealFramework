@@ -55,4 +55,9 @@ public:
 	TSubclassOf<AActor> ExplosionClass;
 
 
+
+
+
+
+
 };

@@ -68,4 +68,19 @@ private:
 
 	UPROPERTY(EditAnywhere, Category = "Basics")
 	float RotateSpeed = 1.0f;
+
+	/* ========= 锁定镜头 ========= */
+	UPROPERTY(EditAnywhere, Category = "Follow")
+	float FollowInterpSpeed = 10.f;
+
+	UPROPERTY(EditAnywhere, Category = "Follow")
+	FVector FollowOffset = FVector(0.f, 0.f, 0.f);
+
+	UPROPERTY()
+	AActor* FollowTarget = nullptr;
+
+	bool bIsFollowing = false;
+
+	void ToggleFollow();
+	void StopFollowIfTargetInvalid();
 };

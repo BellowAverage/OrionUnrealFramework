@@ -29,9 +29,9 @@
 #include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include <Components/SphereComponent.h>
-#include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
 #include "Engine/DamageEvents.h"
+#include "OrionGameMode.h"
 
 AOrionChara::AOrionChara()
 {
@@ -141,7 +141,7 @@ void AOrionChara::BeginPlay()
         MovementComponent->bConstrainToPlane = true;
         MovementComponent->bSnapToPlaneAtStart = true;
 
-        MovementComponent->MaxWalkSpeed = 300.0f; // 设置移动速度为 300 单位/秒
+        MovementComponent->MaxWalkSpeed = OrionCharaSpeed;
 
     }
 
@@ -151,6 +151,16 @@ void AOrionChara::BeginPlay()
     // Enable the character to receive damage
     this->SetCanBeDamaged(true);
 
+}
+
+void AOrionChara::ChangeMaxWalkSpeed(float InValue)
+{
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (MovementComponent)
+	{
+		MovementComponent->MaxWalkSpeed = InValue;
+		OrionCharaSpeed = InValue;
+	}
 }
 
 void AOrionChara::Tick(float DeltaTime)
@@ -208,16 +218,16 @@ void AOrionChara::Tick(float DeltaTime)
     if (IsAttackOnCharaLongRange != PreviousTickIsAttackOnCharaLongRange)
     {
         SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
-        if (!PreviousTickIsAttackOnCharaLongRange)
-        {
-            // Spawn BP_OrionWeapon on the Character's hand
-            SpawnWeaponActor();
-        }
-        else
-        {
-			// Destroy BP_OrionWeapon
-            RemoveWeaponActor();
-        }
+   //     if (!PreviousTickIsAttackOnCharaLongRange)
+   //     {
+   //         // Spawn BP_OrionWeapon on the Character's hand
+   //         SpawnWeaponActor();
+   //     }
+   //     else
+   //     {
+			//// Destroy BP_OrionWeapon
+   //         RemoveWeaponActor();
+   //     }
 
     }
 
@@ -273,6 +283,12 @@ bool AOrionChara::MoveToLocation(FVector InTargetLocation)
             return false;
         };
     */
+
+    if (bIsPlayingMontage)
+    {
+		OnEquipWeaponMontageInterrupted();
+		bIsPlayingMontage = false;
+    }
 
     if (AIController)
     {
@@ -474,131 +490,6 @@ void AOrionChara::InteractWithActorStop()
 	CurrentInteractActor->CurrWorkers -= 1;
 	CurrentInteractActor = nullptr;
 	InteractType = EInteractType::Unavailable;
-}
-
-bool AOrionChara::AttackOnChara(float DeltaTime, AActor* InTarget, FVector HitOffset)
-{
-
-    if (!InTarget) return true;
-
-    if (AOrionChara* TargetChara = Cast<AOrionChara>(InTarget))
-    {
-        if (TargetChara->CharaState == ECharaState::Incapacitated || TargetChara->CharaState == ECharaState::Dead)
-        {
-            //UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Target is Incapacitated. Stop attacking."); 
-            IsAttackOnCharaLongRange = false;
-            return true;
-        }
-    
-        if (TargetChara == this)
-        {
-            //UOrionBPFunctionLibrary::OrionPrint("AttackOnChara: Attacking on oneself is not supported."); 
-            IsAttackOnCharaLongRange = false;
-            return true;
-        }
-    }
-
-    return AttackOnCharaLongRange(DeltaTime, InTarget, HitOffset);
-}
-
-bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AActor* InTarget, FVector HitOffset)
-{   
-    // 3. 检测射程&遮挡
-    float DistToTarget = FVector::Dist(GetActorLocation(), InTarget->GetActorLocation() + HitOffset);
-
-    bool bInRange = (DistToTarget <= FireRange);
-
-    // 遮挡判断：线 Trace
-    bool bLineOfSight = false;
-    //DrawDebugLine(GetWorld(), GetActorLocation(), InTarget->GetActorLocation() + HitOffset, FColor::Green, false, 5.0f, 2.0f);
-
-    if (bInRange)
-    {
-        FHitResult Hit;
-        FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(AttackTrace), true);
-        TraceParams.AddIgnoredActor(this);
-        TraceParams.AddIgnoredActor(InTarget);
-
-        // 忽略所有 AOrionProjectile 的子类
-        for (TActorIterator<AOrionProjectile> It(GetWorld()); It; ++It)
-        {
-            TraceParams.AddIgnoredActor(*It);
-        }
-
-
-        bool bHit = GetWorld()->LineTraceSingleByChannel(
-            Hit,
-            GetActorLocation(),
-            InTarget->GetActorLocation() + HitOffset,
-            ECC_Visibility,
-            TraceParams
-        );
-
-        if (bHit)
-        {
-            bLineOfSight = false; // 有阻挡
-            if (Hit.GetActor())
-            {
-                UE_LOG(LogTemp, Warning, TEXT("AttackOnCharaLongRange: Line of sight blocked by %s."),
-                    *Hit.GetActor()->GetName());
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("AttackOnCharaLongRange: Line of sight blocked by an unknown object."));
-            }
-        }
-        else
-        {
-            bLineOfSight = true; // 未撞到任何阻挡 =>无遮挡
-        }
-    }
-
-    // 4. 判断能否直接射击
-    if (bInRange && bLineOfSight)
-    {
-        // 4.1 连续射击
-        
-        IsAttackOnCharaLongRange = true;
-
-        AIController->StopMovement();
-
-        // 2. 先让角色面向目标 (每帧都朝向，以便目标移动时持续追踪)
-        FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
-            GetActorLocation(),
-			InTarget->GetActorLocation() + HitOffset + FVector(0, 0, 20.0f) // ADD AN ADDITIONAL OFFSET
-        );
-        SetActorRotation(LookAtRot);
-
-        SpawnBulletActor(InTarget->GetActorLocation() + HitOffset, DeltaTime);
-
-        return false;
-    }
-    else
-    {
-        // 5. 不在射程 or 有遮挡 => 先找一个可射击位置，然后插入“移动”动作
-        if (!bInRange)
-        {
-			UE_LOG(LogTemp, Log, TEXT("AttackOnCharaLongRange: Out of range. Moving to a better position."));
-        }
-        else if (!bLineOfSight)
-        {
-            UE_LOG(LogTemp, Log, TEXT("AttackOnCharaLongRange: line of sight blocked. Moving to a better position."));
-        }
-
-        if (AIController)
-        {
-            EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(InTarget->GetActorLocation(), 5.0f, true, true, true, false, 0, true);
-        }
-
-        IsAttackOnCharaLongRange = false;
-        return false;
-    }
-}
-
-void AOrionChara::AttackOnCharaLongRangeStop()
-{
-	IsAttackOnCharaLongRange = false;
-    SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
 }
 
 void AOrionChara::SpawnBulletActor(const FVector& TargetLocation, float DeltaTime)
@@ -1091,4 +982,3 @@ AOrionChara* AOrionChara::GetClosestOrionChara()
     }
     return ClosestOrionChara;
 }
-

@@ -45,8 +45,6 @@ enum class EAIState : uint8
 	AttackingEnemies UMETA(DisplayName = "Attacking Enemies")
 };
 
-
-
 class Action
 {
 public:
@@ -106,6 +104,9 @@ protected:
 public:
     virtual void Tick(float DeltaTime) override;
     AAIController* AIController;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	float OrionCharaSpeed = 500.0f;
 
     /* CharacterActionQueue */
     ActionQueue CharacterActionQueue;
@@ -225,5 +226,25 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Optimization")
     AOrionChara* GetClosestOrionChara();
 
+    /* Interface */
+	UFUNCTION(BlueprintCallable, Category = "Interface")
+	void ChangeMaxWalkSpeed(float InValue);
 
+    /* Animation Optimization */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	UAnimMontage* AM_EquipWeapon;
+
+    void PlayEquipWeaponMontage();
+
+    UFUNCTION()
+    void OnEquipWeaponMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+    AOrionChara* MontageCallbackChara = nullptr;
+    AActor* MontageCallbackTargetActor = nullptr;
+    FVector MontageCallbackHitOffset = FVector::ZeroVector;
+    FString MontageCallbackActionName = TEXT("EquipWeaponMontage");
+    FTimerHandle EquipMontageTriggerHandle;
+    FTimerHandle EquipMontageSpawnHandle;
+	bool bIsPlayingMontage = false;
+	void OnEquipWeaponMontageInterrupted();
 };

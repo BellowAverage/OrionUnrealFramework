@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "OrionChara.h"
-#include <vector>
+#include "UserInterface/OrionUserWidgetCharaInfo.h"
 #include "OrionHUD.generated.h"
 
 UCLASS()
@@ -17,32 +17,57 @@ public:
     void BeginPlay();
 
     void Tick(float DeltaTime) override;
+
+	/* Developer UI Base */
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UUserWidget> WB_DeveloperUIBase;
 
 
+    /* Player Operation Menu */
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
     TSubclassOf<UUserWidget> WB_PlayerOperationMenu;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	TArray<FName> ArrOperationAvailable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	FHitResult PlayerOperationSpawnReference;
+
     void ShowPlayerOperationMenu(
         float MouseX,
         float MouseY,
-        const FHitResult& HitResult = FHitResult(),  // 一个空的HitResult作为默认
-        const std::vector<std::string>& ArrOptionNames = {},
-        AOrionChara* InTarget = nullptr,
-		AOrionActor* InTargetActor = nullptr
+        const FHitResult& HitResult = FHitResult(),
+        const std::vector<std::string>& ArrOptionNames = {}
     );
 
-    //UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-    //TSubclassOf<UUserWidget> WB_CharaSelectionMenu;
-    //UUserWidget* ActiveCharaSelectionMenu = nullptr;
-    //void ListenChangeCharaSelection();
-    //static std::vector<AOrionChara*> PreviousCharaSelection;
+	/* Chara Info Dashboard */
 
+    UFUNCTION(BlueprintCallable, Category = "UI")
+	void InitCharaInfoPanel();
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void ShowCharaInfoPanel();
+
+
+    UFUNCTION(BlueprintCallable, Category = "UI")
+    void HideCharaInfoPanel();
+
+    UPROPERTY(EditAnywhere, Category = "UI")
+    TSubclassOf<UOrionUserWidgetCharaInfo> WB_CharaInfoPanel;
+
+    UPROPERTY(Transient)
+    UOrionUserWidgetCharaInfo* CharaInfoPanel = nullptr;
+
+	bool bShowCharaInfoPanel = false;
+	bool PreviousbShowCharaInfoPanel = false;
+	AOrionChara* InfoChara = nullptr;
+
+    /* OrionActor Hoving Info Panel */
     TArray<FString> InfoLines;
     bool bShowActorInfo;
     void ShowInfoAtMouse(const TArray<FString>& InLines);
 
-	//UFUNCTION(BlueprintCallable, Category = "UI Command")
- //   void PlayerOperationOptionDispatcher(const FString& InOptionName);
 
 };

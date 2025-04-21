@@ -9,6 +9,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/DamageEvents.h" // For Testing Purpose
 #include "PhysicsEngine/RadialForceComponent.h"
+#include "Kismet/KismetMathLibrary.h"
 
 #define ORION_CHARA_HALF_HEIGHT 88.f
 
@@ -71,9 +72,16 @@ void AOrionGameMode::OnTestKey2Pressed()
     if (!PC) return;
 
     FHitResult HitResult;
-    PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
-	FVector TempLocation = HitResult.Location;
     bool bHit = PC->GetHitResultUnderCursor(ECC_Visibility, false, HitResult);
+
+    if (!bHit)
+    {
+		UE_LOG(LogTemp, Warning, TEXT("HitResult is not blocking hit. Trying to use GameTraceChannel1."));
+        bHit = PC->GetHitResultUnderCursor(ECC_GameTraceChannel1, false, HitResult);
+    }
+    
+    FVector TempLocation = HitResult.Location;
+
     if (bHit && HitResult.bBlockingHit)
     {
         FVector ImpactPoint = HitResult.ImpactPoint;
@@ -136,14 +144,10 @@ void AOrionGameMode::OnTestKey2Pressed()
     }
 }
 
-
-
 void AOrionGameMode::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 }
-
-
 
 void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 {
@@ -225,7 +229,7 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
             {
                 for (auto& each : OrionCharasRequested)
                 {
-                    FString ActionName = FString::Printf(TEXT("ForceAttackOnCharaLongRange|%s"), *TargetActor->GetName());
+                    FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange-%s"), *TargetActor->GetName());
 
                     if (each->CurrentAction)
                     {
@@ -235,14 +239,14 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
                             continue;
                         }
 
-                        // switch target
+                        // if switching target
                         else if (each->CurrentAction->Name.Contains("AttackOnCharaLongRange"))
                         {
                             each->CharacterActionQueue.Actions.clear();
 
                             each->CharacterActionQueue.Actions.push_back(
                                 Action(ActionName,
-                                    // 捕获: 攻击者(each) + 目标(HitChara)
+
                                     [charPtr = each, targetChara = TargetActor, inHitOffset = HitOffset](float DeltaTime) -> bool
                                     {
                                         return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
@@ -254,23 +258,25 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
                     }
 
                     each->RemoveAllActions();
-                    // 添加“ForceAttackOnChara”的 Action
-                    each->CharacterActionQueue.Actions.push_back(
-                        Action(ActionName,
-                            // 捕获: 攻击者(each) + 目标(HitChara)
-                            [charPtr = each, targetChara = TargetActor, inHitOffset = HitOffset](float DeltaTime) -> bool
-                            {
-                                // AOrionChara::AttackOnChara(AOrionChara* InTarget) 返回 bool
-                                return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
-                            }
-                        )
+
+					each->PlayEquipWeaponMontage();
+
+                    each->MontageCallbackChara = each;
+                    each->MontageCallbackTargetActor = TargetActor;
+                    each->MontageCallbackHitOffset = HitOffset;
+                    each->MontageCallbackActionName = ActionName;
+
+                    FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
+                        each->GetActorLocation(),
+                        TargetActor->GetActorLocation() + HitOffset + FVector(0, 0, 20.0f) // ADD AN ADDITIONAL OFFSET
                     );
+                    each->SetActorRotation(LookAtRot);
+
                 }
             }
         }
         else if (inCommandType == CommandType::Append)
         {
-            // 向控制选中的角色下达“攻击”指令
             if (!OrionCharasRequested.empty())
             {
                 for (auto& each : OrionCharasRequested)
@@ -278,10 +284,8 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
                     FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange|%s"), *TargetActor->GetName());
                     each->CharacterActionQueue.Actions.push_back(
                         Action(ActionName,
-                            // 捕获: 攻击者(each) + 目标(HitChara)
                             [charPtr = each, targetChara = TargetActor, inHitOffset = HitOffset](float DeltaTime) -> bool
                             {
-                                // AOrionChara::AttackOnChara(AOrionChara* InTarget) 返回 bool
                                 return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
                             }
                         )
@@ -320,7 +324,7 @@ bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionC
                 }
 
                 each->CharacterActionQueue.Actions.push_back(
-                    Action(TEXT("ForceMoveToLocation"),
+                    Action(TEXT("MoveToLocation"),
                         [charPtr = each, location = TargetLocation](float DeltaTime) -> bool
                         {
                             return charPtr->MoveToLocation(location);
@@ -403,7 +407,7 @@ void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCha
         {
             if (!each) continue;
 
-            FString ActionName = FString::Printf(TEXT("ForceInteractWithActor|%s"), *TargetActor->GetName());
+            FString ActionName = FString::Printf(TEXT("InteractWithActor|%s"), *TargetActor->GetName());
             each->RemoveAllActions();
             each->CharacterActionQueue.Actions.push_back(
                 Action(ActionName,

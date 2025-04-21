@@ -113,6 +113,21 @@ void AOrionPlayerController::Tick(float DeltaTime)
         }
 	}
 
+
+    if (AOrionHUD* CharaHUD = Cast<AOrionHUD>(GetHUD()))
+    {
+        if (OrionCharaSelection.size() == 1)
+        {
+            CharaHUD->bShowCharaInfoPanel = true;          //★ 改这里
+            CharaHUD->InfoChara = OrionCharaSelection[0];
+        }
+        else
+        {
+            CharaHUD->bShowCharaInfoPanel = false;         //★ 改这里
+            CharaHUD->InfoChara = nullptr;
+        }
+    }
+
 }
 
 
@@ -362,7 +377,7 @@ void AOrionPlayerController::OnRightMouseUp()
             ArrOptionNames.push_back(StringAttackOnOrionActor);
             ArrOptionNames.push_back("Operation2");
             ArrOptionNames.push_back("Operation3");
-            OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, FHitResult(), ArrOptionNames, OrionCharaSelection.front(), CachedRightClickedOrionActor);
+            OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, FHitResult(), ArrOptionNames);
         }
 
     }

@@ -15,14 +15,6 @@ enum class CommandType : uint8
     Append UMETA(DisplayName = "Push Action into ActionQueue"),
 };
 
-//UENUM(BlueprintType)
-//enum class ECallBackServerRequest : uint8
-//{
-//    RequestAttackOnOrionActor UMETA(DisplayName = "RequestAttackOnOrionActor"),
-//	RequestMoveToLocation UMETA(DisplayName = "RequestMoveToLocation"),
-//	RequestInteractWithActor UMETA(DisplayName = "RequestInteractWithActor"),
-//};
-
 UCLASS()
 class ORION_API AOrionPlayerController : public APlayerController
 {
@@ -45,7 +37,6 @@ public:
     TSubclassOf<AOrionChara> SubclassOfAOrionChara;
     std::vector<AOrionChara*> OrionCharaSelection;
     std::vector<AWheeledVehiclePawn*> OrionPawnSelection;
-
 
     /* OrionCharaSelection List Utilities */
     void SelectAll();

@@ -18,19 +18,58 @@ void AOrionHUD::BeginPlay()
         DeveloperUIBase->AddToViewport();
     }
 
-}
-void AOrionHUD::Tick(float DeltaTime)
-{
-    //ListenChangeCharaSelection();
+    InitCharaInfoPanel();
+	HideCharaInfoPanel();
 }
 
-void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult, const std::vector<std::string>& ArrOptionNames, AOrionChara* InTarget, AOrionActor* InTargetActor)
+void AOrionHUD::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);   // ①
+
+    UE_LOG(LogTemp, Verbose,
+        TEXT("bShow=%d  Prev=%d"),
+        bShowCharaInfoPanel, PreviousbShowCharaInfoPanel);
+
+    /* ---------- 状态切换 ---------- */
+    if (bShowCharaInfoPanel != PreviousbShowCharaInfoPanel)
+    {
+        if (bShowCharaInfoPanel)
+        {
+            UE_LOG(LogTemp, Log, TEXT("Show Chara Info Panel"));
+            if (CharaInfoPanel && InfoChara) CharaInfoPanel->InitCharaInfoPanelParams(InfoChara);
+            ShowCharaInfoPanel();
+        }
+        else
+        {
+            UE_LOG(LogTemp, Log, TEXT("Hide Chara Info Panel"));
+            HideCharaInfoPanel();
+            InfoChara = nullptr;
+        }
+        PreviousbShowCharaInfoPanel = bShowCharaInfoPanel;
+    }
+
+    /* ---------- 每帧刷新 ---------- */
+    if (CharaInfoPanel && bShowCharaInfoPanel && InfoChara)  // ②
+    {
+        UE_LOG(LogTemp, Verbose, TEXT("Update Chara Info Panel"));
+        CharaInfoPanel->UpdateCharaInfo(InfoChara);
+    }
+}
+
+void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult, const std::vector<std::string>& ArrOptionNames)
 {   
-    TArray<FName> NamesToPass;
+
+	if (ArrOperationAvailable.Num() > 0)
+	{
+		ArrOperationAvailable.Empty();
+	}
+
+    PlayerOperationSpawnReference = FHitResult();
+
     for (auto& each : ArrOptionNames)
     {
         FString OptionName = FString(UTF8_TO_TCHAR(each.c_str()));
-        NamesToPass.Add(FName(*OptionName));
+        ArrOperationAvailable.Add(FName(*OptionName));
     }
 
     if (WB_PlayerOperationMenu)
@@ -38,6 +77,7 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitRe
         UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu);
         if (PlayerOperationMenu)
         {
+            /*
             UFunction* SetFunction = PlayerOperationMenu->FindFunction(FName(TEXT("SetArrOperationAvailable")));
             if (SetFunction)
             {
@@ -55,81 +95,15 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitRe
 				Params.InTargetActor = InTargetActor;
                 PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
             }
+            */
+
+			PlayerOperationSpawnReference = HitResult;
 
             PlayerOperationMenu->AddToViewport();
             PlayerOperationMenu->SetPositionInViewport(FVector2D(MouseX, MouseY));
         }
     }
 }
-
-/*
-
-std::vector<AOrionChara*> AOrionHUD::PreviousCharaSelection;
-
-void AOrionHUD::ListenChangeCharaSelection()
-{
-    AOrionPlayerController* OrionPlayerController = Cast<AOrionPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0));
-    if (!OrionPlayerController)
-    {
-        UE_LOG(LogTemp, Error, TEXT("OrionPlayerController is null"));
-        return;
-    }
-
-    if (std::any_of(OrionPlayerController->OrionCharaSelection.begin(), OrionPlayerController->OrionCharaSelection.end(), [](AOrionChara* Chara) { return Chara == nullptr; }))
-    {
-        UE_LOG(LogTemp, Error, TEXT("Invalid pointer in OrionCharaSelection"));
-        return;
-    }
-
-    if (PreviousCharaSelection.size() != OrionPlayerController->OrionCharaSelection.size() ||
-        !std::equal(OrionPlayerController->OrionCharaSelection.begin(), OrionPlayerController->OrionCharaSelection.end(), PreviousCharaSelection.begin()))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("CharaSelection has changed!"));
-
-        if (WB_CharaSelectionMenu)
-        {
-            // 检查是否已经存在
-            if (ActiveCharaSelectionMenu)
-            {
-                // 从视口移除并销毁现有组件
-                ActiveCharaSelectionMenu->RemoveFromParent();
-                ActiveCharaSelectionMenu = nullptr;
-            }
-
-            UUserWidget* CharaSelectionMenu = CreateWidget<UUserWidget>(GetWorld(), WB_CharaSelectionMenu);
-            if (CharaSelectionMenu)
-            {
-                // 存储当前实例
-                ActiveCharaSelectionMenu = CharaSelectionMenu;
-
-                UFunction* SetFunction = CharaSelectionMenu->FindFunction(FName(TEXT("FuncReloadWBDevelopmentUIBase")));
-                if (SetFunction)
-                {
-                    struct
-                    {
-                        TArray<AOrionChara*> CharaSelection;
-                    } Params;
-
-                    for (auto& each : OrionPlayerController->OrionCharaSelection)
-                    {
-                        Params.CharaSelection.Add(each);
-                    }
-
-                    CharaSelectionMenu->ProcessEvent(SetFunction, &Params);
-                }
-
-                CharaSelectionMenu->AddToViewport();
-                CharaSelectionMenu->SetPositionInViewport(FVector2D(40, 188));
-            }
-        }
-
-    }
-
-    // 更新快照
-    PreviousCharaSelection = OrionPlayerController->OrionCharaSelection;
-}
-
-*/
 
 void AOrionHUD::DrawHUD()
 {
@@ -248,9 +222,37 @@ void AOrionHUD::DrawHUD()
     }
 }
 
-
 void AOrionHUD::ShowInfoAtMouse(const TArray<FString>& InLines)
 {
     InfoLines = InLines;
 }
 
+void AOrionHUD::InitCharaInfoPanel()
+{
+
+	if (WB_CharaInfoPanel)
+	{
+        CharaInfoPanel = CreateWidget<UOrionUserWidgetCharaInfo>(GetWorld(), WB_CharaInfoPanel);
+		if (CharaInfoPanel)
+		{
+			CharaInfoPanel->AddToViewport();
+		}
+	}
+}
+
+void AOrionHUD::HideCharaInfoPanel()
+{
+    if (CharaInfoPanel)
+    {
+        CharaInfoPanel->SetVisibility(ESlateVisibility::Collapsed);
+        // 或者彻底：CharaPanel->RemoveFromParent();
+    }
+}
+
+void AOrionHUD::ShowCharaInfoPanel()
+{
+	if (CharaInfoPanel)
+	{
+		CharaInfoPanel->SetVisibility(ESlateVisibility::Visible);
+	}
+}
