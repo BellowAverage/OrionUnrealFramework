@@ -5,8 +5,9 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "../OrionChara.h"
+#include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
-#include "Components/ProgressBar.h"
+//#include "Components/ProgressBar.h"
 #include "Components/Slider.h"
 #include "OrionUserWidgetCharaInfo.generated.h"
 
@@ -17,11 +18,11 @@ UCLASS(Blueprintable, BlueprintType)
 class ORION_API UOrionUserWidgetCharaInfo : public UUserWidget
 {
 	GENERATED_BODY()
-	
-public:
 
+public:
 	virtual void NativeConstruct() override;
 
+	UPROPERTY()
 	AOrionChara* CharaRef = nullptr;
 
 	/* Widget Bindings */
@@ -44,10 +45,29 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* TextActionQueue = nullptr;
 
+	UPROPERTY(meta = (BindWidget))
+	UCheckBox* CheckDefensive = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UCheckBox* CheckAggressive = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UCheckBox* CheckUnavailable = nullptr;
+
+
 	/* Call Back */
 
 	UFUNCTION()
 	void OnSliderChange(float InValue);
 
+	UFUNCTION()
+	void OnDefensiveChanged(bool bIsChecked);
 
+	UFUNCTION()
+	void OnAggressiveChanged(bool bIsChecked);
+
+	UFUNCTION()
+	void OnUnavailableChanged(bool bIsChecked);
+
+	bool bSuppressCheckEvents = false;
 };

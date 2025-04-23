@@ -24,7 +24,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bullet")
 	TSubclassOf<AOrionProjectile> ProjectileClass;
 	UFUNCTION(BlueprintCallable, Category = "Bullet")
-	void SpawnOrionBulletActor(const FVector& TargetLocation, const FVector& MuzzleLocation);
+	void SpawnOrionBulletActor(
+		const FVector& SpawnLocation,
+		const FVector& ForwardDirection);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bullet")
 	float SpawnZOffset;
