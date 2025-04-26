@@ -20,12 +20,10 @@ AOrionAIController::AOrionAIController()
 	SightConfig->PeripheralVisionAngleDegrees = 90.f; // 左右视野(一侧)角度
 	SightConfig->SetMaxAge(5.f); // 感知保留时长
 
-	// 告诉感知组件可以感知敌对、中立、友军
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
 	SightConfig->DetectionByAffiliation.bDetectFriendlies = true;
 
-	// 将Sight配置添加到感知组件
 	AIPerceptionComp->ConfigureSense(*SightConfig);
 	AIPerceptionComp->SetDominantSense(SightConfig->GetSenseImplementation());
 }
@@ -54,7 +52,6 @@ void AOrionAIController::Tick(float DeltaTime)
 
 	if (ControlledPawn->CharaAIState == EAIState::Defensive)
 	{
-		//UE_LOG(LogTemp, Log, TEXT("AOrionAIController::Tick: RegisterDefensiveAIActon"));
 		RegisterDefensiveAIActon();
 	}
 }
@@ -62,7 +59,8 @@ void AOrionAIController::Tick(float DeltaTime)
 
 void AOrionAIController::RegisterDefensiveAIActon()
 {
-	if (ControlledPawn->CharaState == ECharaState::Alive && ControlledPawn->CurrentAction == nullptr)
+	if (ControlledPawn->CharaState == ECharaState::Alive && ControlledPawn->CurrentAction == nullptr && ControlledPawn
+		->CharacterActionQueue.IsEmpty())
 	{
 		if (AOrionChara* TargetOrionChara = GetClosestOrionCharaByRelation(
 			ERelation::Hostile, ControlledPawn->HostileGroupsIndex, ControlledPawn->FriendlyGroupsIndex))
@@ -80,6 +78,10 @@ void AOrionAIController::RegisterDefensiveAIActon()
 				       }
 				)
 			);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::RegisterDefensiveAIActon: No available target found"));
 		}
 	}
 }

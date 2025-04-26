@@ -456,3 +456,61 @@ void AOrionChara::OnEquipWeaponMontageEnded(UAnimMontage* Montage, bool bInterru
 		UE_LOG(LogTemp, Log, TEXT("EquipWeaponMontage ended."));
 	}
 }
+
+float AOrionChara::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator,
+                              AActor* DamageCauser)
+{
+	const float DamageApplied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+
+	CurrHealth -= DamageApplied;
+
+	//UE_LOG(LogTemp, Log, TEXT("AOrionChara took %f damage. Current Health: %f"), DamageApplied, CurrHealth);
+
+	/*
+	// 检查 DamageEvent 是否为径向伤害事件
+	if (DamageEvent.GetTypeID() == FRadialDamageEvent::ClassID)
+	{
+		UE_LOG(LogTemp, Log, TEXT("DamageEvent is a radial damage event."));
+		// 将 DamageEvent 转换为 FRadialDamageEvent
+		const FRadialDamageEvent& RadialDamageEvent = static_cast<const FRadialDamageEvent&>(DamageEvent);
+
+		// 计算角色与爆炸点的距离
+		float Distance = FVector::Dist(RadialDamageEvent.Origin, GetActorLocation());
+
+		// 计算力的大小
+		float MaxForce = DamageAmount; // 这里假设 DamageAmount 与最大力成正比
+		float ForceMagnitude = FMath::Max(0.f, MaxForce * (1 - Distance / RadialDamageEvent.Params.OuterRadius));
+
+		UE_LOG(LogTemp, Warning, TEXT("Calculated ForceMagnitude: %f at Distance: %f"), ForceMagnitude, Distance);
+
+		// 如果力超过阈值，调用 OnForceExceeded
+		if (ForceMagnitude > ForceThreshold)
+		{
+			// 计算力的方向
+			FVector ForceDirection = GetActorLocation() - RadialDamageEvent.Origin;
+			ForceDirection = ForceDirection.GetSafeNormal();
+
+			// 调用 OnForceExceeded，传递力向量
+			OnForceExceeded(ForceDirection * ForceMagnitude);
+		}
+	}
+	*/
+
+
+	if (CurrHealth <= 0.0f)
+	{
+		Incapacitate();
+	}
+
+	return DamageApplied;
+}
+
+void AOrionChara::RefreshAttackFrequency()
+{
+	if (IsAttackOnCharaLongRange != PreviousTickIsAttackOnCharaLongRange)
+	{
+		SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
+	}
+
+	PreviousTickIsAttackOnCharaLongRange = IsAttackOnCharaLongRange;
+}

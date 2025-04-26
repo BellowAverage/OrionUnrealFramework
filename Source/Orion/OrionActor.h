@@ -18,8 +18,8 @@ UCLASS()
 class ORION_API AOrionActor : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
+
+public:
 	// Sets default values for this actor's properties
 	AOrionActor();
 
@@ -63,7 +63,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	int CurrHealth;
 
-	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator,
+	                         AActor* DamageCauser) override;
 	void Die();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
@@ -76,12 +77,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Basics")
 	void ProductionProgressUpdate(float DeltaTime);
 
+	/* Inventory Utility */
 
+	void OnInventoryUpdate(float DeltaTime);
+	void OnInventoryExceeded();
+	int PreviousInventory;
 
 protected:
 	virtual void BeginPlay() override;
 
-public:	
+public:
 	virtual void Tick(float DeltaTime) override;
-
 };

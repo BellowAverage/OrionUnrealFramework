@@ -4,7 +4,6 @@
 #include "OrionAIController.h"
 
 #include "AIController.h"
-#include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "NavigationSystem.h"
 #include "GameFramework/Actor.h"
@@ -23,7 +22,8 @@
 #include <limits>
 #include <algorithm>
 #include "TimerManager.h"
-#include "Components/PrimitiveComponent.h"
+
+//#include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include <Components/SphereComponent.h>
 
@@ -35,6 +35,7 @@
 #include "Animation/SkeletalMeshActor.h"
 #include "OrionBPFunctionLibrary.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
+#include "GameFramework/CharacterMovementComponent.h"
 */
 
 
@@ -52,33 +53,19 @@ AOrionChara::AOrionChara()
 
 
 	SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
-	CharacterActionQueue.Actions.reserve(100);
 
-	/* AI Information */
-	HostileGroupsIndex.Add(1);
-	HostileGroupsIndex.Add(3);
-	HostileGroupsIndex.Add(5);
-
-	FriendlyGroupsIndex.Add(2);
-	FriendlyGroupsIndex.Add(4);
-	FriendlyGroupsIndex.Add(6);
+	//CharacterActionQueue.Actions.reserve(100);
 }
 
 void AOrionChara::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UE_LOG(LogTemp, Log, TEXT("%s has been constructed."), *GetName());
+	// UE_LOG(LogTemp, Log, TEXT("%s has been constructed."), *GetName());
 
-	if (GetMesh())
-	{
-		DefaultMeshRelativeLocation = GetMesh()->GetRelativeLocation();
-		DefaultMeshRelativeRotation = GetMesh()->GetRelativeRotation();
-		DefaultCapsuleMeshOffset = GetCapsuleComponent()->GetComponentLocation() - GetMesh()->GetComponentLocation();
-	}
-
-	// 1) 尝试获取当前的 AIController
 	AIController = Cast<AOrionAIController>(GetController());
+
+	/*
 	if (AIController)
 	{
 		UE_LOG(LogTemp, Log, TEXT("OrionChara is now controlled by OrionAIController"));
@@ -87,16 +74,12 @@ void AOrionChara::BeginPlay()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("OrionChara is not controlled by OrionAIController"));
 
-		// 检查是否设置了 AIControllerClass
 		if (AIControllerClass)
 		{
 			UE_LOG(LogTemp, Log, TEXT("AIControllerClass is set to: %s"), *AIControllerClass->GetName());
 
-			// 获取世界上下文
-
 			if (UWorld* World = GetWorld())
 			{
-				// 设置 Spawn 参数
 				FActorSpawnParameters SpawnParams;
 				SpawnParams.Instigator = GetInstigator();
 				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -104,140 +87,163 @@ void AOrionChara::BeginPlay()
 				UE_LOG(LogTemp, Log, TEXT("Attempting to spawn AIController of class: %s"),
 				       *AIControllerClass->GetName());
 
-				// 使用 SpawnActor 生成 AIController，不再使用 Cast<>()，因为 SpawnActor<AOrionAIController> 已返回正确类型
 				AIController = World->SpawnActor<AOrionAIController>(AIControllerClass, SpawnParams);
 				if (AIController)
 				{
-					// 让新的 AIController 控制这个角色
 					AIController->Possess(this);
 					UE_LOG(LogTemp, Log, TEXT("OrionAIController has been spawned and possessed the OrionChara."));
 				}
 				else
 				{
 					UE_LOG(LogTemp, Error, TEXT("Failed to spawn OrionAIController. Skipping related logic."));
-					// 转换失败，跳过相关逻辑
 				}
 			}
 			else
 			{
 				UE_LOG(LogTemp, Error, TEXT("World context is invalid. Skipping related logic."));
-				// 世界上下文无效，跳过相关逻辑
 			}
 		}
 		else
 		{
 			UE_LOG(LogTemp, Error,
 			       TEXT("AIControllerClass is not set. Please assign it in the constructor or editor."));
-			// AIControllerClass 未设置，跳过相关逻辑
 		}
 	}
+	*/
 
-	// 2) 获取 CharacterMovementComponent
-	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-	if (MovementComponent)
-	{
-		// Don't rotate character to camera direction
-		bUseControllerRotationPitch = false;
-		bUseControllerRotationYaw = false;
-		bUseControllerRotationRoll = false;
+	InitOrionCharaMovement();
 
-		// Configure character movement
-		MovementComponent->bOrientRotationToMovement = true; // Rotate character to moving direction
-		MovementComponent->RotationRate = FRotator(0.f, 270.f, 0.f);
-		MovementComponent->bConstrainToPlane = true;
-		MovementComponent->bSnapToPlaneAtStart = true;
-
-		MovementComponent->MaxWalkSpeed = OrionCharaSpeed;
-	}
-
-	// Initialize default health values
 	CurrHealth = MaxHealth;
-
-	// Enable the character to receive damage
 	this->SetCanBeDamaged(true);
-}
-
-void AOrionChara::ChangeMaxWalkSpeed(float InValue)
-{
-	if (UCharacterMovementComponent* MovementComponent = GetCharacterMovement();)
-	{
-		MovementComponent->MaxWalkSpeed = InValue;
-		OrionCharaSpeed = InValue;
-	}
 }
 
 void AOrionChara::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	//UE_LOG(LogTemp, Log, TEXT("AOrionChara::Tick()"));
+
 	if (CharaState == ECharaState::Dead || CharaState == ECharaState::Incapacitated)
 	{
 		return;
 	}
 
+	/* Physics Handle - See Movement Module */
 
-	if (CharaState == ECharaState::Ragdoll)
-	{
-		FName RootBone = GetMesh()->GetBoneName(0);
-		FVector MeshRootLocation = GetMesh()->GetBoneLocation(RootBone);
-
-		UCapsuleComponent* CapsuleComp = GetCapsuleComponent();
-		if (CapsuleComp)
-		{
-			FVector NewCapsuleLocation = MeshRootLocation + DefaultCapsuleMeshOffset;
-			CapsuleComp->SetWorldLocation(NewCapsuleLocation);
-		}
-
-
-		if (RagdollWakeupAccumulatedTime >= RagdollWakeupThreshold)
-		{
-			RagdollWakeupAccumulatedTime = 0;
-			RagdollWakeup();
-		}
-		else
-		{
-			RagdollWakeupAccumulatedTime += DeltaTime;
-		}
-	}
+	RegisterCharaRagdoll(DeltaTime);
 
 	ForceDetectionOnVelocityChange();
 
-	if (CurrentAction == nullptr && !CharacterActionQueue.IsEmpty())
+	/* AI Controlling */
+
+	const FString PrevName = LastNonEmptyActionName;
+
+	/*
+	UE_LOG(LogTemp, Warning,
+	       TEXT("[DEBUG] %s PrevAction='%s'"),
+	       *GetName(),
+	       PrevName.IsEmpty() ? TEXT("None") : *PrevName
+	);
+	*/
+
+	DistributeCharaAction(DeltaTime);
+
+	const FString CurrName = GetUnifiedActionName();
+
+	/*
+	UE_LOG(LogTemp, Warning,
+	       TEXT("[DEBUG] %s CurrAction='%s'"),
+	       *GetName(),
+	       CurrName.IsEmpty() ? TEXT("None") : *CurrName
+	);
+	*/
+
+	// if both non-empty and changed, invoke state transition
+	if (!PrevName.IsEmpty() && !CurrName.IsEmpty() && PrevName != CurrName)
 	{
-		CurrentAction = CharacterActionQueue.GetNextAction();
+		UE_LOG(LogTemp, Log,
+		       TEXT("SwitchingStateHandle: %s -> %s"),
+		       *PrevName, *CurrName
+		);
+		SwitchingStateHandle(PrevName, CurrName);
 	}
 
-	if (CurrentAction)
+	if (!CurrName.IsEmpty())
 	{
-		bool ActionComplete = CurrentAction->ExecuteFunction(DeltaTime);
-
-		if (ActionComplete)
-		{
-			CharacterActionQueue.RemoveCurrentAction();
-			CurrentAction = nullptr;
-		}
+		LastNonEmptyActionName = CurrName;
 	}
 
-	if (IsAttackOnCharaLongRange != PreviousTickIsAttackOnCharaLongRange)
-	{
-		SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
-	}
 
-	PreviousTickIsAttackOnCharaLongRange = IsAttackOnCharaLongRange;
+	/* Refresh Attack Frequency */
+
+	RefreshAttackFrequency();
 }
 
-void AOrionChara::ForceDetectionOnVelocityChange()
+FString AOrionChara::GetUnifiedActionName() const
 {
-	FVector CurrentVelocity = GetVelocity();
-	float VelocityChange = (CurrentVelocity - PreviousVelocity).Size();
-
-	if (VelocityChange > VelocityChangeThreshold)
+	// choose between procedural vs real‐time
+	if (bIsCharaProcedural)
 	{
-		// 认为受到了外力影响
-		OnForceExceeded(CurrentVelocity - PreviousVelocity);
+		return CurrentProcAction ? CurrentProcAction->Name : TEXT("");
+	}
+	return CurrentAction ? CurrentAction->Name : TEXT("");
+}
+
+void AOrionChara::DistributeCharaAction(float DeltaTime)
+{
+	if (bIsCharaProcedural)
+	{
+		DistributeProceduralAction(DeltaTime);
+	}
+	else
+	{
+		DistributeRealTimeAction(DeltaTime);
+	}
+}
+
+void AOrionChara::DistributeRealTimeAction(float DeltaTime)
+{
+	if (CurrentAction)
+	{
+		PreviousAction = CurrentAction;
 	}
 
-	PreviousVelocity = CurrentVelocity;
+	if (CurrentAction == nullptr && !CharacterActionQueue.IsEmpty())
+	{
+		CurrentAction = CharacterActionQueue.GetFrontAction();
+	}
+
+	if (CurrentAction && CurrentAction->ExecuteFunction(DeltaTime))
+	{
+		CharacterActionQueue.PopFrontAction();
+		CurrentAction = nullptr;
+	}
+}
+
+void AOrionChara::DistributeProceduralAction(float DeltaTime)
+{
+	if (CurrentProcAction)
+	{
+		PreviousProcAction = CurrentProcAction;
+	}
+
+	for (auto& ProcAction : CharacterProcActionQueue.Actions)
+	{
+		bool bInterrupted = ProcAction.ExecuteFunction(DeltaTime);
+		if (!bInterrupted)
+		{
+			CurrentProcAction = &ProcAction;
+			break;
+		}
+	}
+}
+
+void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
+{
+	if (Prev.Contains(TEXT("InteractWithActor")) && Curr.Contains(TEXT("MoveToLocation")))
+	{
+		InteractWithActorStop();
+	}
 }
 
 bool AOrionChara::MoveToLocation(FVector InTargetLocation)
@@ -321,9 +327,17 @@ void AOrionChara::MoveToLocationStop()
 
 bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 {
+	// UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: InTarget is being interacted."));
+
 	if (!IsValid(InTarget))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: InTarget is not valid."));
+
+		if (IsInteractWithActor)
+		{
+			InteractWithActorStop();
+		}
+
 		IsInteractWithActor = false;
 		return true;
 	}
@@ -331,6 +345,12 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: InTarget is not Interactable."));
+
+		if (IsInteractWithActor)
+		{
+			InteractWithActorStop();
+		}
+
 		IsInteractWithActor = false;
 		return true;
 	}
@@ -339,16 +359,6 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 
 	if (CollisionSphere && CollisionSphere->IsOverlappingActor(this))
 	{
-		if (InTarget->GetName().Contains("BP_OrionDynamicActor"))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("%s: Interacting with BP_OrionDynamicActor is now Discarded."),
-			       *this->GetName());
-			//return PickUpItem(DeltaTime, InTarget);
-			return true;
-		}
-
-		IsInteractWithActor = true;
-
 		// Determine the type of interaction
 
 		FString TargetInteractType = InTarget->GetInteractType();
@@ -360,13 +370,19 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		{
 			InteractType = EInteractType::Unavailable;
 			UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: Unavailable interact type."));
+
+			if (IsInteractWithActor)
+			{
+				InteractWithActorStop();
+			}
+
 			IsInteractWithActor = false;
 			return true;
 		}
 
-		if (!DoOnceInteractWithActor)
+		if (!IsInteractWithActor)
 		{
-			DoOnceInteractWithActor = true;
+			IsInteractWithActor = true;
 			CurrentInteractActor = InTarget;
 			InTarget->CurrWorkers += 1;
 		}
@@ -374,7 +390,6 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		if (AIController)
 		{
 			AIController->StopMovement();
-			//UE_LOG(LogTemp, Log, TEXT("StopMovement Called. "));
 		}
 
 		// 计算朝向目标的旋转角度
@@ -392,33 +407,31 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 
 		return false;
 	}
+
 	if (AIController)
 	{
 		UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
 		if (NavSys)
 		{
-			FNavLocation ProjectedLocation; // 修改为 FNavLocation
+			FNavLocation ProjectedLocation;
 
-			// 定义搜索范围
 			FVector SearchExtent(500.0f, 500.0f, 500.0f);
 
-			// 尝试将目标点投影到导航网格上
 			if (NavSys->ProjectPointToNavigation(
-				InTarget->GetActorLocation(), // 原始目标位置
-				ProjectedLocation, // 输出投影后的可导航点
-				SearchExtent // 搜索范围
+				InTarget->GetActorLocation(),
+				ProjectedLocation,
+				SearchExtent
 			))
 			{
-				// 使用投影点作为目标位置
 				EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
-					ProjectedLocation.Location, // 使用 ProjectedLocation.Location
-					20.0f, // 容忍距离（单位：厘米）
-					true, // 停止于重叠
-					true, // 使用路径寻路
-					true, // 投影到可导航区域
-					false, // 不允许平移移动
-					nullptr, // 无自定义路径过滤器
-					true // 允许部分路径
+					ProjectedLocation.Location,
+					20.0f,
+					true,
+					true,
+					true,
+					false,
+					nullptr,
+					true
 				);
 
 				if (RequestResult == EPathFollowingRequestResult::Failed)
@@ -439,6 +452,11 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		{
 			//UE_LOG(LogTemp, Error, TEXT("Navigation system is not available!"));
 		}
+	}
+
+	if (IsInteractWithActor)
+	{
+		InteractWithActorStop();
 	}
 
 	IsInteractWithActor = false;
@@ -499,76 +517,27 @@ void AOrionChara::RemoveAllActions(const FString& Except)
 	CharacterActionQueue.Actions.clear();
 }
 
-float AOrionChara::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator,
-                              AActor* DamageCauser)
-{
-	float DamageApplied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
-
-	CurrHealth -= DamageApplied;
-
-	//UE_LOG(LogTemp, Log, TEXT("AOrionChara took %f damage. Current Health: %f"), DamageApplied, CurrHealth);
-
-	// 检查 DamageEvent 是否为径向伤害事件
-	/*
-	if (DamageEvent.GetTypeID() == FRadialDamageEvent::ClassID)
-	{
-		UE_LOG(LogTemp, Log, TEXT("DamageEvent is a radial damage event."));
-	    // 将 DamageEvent 转换为 FRadialDamageEvent
-	    const FRadialDamageEvent& RadialDamageEvent = static_cast<const FRadialDamageEvent&>(DamageEvent);
-
-	    // 计算角色与爆炸点的距离
-	    float Distance = FVector::Dist(RadialDamageEvent.Origin, GetActorLocation());
-
-	    // 计算力的大小
-	    float MaxForce = DamageAmount; // 这里假设 DamageAmount 与最大力成正比
-	    float ForceMagnitude = FMath::Max(0.f, MaxForce * (1 - Distance / RadialDamageEvent.Params.OuterRadius));
-
-	    UE_LOG(LogTemp, Warning, TEXT("Calculated ForceMagnitude: %f at Distance: %f"), ForceMagnitude, Distance);
-
-	    // 如果力超过阈值，调用 OnForceExceeded
-	    if (ForceMagnitude > ForceThreshold)
-	    {
-	        // 计算力的方向
-	        FVector ForceDirection = GetActorLocation() - RadialDamageEvent.Origin;
-	        ForceDirection = ForceDirection.GetSafeNormal();
-
-	        // 调用 OnForceExceeded，传递力向量
-	        OnForceExceeded(ForceDirection * ForceMagnitude);
-	    }
-	}
-	*/
-
-
-	if (CurrHealth <= 0.0f)
-	{
-		Incapacitate();
-	}
-
-	return DamageApplied;
-}
 
 void AOrionChara::OnForceExceeded(const FVector& DeltaVelocity)
 {
-	float DeltaVSize = DeltaVelocity.Size();
+	const float DeltaVSize = DeltaVelocity.Size();
 	UE_LOG(LogTemp, Warning, TEXT("Force exceeded! Delta Velocity: %f"), DeltaVSize);
 
-	float Mass = GetMesh()->GetMass();
+	const float Mass = GetMesh()->GetMass();
 
 	constexpr float DeltaT = 0.0166f;
 
-	// 计算近似的平均受力 F = m * Δv / Δt
-	float ApproximatedForce = Mass * DeltaVSize / DeltaT / 20.0f;
+	// F = m * Δv / Δt
+	const float ApproximatedForce = Mass * DeltaVSize / DeltaT / 20.0f;
 	UE_LOG(LogTemp, Warning, TEXT("Approximated Impulse Force: %f"), ApproximatedForce);
 
-	FVector CurrVel = GetVelocity();
+	const FVector CurrVel = GetVelocity();
 
 	Ragdoll();
 
-	// 计算当前速度
-
 	GetMesh()->SetPhysicsLinearVelocity(CurrVel);
 
-	FVector ImpulseToAdd = DeltaVelocity.GetSafeNormal() * ApproximatedForce * DeltaT;
+	const FVector ImpulseToAdd = DeltaVelocity.GetSafeNormal() * ApproximatedForce * DeltaT;
 	GetMesh()->AddImpulse(ImpulseToAdd, NAME_None, true);
 }
 
@@ -578,13 +547,10 @@ void AOrionChara::Die()
 
 	UE_LOG(LogTemp, Log, TEXT("AOrionChara::Die() called."));
 
-	// 1. 停止所有动作
 	RemoveAllActions();
 
-	// 2. 停止AI感知
 	if (StimuliSourceComp)
 	{
-		// Ensure that the sense class is valid
 		if (UAISense_Sight::StaticClass())
 		{
 			StimuliSourceComp->UnregisterFromSense(UAISense_Sight::StaticClass());
@@ -640,12 +606,10 @@ void AOrionChara::Incapacitate()
 {
 	CharaState = ECharaState::Incapacitated;
 
-	// 1. 停止所有动作
 	RemoveAllActions();
-	// 2. 停止AI感知
+
 	if (StimuliSourceComp)
 	{
-		// Ensure that the sense class is valid
 		if (UAISense_Sight::StaticClass())
 		{
 			StimuliSourceComp->UnregisterFromSense(UAISense_Sight::StaticClass());
@@ -660,7 +624,7 @@ void AOrionChara::Incapacitate()
 	{
 		UE_LOG(LogTemp, Warning, TEXT("StimuliSourceComp is null in Die()."));
 	}
-	// 3. 停止AI控制
+
 	if (AIController)
 	{
 		AIController->StopMovement();
@@ -672,7 +636,6 @@ void AOrionChara::Incapacitate()
 		UE_LOG(LogTemp, Warning, TEXT("AIController is null in Die()."));
 	}
 
-	// Inside AOrionChara::BeginPlay() or wherever appropriate
 	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(
 		GetComponentByClass(UPrimitiveComponent::StaticClass()));
 	if (PrimitiveComponent)
@@ -680,9 +643,7 @@ void AOrionChara::Incapacitate()
 		PrimitiveComponent->SetSimulatePhysics(true);
 	}
 
-	// Disable capsule collision
-	UCapsuleComponent* CharaCapsuleComponent = GetCapsuleComponent();
-	if (CharaCapsuleComponent)
+	if (UCapsuleComponent* CharaCapsuleComponent = GetCapsuleComponent())
 	{
 		CharaCapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
@@ -691,13 +652,6 @@ void AOrionChara::Incapacitate()
 void AOrionChara::Ragdoll()
 {
 	RemoveAllActions();
-
-	//UCapsuleComponent* CapsuleComp = GetCapsuleComponent();
-	//if (CapsuleComp)
-	//{
-	//    CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	//    CapsuleComp->SetVisibility(false);
-	//}
 
 	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(
 		GetComponentByClass(UPrimitiveComponent::StaticClass()));
@@ -722,22 +676,17 @@ void AOrionChara::RagdollWakeup()
 		PrimitiveComponent->SetSimulatePhysics(false);
 	}
 
-	// 将角色旋转调整为正立（保留当前 Yaw，仅将 Pitch 与 Roll 设为 0）
 	FRotator CurrentRot = GetActorRotation();
 	FRotator UprightRot(0.0f, CurrentRot.Yaw, 0.0f);
 	SetActorRotation(UprightRot);
 
-	// 重置 Skeletal Mesh 的相对位置和旋转至初始状态
 	if (GetMesh())
 	{
-		// 如果当前 Mesh 还处于物理模拟状态下，其骨骼可能被物理计算改变，停止物理模拟后重新设置初始状态
 		GetMesh()->SetRelativeLocation(DefaultMeshRelativeLocation);
 		GetMesh()->SetRelativeRotation(DefaultMeshRelativeRotation);
 
-		// 刷新骨骼状态，使其回到参考姿势
 		GetMesh()->RefreshBoneTransforms();
 
-		// 如果需要，还可以重置动画实例（强制刷新到动画蓝图中的默认 Idle 或站立状态）
 		if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 		{
 			AnimInst->InitializeAnimation();
@@ -759,11 +708,9 @@ void AOrionChara::AddItemToInventory(int ItemID, int Quantity)
 
 std::vector<AOrionChara*> AOrionChara::GetOtherCharasByProximity() const
 {
-	// 1) 拿到场景中所有 AOrionChara 实例
 	TArray<AActor*> AllActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), StaticClass(), AllActors);
 
-	// 2) 过滤出“不是自己”且“阵营不同”的角色
 	std::vector<AOrionChara*> Enemies;
 	Enemies.reserve(AllActors.Num());
 	for (AActor* Actor : AllActors)
@@ -782,7 +729,6 @@ std::vector<AOrionChara*> AOrionChara::GetOtherCharasByProximity() const
 		}
 	}
 
-	// 3) 按距离从近到远排序（用 DistSquared 更高效）
 	const FVector MyLocation = GetActorLocation();
 	std::sort(Enemies.begin(), Enemies.end(),
 	          [MyLocation](AOrionChara* A, AOrionChara* B)
@@ -836,4 +782,37 @@ bool AOrionChara::bIsLineOfSightBlocked(AActor* InTargetActor) const
 	}
 
 	return false;
+}
+
+void AOrionChara::ReorderProceduralAction(int32 DraggedIndex, int32 DropIndex)
+{
+	auto& Q = CharacterProcActionQueue.Actions;
+
+	int32 Count = static_cast<int32>(Q.size());
+	if (DraggedIndex < 0 || DraggedIndex >= Count)
+	{
+		return;
+	}
+
+	Action Temp = MoveTemp(Q[DraggedIndex]);
+	Q.erase(Q.begin() + DraggedIndex);
+
+	int32 NewIndex = DropIndex;
+	if (DropIndex > DraggedIndex)
+	{
+		NewIndex = DropIndex - 1;
+	}
+
+	NewIndex = FMath::Clamp(NewIndex, 0, static_cast<int32>(Q.size()));
+
+	Q.insert(Q.begin() + NewIndex, MoveTemp(Temp));
+}
+
+void AOrionChara::RemoveProceduralActionAt(int32 Index)
+{
+	auto& Q = CharacterProcActionQueue.Actions;
+	if (Index >= 0 && Index < Q.size())
+	{
+		Q.erase(Q.begin() + Index);
+	}
 }

@@ -49,7 +49,8 @@ void AOrionGameMode::OnTestKey1Pressed()
 				if (AOrionActor* TestOrionActor = Cast<AOrionActor>(ClickedActor))
 				{
 					FDamageEvent DamageEvent; // Temporary FDamageEvent for testing purposes
-					TestOrionActor->TakeDamage(10.f, FDamageEvent(), PlayerController->GetInstigatorController(), this);
+					TestOrionActor->TakeDamage(1.0f, FDamageEvent(), PlayerController->GetInstigatorController(), this);
+					TestOrionActor->CurrInventory -= 1;
 				}
 				else if (AOrionChara* TestOrionChara = Cast<AOrionChara>(ClickedActor))
 				{
@@ -168,7 +169,7 @@ void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.Owner = this;
-	SpawnParams.Instigator = nullptr; // GameMode 通常没有 Instigator
+	SpawnParams.Instigator = nullptr;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 
 	float CapsuleHalfHeight = ORION_CHARA_HALF_HEIGHT;
@@ -230,6 +231,12 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
 			{
 				for (auto& each : OrionCharasRequested)
 				{
+					if (each->bIsCharaProcedural)
+					{
+						each->bIsCharaProcedural = false;
+					}
+
+
 					FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange-%s"), *TargetActor->GetName());
 
 					if (each->CurrentAction)
@@ -307,6 +314,12 @@ bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionC
 		{
 			for (auto& each : OrionCharasRequested)
 			{
+				if (each->bIsCharaProcedural)
+				{
+					each->bIsCharaProcedural = false;
+				}
+
+
 				if (each->CurrentAction)
 				{
 					if (each->CurrentAction->Name.Contains("MoveToLocation"))
@@ -404,7 +417,12 @@ void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCha
 				continue;
 			}
 
-			FString ActionName = FString::Printf(TEXT("InteractWithActor|%s"), *TargetActor->GetName());
+			if (each->bIsCharaProcedural)
+			{
+				each->bIsCharaProcedural = false;
+			}
+
+			FString ActionName = FString::Printf(TEXT("InteractWithActor_%s"), *TargetActor->GetName());
 			each->RemoveAllActions();
 			each->CharacterActionQueue.Actions.push_back(
 				Action(ActionName,
@@ -425,8 +443,8 @@ void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCha
 				continue;
 			}
 
-			FString ActionName = FString::Printf(TEXT("InteractWithActor|%s"), *TargetActor->GetName());
-			each->CharacterActionQueue.Actions.push_back(
+			FString ActionName = FString::Printf(TEXT("InteractWithActor_%s"), *TargetActor->GetName());
+			each->CharacterProcActionQueue.Actions.push_back(
 				Action(ActionName,
 				       [charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
 				       {

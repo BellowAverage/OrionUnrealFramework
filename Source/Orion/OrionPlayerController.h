@@ -53,7 +53,7 @@ public:
 
 	float RightMouseDownTime = 0.0f;
 	UPROPERTY(EditAnywhere, Category="Input")
-	float RightClickHoldThreshold = 0.5f;
+	float RightClickHoldThreshold = 0.2f;
 
 	AOrionActor* CachedRightClickedOrionActor = nullptr;
 	void OnRightMouseUp();

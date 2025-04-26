@@ -10,229 +10,245 @@
 
 void AOrionHUD::BeginPlay()
 {
-    Super::BeginPlay();
+	Super::BeginPlay();
 
-    if (WB_DeveloperUIBase)
-    {
-        UUserWidget* DeveloperUIBase = CreateWidget<UUserWidget>(GetWorld(), WB_DeveloperUIBase);
-        DeveloperUIBase->AddToViewport();
-    }
+	if (WB_DeveloperUIBase)
+	{
+		UUserWidget* DeveloperUIBase = CreateWidget<UUserWidget>(GetWorld(), WB_DeveloperUIBase);
+		DeveloperUIBase->AddToViewport();
+	}
 
-    InitCharaInfoPanel();
+	InitCharaInfoPanel();
 	HideCharaInfoPanel();
 }
 
 void AOrionHUD::Tick(float DeltaTime)
 {
-    Super::Tick(DeltaTime);   // ①
+	Super::Tick(DeltaTime); // ①
 
-    UE_LOG(LogTemp, Verbose,
-        TEXT("bShow=%d  Prev=%d"),
-        bShowCharaInfoPanel, PreviousbShowCharaInfoPanel);
+	// —— 状态切换 —— //
+	// 无论 InfoChara 是否为空，都先检查 bShowCharaInfoPanel 的变化
+	if (bShowCharaInfoPanel != PreviousbShowCharaInfoPanel ||
+		(InfoChara && InfoChara->GetName() != PreviousInfoChara))
+	{
+		if (bShowCharaInfoPanel && InfoChara)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Show Chara Info Panel"));
+			if (CharaInfoPanel)
+			{
+				CharaInfoPanel->InitCharaInfoPanelParams(InfoChara);
+			}
+			ShowCharaInfoPanel();
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("Hide Chara Info Panel"));
+			HideCharaInfoPanel();
+		}
 
-    /* ---------- 状态切换 ---------- */
-    if (bShowCharaInfoPanel != PreviousbShowCharaInfoPanel)
-    {
-        if (bShowCharaInfoPanel)
-        {
-            UE_LOG(LogTemp, Log, TEXT("Show Chara Info Panel"));
-            if (CharaInfoPanel && InfoChara) CharaInfoPanel->InitCharaInfoPanelParams(InfoChara);
-            ShowCharaInfoPanel();
-        }
-        else
-        {
-            UE_LOG(LogTemp, Log, TEXT("Hide Chara Info Panel"));
-            HideCharaInfoPanel();
-            InfoChara = nullptr;
-        }
-        PreviousbShowCharaInfoPanel = bShowCharaInfoPanel;
-    }
+		PreviousbShowCharaInfoPanel = bShowCharaInfoPanel;
+		PreviousInfoChara = InfoChara ? InfoChara->GetName() : TEXT("");
+	}
 
-    /* ---------- 每帧刷新 ---------- */
-    if (CharaInfoPanel && bShowCharaInfoPanel && InfoChara)  // ②
-    {
-        UE_LOG(LogTemp, Verbose, TEXT("Update Chara Info Panel"));
-        CharaInfoPanel->UpdateCharaInfo(InfoChara);
-    }
+	// —— 每帧刷新 —— //
+	if (CharaInfoPanel && bShowCharaInfoPanel && InfoChara)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("Update Chara Info Panel"));
+		CharaInfoPanel->UpdateCharaInfo(InfoChara);
+	}
 }
 
-void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult, const std::vector<std::string>& ArrOptionNames)
-{   
-
+void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult,
+                                        const std::vector<std::string>& ArrOptionNames)
+{
 	if (ArrOperationAvailable.Num() > 0)
 	{
 		ArrOperationAvailable.Empty();
 	}
 
-    PlayerOperationSpawnReference = FHitResult();
+	PlayerOperationSpawnReference = FHitResult();
 
-    for (auto& each : ArrOptionNames)
-    {
-        FString OptionName = FString(UTF8_TO_TCHAR(each.c_str()));
-        ArrOperationAvailable.Add(FName(*OptionName));
-    }
+	for (auto& each : ArrOptionNames)
+	{
+		FString OptionName = FString(UTF8_TO_TCHAR(each.c_str()));
+		ArrOperationAvailable.Add(FName(*OptionName));
+	}
 
-    if (WB_PlayerOperationMenu)
-    {
-        UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu);
-        if (PlayerOperationMenu)
-        {
-            /*
-            UFunction* SetFunction = PlayerOperationMenu->FindFunction(FName(TEXT("SetArrOperationAvailable")));
-            if (SetFunction)
-            {
-                struct
-                {
-                    TArray<FName> ArrOperationAvailable;
-                    FHitResult InHitResult;
+	if (WB_PlayerOperationMenu)
+	{
+		UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu);
+		if (PlayerOperationMenu)
+		{
+			/*
+			UFunction* SetFunction = PlayerOperationMenu->FindFunction(FName(TEXT("SetArrOperationAvailable")));
+			if (SetFunction)
+			{
+			    struct
+			    {
+			        TArray<FName> ArrOperationAvailable;
+			        FHitResult InHitResult;
 					AOrionChara* InTarget;
 					AOrionActor* InTargetActor;
 
-                } Params;
-                Params.ArrOperationAvailable = NamesToPass;
-                Params.InHitResult = HitResult;
+			    } Params;
+			    Params.ArrOperationAvailable = NamesToPass;
+			    Params.InHitResult = HitResult;
 				Params.InTarget = InTarget;
 				Params.InTargetActor = InTargetActor;
-                PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
-            }
-            */
+			    PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
+			}
+			*/
 
 			PlayerOperationSpawnReference = HitResult;
 
-            PlayerOperationMenu->AddToViewport();
-            PlayerOperationMenu->SetPositionInViewport(FVector2D(MouseX, MouseY));
-        }
-    }
+			PlayerOperationMenu->AddToViewport();
+			PlayerOperationMenu->SetPositionInViewport(FVector2D(MouseX, MouseY));
+		}
+	}
 }
 
 void AOrionHUD::DrawHUD()
 {
-    Super::DrawHUD();
+	Super::DrawHUD();
 
-    APlayerController* PC = GetOwningPlayerController();
-    if (!PC || !Canvas) return;
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas)
+	{
+		return;
+	}
 
-    TArray<AActor*> FoundActors;
-    UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
+	TArray<AActor*> FoundActors;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
 
-    for (AActor* Actor : FoundActors)
-    {
-        AOrionChara* OrionChara = Cast<AOrionChara>(Actor);
-        if (!OrionChara) continue;
+	for (AActor* Actor : FoundActors)
+	{
+		AOrionChara* OrionChara = Cast<AOrionChara>(Actor);
+		if (!OrionChara)
+		{
+			continue;
+		}
 
-        FString CurrObjectName = OrionChara->GetName();
-        FString CurrObjectLocation = OrionChara->GetActorLocation().ToString();
+		FString CurrObjectName = OrionChara->GetName();
+		FString CurrObjectLocation = OrionChara->GetActorLocation().ToString();
 
-        FString ActionQueueContent;
-        for (const auto& Action : OrionChara->CharacterActionQueue.Actions)
-        {
-            ActionQueueContent += Action.Name + TEXT(" ");
-        }
-        FString CurrActionDebug = OrionChara->CurrentAction ? OrionChara->CurrentAction->Name : TEXT("None");
+		FString ActionQueueContent;
+		for (const auto& Action : OrionChara->CharacterActionQueue.Actions)
+		{
+			ActionQueueContent += Action.Name + TEXT(" ");
+		}
+		FString CurrActionDebug = OrionChara->CurrentAction ? OrionChara->CurrentAction->Name : TEXT("None");
 
 		FString CurrHealthDebug = FString::Printf(TEXT("Health: %f"), OrionChara->CurrHealth);
 
-        FString CombinedText = FString::Printf(
-            TEXT("Name: %s\nActionQueue: %s\nCurrHealth: %s"),
-            *CurrObjectName,
-            //*CurrObjectLocation,
-            *ActionQueueContent,
-            //*CurrActionDebug,
-            *CurrHealthDebug
-        );
+		FString CombinedText = FString::Printf(
+			TEXT("Name: %s\nActionQueue: %s\nCurrHealth: %s"),
+			*CurrObjectName,
+			//*CurrObjectLocation,
+			*ActionQueueContent,
+			//*CurrActionDebug,
+			*CurrHealthDebug
+		);
 
-        // 2) 将OrionChara的世界坐标 转成 屏幕坐标
-        FVector2D ScreenPos;
-        bool bProjected = UGameplayStatics::ProjectWorldToScreen(
-            PC,
-            // 可稍微抬高一点，让文字显示在头顶
-            OrionChara->GetActorLocation() + FVector(0.f, 0.f, 100.f),
-            ScreenPos
-        );
+		// 2) 将OrionChara的世界坐标 转成 屏幕坐标
+		FVector2D ScreenPos;
+		bool bProjected = UGameplayStatics::ProjectWorldToScreen(
+			PC,
+			// 可稍微抬高一点，让文字显示在头顶
+			OrionChara->GetActorLocation() + FVector(0.f, 0.f, 100.f),
+			ScreenPos
+		);
 
-        // 3) 在Canvas上绘制文字
-        if (bProjected)
-        {
-        // 选一个字体，UE 默认有 GetLargeFont() / GetMediumFont() 等等
-        UFont* RenderFont = GEngine->GetMediumFont();
+		// 3) 在Canvas上绘制文字
+		if (bProjected)
+		{
+			// 选一个字体，UE 默认有 GetLargeFont() / GetMediumFont() 等等
+			UFont* RenderFont = GEngine->GetMediumFont();
 
-        // 先设置文本颜色
-        Canvas->SetDrawColor(FColor::Yellow);
+			// 先设置文本颜色
+			Canvas->SetDrawColor(FColor::Yellow);
 
-        // 如果需要阴影，可设置 FFontRenderInfo
-        FFontRenderInfo RenderInfo;
-        RenderInfo.bEnableShadow = true;
+			// 如果需要阴影，可设置 FFontRenderInfo
+			FFontRenderInfo RenderInfo;
+			RenderInfo.bEnableShadow = true;
 
-        // Canvas->DrawText(...) 在 UE5.5 中的原型：
-        // float DrawText(const UFont*, const FString&, float X, float Y, float XScale=..., float YScale=..., const FFontRenderInfo& RenderInfo=...);
+			// Canvas->DrawText(...) 在 UE5.5 中的原型：
+			// float DrawText(const UFont*, const FString&, float X, float Y, float XScale=..., float YScale=..., const FFontRenderInfo& RenderInfo=...);
 
-        Canvas->DrawText(
-             RenderFont,
-             CombinedText,
-             ScreenPos.X,
-             ScreenPos.Y,
-             1.5f,                // XScale
-             1.5f,                // YScale
-             RenderInfo          // 字体渲染信息
-         );
+			Canvas->DrawText(
+				RenderFont,
+				CombinedText,
+				ScreenPos.X,
+				ScreenPos.Y,
+				1.5f, // XScale
+				1.5f, // YScale
+				RenderInfo // 字体渲染信息
+			);
 
-        // 如果需要再次换别的颜色，就再次 SetDrawColor(...) 后再绘制
-        }
-    }
+			// 如果需要再次换别的颜色，就再次 SetDrawColor(...) 后再绘制
+		}
+	}
 
-    // ==========================================================
+	// ==========================================================
 
-    // 如果没有 PlayerOwner 或无法获得鼠标位置，就不绘制
-    if (!PlayerOwner) return;
+	// 如果没有 PlayerOwner 或无法获得鼠标位置，就不绘制
+	if (!PlayerOwner)
+	{
+		return;
+	}
 
-    if (!bShowActorInfo) return;
+	if (!bShowActorInfo)
+	{
+		return;
+	}
 
-    float MouseX = 0.f, MouseY = 0.f;
-    bool bGotMouse = PlayerOwner->GetMousePosition(MouseX, MouseY);
+	float MouseX = 0.f, MouseY = 0.f;
+	bool bGotMouse = PlayerOwner->GetMousePosition(MouseX, MouseY);
 
-    if (!bGotMouse) return;
+	if (!bGotMouse)
+	{
+		return;
+	}
 
-    // 在鼠标位置右侧绘制
-    // 给一点偏移量，让文本不要“压”在鼠标上
-    float XOffset = 15.f;
-    float YOffsetBetweenLines = 20.f;
+	// 在鼠标位置右侧绘制
+	// 给一点偏移量，让文本不要“压”在鼠标上
+	float XOffset = 15.f;
+	float YOffsetBetweenLines = 20.f;
 
-    // 从 Engine 获取一个合适的字体，或者你也可以自定义
-    UFont* RenderFont = GEngine->GetMediumFont();
+	// 从 Engine 获取一个合适的字体，或者你也可以自定义
+	UFont* RenderFont = GEngine->GetMediumFont();
 
-    float CurrentY = MouseY;
-    for (const FString& Line : InfoLines)
-    {
-        // DrawText 参数依次是：
-        //  *Text
-        //  *TextColor
-        //  X, Y
-        //  *Font
-        //  Scale（1.0表示正常大小）
-        //  bScalePosition（是否将X/Y应用缩放）
-        DrawText(Line,
-            FLinearColor::Red,
-            MouseX + XOffset,
-            CurrentY,
-            RenderFont,
-            1.5f /*Scale*/,
-            false /*bScalePosition*/);
+	float CurrentY = MouseY;
+	for (const FString& Line : InfoLines)
+	{
+		// DrawText 参数依次是：
+		//  *Text
+		//  *TextColor
+		//  X, Y
+		//  *Font
+		//  Scale（1.0表示正常大小）
+		//  bScalePosition（是否将X/Y应用缩放）
+		DrawText(Line,
+		         FLinearColor::Red,
+		         MouseX + XOffset,
+		         CurrentY,
+		         RenderFont,
+		         1.5f /*Scale*/,
+		         false /*bScalePosition*/);
 
-        CurrentY += YOffsetBetweenLines;
-    }
+		CurrentY += YOffsetBetweenLines;
+	}
 }
 
 void AOrionHUD::ShowInfoAtMouse(const TArray<FString>& InLines)
 {
-    InfoLines = InLines;
+	InfoLines = InLines;
 }
 
 void AOrionHUD::InitCharaInfoPanel()
 {
-
 	if (WB_CharaInfoPanel)
 	{
-        CharaInfoPanel = CreateWidget<UOrionUserWidgetCharaInfo>(GetWorld(), WB_CharaInfoPanel);
+		CharaInfoPanel = CreateWidget<UOrionUserWidgetCharaInfo>(GetWorld(), WB_CharaInfoPanel);
 		if (CharaInfoPanel)
 		{
 			CharaInfoPanel->AddToViewport();
@@ -242,11 +258,11 @@ void AOrionHUD::InitCharaInfoPanel()
 
 void AOrionHUD::HideCharaInfoPanel()
 {
-    if (CharaInfoPanel)
-    {
-        CharaInfoPanel->SetVisibility(ESlateVisibility::Collapsed);
-        // 或者彻底：CharaPanel->RemoveFromParent();
-    }
+	if (CharaInfoPanel)
+	{
+		CharaInfoPanel->SetVisibility(ESlateVisibility::Collapsed);
+		// 或者彻底：CharaPanel->RemoveFromParent();
+	}
 }
 
 void AOrionHUD::ShowCharaInfoPanel()

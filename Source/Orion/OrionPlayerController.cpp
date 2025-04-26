@@ -22,9 +22,9 @@
 AOrionPlayerController::AOrionPlayerController()
 {
 	PrimaryActorTick.bCanEverTick = true;
-	bShowMouseCursor = true; // 显示鼠标光标
-	bEnableClickEvents = true; // 启用点击事件
-	bEnableMouseOverEvents = true; // 启用鼠标悬停事件
+	bShowMouseCursor = true;
+	bEnableClickEvents = true;
+	bEnableMouseOverEvents = true;
 }
 
 void AOrionPlayerController::SetupInputComponent()
@@ -118,17 +118,16 @@ void AOrionPlayerController::Tick(float DeltaTime)
 	{
 		if (OrionCharaSelection.size() == 1)
 		{
-			CharaHUD->bShowCharaInfoPanel = true; //★ 改这里
+			CharaHUD->bShowCharaInfoPanel = true;
 			CharaHUD->InfoChara = OrionCharaSelection[0];
 		}
 		else
 		{
-			CharaHUD->bShowCharaInfoPanel = false; //★ 改这里
+			CharaHUD->bShowCharaInfoPanel = false;
 			CharaHUD->InfoChara = nullptr;
 		}
 	}
 }
-
 
 void AOrionPlayerController::OnLeftMouseDown()
 {
@@ -176,7 +175,6 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 		       *HitActor->GetName(),
 		       *HitActor->GetClass()->GetName());
 
-		// 1. 检查是否是 AOrionChara
 		if (AOrionChara* Chara = Cast<AOrionChara>(HitActor))
 		{
 			if (bIsShiftKeyPressed)
@@ -214,7 +212,6 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 			return;
 		}
 
-		// 2. 检查是否是 APawn
 		if (AWheeledVehiclePawn* HitPawn = Cast<AWheeledVehiclePawn>(HitActor))
 		{
 			OrionPawnSelection.clear();
@@ -234,7 +231,6 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 			}
 			else
 			{
-				// 如果未按住Shift键，则清空之前的选择并选择新的角色
 				OrionPawnSelection.clear();
 				OrionPawnSelection.push_back(HitPawn);
 			}
@@ -253,10 +249,8 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 
 void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, const FVector2D& EndPos)
 {
-	// 清空已有选中
 	OrionCharaSelection.clear();
 
-	// 计算矩形范围
 	float MinX = FMath::Min(StartPos.X, EndPos.X);
 	float MaxX = FMath::Max(StartPos.X, EndPos.X);
 	float MinY = FMath::Min(StartPos.Y, EndPos.Y);
@@ -265,11 +259,9 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 	UE_LOG(LogTemp, Log, TEXT("[BoxSelection] Rect Range: (%.2f, %.2f) ~ (%.2f, %.2f)"),
 	       MinX, MinY, MaxX, MaxY);
 
-	// 获取场景中所有 AOrionChara
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
 
-	// 如果没有找到任何此类对象，直接返回
 	if (FoundActors.Num() == 0)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BoxSelection] No AOrionChara found in the world."));
@@ -287,7 +279,6 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 		FVector2D ScreenPos;
 		bool bProjected = ProjectWorldLocationToScreen(Actor->GetActorLocation(), ScreenPos);
 
-		// 打印调试信息：投影是否成功 + 投影后的屏幕坐标
 		if (!bProjected)
 		{
 			UE_LOG(LogTemp, Warning,
@@ -298,13 +289,11 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 		UE_LOG(LogTemp, Log, TEXT("[BoxSelection] Actor %s => ScreenPos: (%.2f, %.2f)"),
 		       *Actor->GetName(), ScreenPos.X, ScreenPos.Y);
 
-		// 判断是否在屏幕矩形内
 		const bool bInsideX = (ScreenPos.X >= MinX && ScreenPos.X <= MaxX);
 		const bool bInsideY = (ScreenPos.Y >= MinY && ScreenPos.Y <= MaxY);
 
 		if (bInsideX && bInsideY)
 		{
-			// 再次检查是否为 AOrionChara（一般来说一定是）
 			if (AOrionChara* Chara = Cast<AOrionChara>(Actor))
 			{
 				OrionCharaSelection.push_back(Chara);
@@ -317,7 +306,6 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 		}
 	}
 
-	// 最后统计一下选中了多少
 	if (OrionCharaSelection.size() == 0)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[BoxSelection] No AOrionChara selected after box check."));
@@ -586,8 +574,16 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 {
 	UE_LOG(LogTemp, Log, TEXT("CallBackRequestDistributor called with request: %s"), *CallBackRequest.ToString());
 
-	FString TempString = CachedRequestCaseNames.front();
-	UE_LOG(LogTemp, Log, TEXT("CachedRequestCaseNames: %s"), *TempString);
+	if (CachedRequestCaseNames.empty())
+	{
+		return;
+	}
+
+	if (!CachedRequestCaseNames.empty())
+	{
+		FString TempString = CachedRequestCaseNames.front();
+		UE_LOG(LogTemp, Log, TEXT("CachedRequestCaseNames: %s"), *TempString);
+	}
 
 	if (CallBackRequest == CachedRequestCaseNames.front())
 	{

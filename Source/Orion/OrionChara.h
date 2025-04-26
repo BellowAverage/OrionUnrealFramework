@@ -12,6 +12,7 @@
 #include <functional>
 #include "OrionWeapon.h"
 #include "OrionActor.h"
+#include "deque"
 //#include "OrionAIController.h"
 #include "OrionChara.generated.h"
 
@@ -52,10 +53,12 @@ class Action
 {
 public:
 	FString Name;
-	std::function<bool(float)> ExecuteFunction;
 
-	Action(const FString& ActionName, const std::function<bool(float)>& Func)
-		: Name(ActionName), ExecuteFunction(Func)
+	TFunction<bool(float)> ExecuteFunction;
+
+	Action(const FString& ActionName, TFunction<bool(float)> Func)
+		: Name(ActionName)
+		  , ExecuteFunction(MoveTemp(Func))
 	{
 	}
 };
@@ -63,27 +66,23 @@ public:
 class ActionQueue
 {
 public:
-	std::vector<Action> Actions;
+	std::deque<Action> Actions;
 
 	bool IsEmpty() const
 	{
 		return Actions.empty();
 	}
 
-	Action* GetNextAction()
+	Action* GetFrontAction()
 	{
-		if (!IsEmpty())
-		{
-			return &Actions.front();
-		}
-		return nullptr;
+		return IsEmpty() ? nullptr : &Actions.front();
 	}
 
-	void RemoveCurrentAction()
+	void PopFrontAction()
 	{
 		if (!IsEmpty())
 		{
-			Actions.erase(Actions.begin());
+			Actions.pop_front();
 		}
 	}
 };
@@ -104,14 +103,56 @@ public:
 	AAIController* AIController;
 
 	/* Character Movement */
+	void InitOrionCharaMovement();
+
+	void SynchronizeCapsuleCompLocation() const;
+
+	void OnForceExceeded(const FVector& VelocityChange);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Physics")
+	float ForceThreshold = 2.0f;
+
+	FVector PreviousVelocity;
+	float VelocityChangeThreshold = 1000.0f;
+
+	void ForceDetectionOnVelocityChange();
+
+	void RegisterCharaRagdoll(float DeltaTime);
+
+	void RagdollWakeup();
+	float RagdollWakeupAccumulatedTime = 0;
+	float RagdollWakeupThreshold = 5.0f;
+
+	FVector DefaultMeshRelativeLocation;
+	FRotator DefaultMeshRelativeRotation;
+	FVector DefaultCapsuleMeshOffset;
+
+	float CapsuleDefaultMass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	float OrionCharaSpeed = 500.0f;
 
-	/* CharacterActionQueue */
+	/* Character Action Queue */
 	ActionQueue CharacterActionQueue;
 	Action* CurrentAction;
+	Action* PreviousAction;
+
+	ActionQueue CharacterProcActionQueue;
+	Action* CurrentProcAction;
+	Action* PreviousProcAction;
+
+	void DistributeCharaAction(float DeltaTime);
+	void DistributeRealTimeAction(float DeltaTime);
+	void DistributeProceduralAction(float DeltaTime);
+	void SwitchingStateHandle(const FString& Prev, const FString& Curr);
 	void RemoveAllActions(const FString& Except = FString());
+	FString GetUnifiedActionName() const;
+	/** last non-empty action name, persists across frames when current action is interrupted */
+	FString LastNonEmptyActionName;
+
+	/* AI: Character Procedural Action Distributor */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
+	bool bIsCharaProcedural;
 
 	/* MoveToLocation */
 	bool MoveToLocation(FVector InTargetLocation);
@@ -152,6 +193,8 @@ public:
 	void AttackOnCharaLongRangeStop();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
 	float FireRange = 2000.0f;
+
+	void RefreshAttackFrequency();
 
 	UFUNCTION(BlueprintCallable, Category = "Action | AttackOnChara")
 	void SpawnBulletActor(const FVector& SpawnLoc, const FVector& DirToFire);
@@ -200,23 +243,6 @@ public:
 
 	/* Physics */
 
-	void OnForceExceeded(const FVector& VelocityChange);
-
-	UPROPERTY(EditDefaultsOnly, Category = "Physics")
-	float ForceThreshold = 2.0f;
-
-	FVector PreviousVelocity;
-	float VelocityChangeThreshold = 1000.0f;
-
-	void ForceDetectionOnVelocityChange();
-	void RagdollWakeup();
-	float RagdollWakeupAccumulatedTime = 0;
-	float RagdollWakeupThreshold = 5.0f;
-
-	FVector DefaultMeshRelativeLocation;
-	FRotator DefaultMeshRelativeRotation;
-	FVector DefaultCapsuleMeshOffset;
-	float CapsuleDefaultMass;
 
 	/* AI Information */
 
@@ -238,6 +264,10 @@ public:
 	/* Interface */
 	UFUNCTION(BlueprintCallable, Category = "Interface")
 	void ChangeMaxWalkSpeed(float InValue);
+	UFUNCTION()
+	void ReorderProceduralAction(int32 DraggedIndex, int32 DropIndex);
+	UFUNCTION()
+	void RemoveProceduralActionAt(int32 Index);
 
 	/* Animation Optimization */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
