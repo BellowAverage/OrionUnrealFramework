@@ -34,6 +34,13 @@ public:
 	/* OrionCharaSelection List */
 	TSubclassOf<AOrionChara> SubclassOfAOrionChara;
 	std::vector<AOrionChara*> OrionCharaSelection;
+
+	UFUNCTION(BlueprintCallable, Category = "OrionChara Selection")
+	TArray<AOrionChara*> GetOrionCharaSelection() const
+	{
+		return TArray<AOrionChara*>(OrionCharaSelection.data(), OrionCharaSelection.size());
+	}
+
 	std::vector<AWheeledVehiclePawn*> OrionPawnSelection;
 
 	/* OrionCharaSelection List Utilities */

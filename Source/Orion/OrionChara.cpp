@@ -130,9 +130,9 @@ void AOrionChara::Tick(float DeltaTime)
 
 	/* Physics Handle - See Movement Module */
 
-	RegisterCharaRagdoll(DeltaTime);
+	// RegisterCharaRagdoll(DeltaTime);
 
-	ForceDetectionOnVelocityChange();
+	// ForceDetectionOnVelocityChange();
 
 	/* AI Controlling */
 
@@ -385,6 +385,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 			IsInteractWithActor = true;
 			CurrentInteractActor = InTarget;
 			InTarget->CurrWorkers += 1;
+			//InTarget->ArrInteractingCharas.Add(this);
 		}
 
 		if (AIController)
@@ -392,17 +393,14 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 			AIController->StopMovement();
 		}
 
-		// 计算朝向目标的旋转角度
 		FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
 			GetActorLocation(),
 			InTarget->GetActorLocation()
 		);
 
-		// 忽略高度轴上的旋转
 		LookAtRot.Pitch = 0.0f;
 		LookAtRot.Roll = 0.0f;
 
-		// 设置角色的旋转
 		SetActorRotation(LookAtRot);
 
 		return false;
@@ -433,24 +431,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 					nullptr,
 					true
 				);
-
-				if (RequestResult == EPathFollowingRequestResult::Failed)
-				{
-					//UE_LOG(LogTemp, Warning, TEXT("MoveToLocation failed even after projection!"));
-				}
-				else
-				{
-					//UE_LOG(LogTemp, Log, TEXT("MoveToLocation request successful."));
-				}
 			}
-			else
-			{
-				//UE_LOG(LogTemp, Warning, TEXT("Failed to project point to navigation!"));
-			}
-		}
-		else
-		{
-			//UE_LOG(LogTemp, Error, TEXT("Navigation system is not available!"));
 		}
 	}
 
@@ -473,8 +454,215 @@ void AOrionChara::InteractWithActorStop()
 	IsInteractWithActor = false;
 	DoOnceInteractWithActor = false;
 	CurrentInteractActor->CurrWorkers -= 1;
+	//CurrentInteractActor->ArrInteractingCharas.Remove(this);
 	CurrentInteractActor = nullptr;
 	InteractType = EInteractType::Unavailable;
+}
+
+bool AOrionChara::TradeMoveToLocation(const FVector& Dest, float AcceptanceRadius)
+{
+	UE_LOG(LogTemp, Log, TEXT("[TradeMoveToLocation] Dest=%s, Radius=%.1f"), *Dest.ToString(), AcceptanceRadius);
+
+	if (AIController)
+	{
+		UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+		if (Nav)
+		{
+			FNavLocation Projected;
+			// 加上一个搜索范围，让它在 Dest 附近（比如上下各 500，高宽各 500）找 NavMesh
+			const FVector SearchExtent(500.f, 500.f, 500.f);
+			if (Nav->ProjectPointToNavigation(Dest, Projected, SearchExtent))
+			{
+				UE_LOG(LogTemp, Log, TEXT("[TradeMoveToLocation] Projected to NavMesh at %s"),
+				       *Projected.Location.ToString());
+				AIController->MoveToLocation(Projected.Location, AcceptanceRadius, /*StopOnOverlap=*/true);
+				return false; // 还在移动
+			}
+			UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] Projection to NavMesh failed even with extent"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] No NavigationSystem found"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] No AIController available"));
+	}
+
+	// 如果连搜索都失败，就强制告诉它已经到位，让流程往下走
+	UE_LOG(LogTemp, Error, TEXT("[TradeMoveToLocation] Fallback: treat as arrived"));
+	return true;
+}
+
+
+bool AOrionChara::TradingCargo(const TMap<AOrionActor*, TMap<int32, int32>>& TradeRoute)
+{
+	UE_LOG(LogTemp, Log, TEXT("========== TradingCargo Tick =========="));
+	UE_LOG(LogTemp, Log, TEXT("  bIsTrading=%s, CurrentSegIndex=%d"),
+	       bIsTrading ? TEXT("true") : TEXT("false"), CurrentSegIndex);
+
+	// 1) Initialization
+	if (!bIsTrading)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Initializing trade route"));
+		TradeSegments.Empty();
+		CurrentSegIndex = 0;
+		TradeStep = ETradeStep::ToSource;
+		bIsTrading = true;
+
+		TArray<AOrionActor*> Nodes;
+		Nodes.Reserve(TradeRoute.Num());
+		for (auto& P : TradeRoute)
+		{
+			Nodes.Add(P.Key);
+			UE_LOG(LogTemp, Log, TEXT("  Route node: %s"), *P.Key->GetName());
+		}
+
+		int32 Num = Nodes.Num();
+		if (Num < 2)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[TradingCargo] Not enough nodes to form a loop"));
+			bIsTrading = false;
+			return true;
+		}
+
+		// expand into segments
+		for (int32 i = 0; i < Num; ++i)
+		{
+			AOrionActor* Src = Nodes[i];
+			AOrionActor* Dst = Nodes[(i + 1) % Num];
+			const auto& Cargo = TradeRoute[Src];
+			for (auto& C : Cargo)
+			{
+				FTradeSeg Seg;
+				Seg.Source = Src;
+				Seg.Dest = Dst;
+				Seg.ItemId = C.Key;
+				Seg.Quantity = C.Value;
+				Seg.Moved = 0;
+				TradeSegments.Add(Seg);
+				UE_LOG(LogTemp, Log, TEXT("  Added segment: %s -> %s, Item=%d x%d"),
+				       *Src->GetName(), *Dst->GetName(), Seg.ItemId, Seg.Quantity);
+			}
+		}
+	}
+
+	// 2) All done?
+	if (CurrentSegIndex >= TradeSegments.Num())
+	{
+		UE_LOG(LogTemp, Log, TEXT("[TradingCargo] All segments completed"));
+		bIsTrading = false;
+		return true;
+	}
+
+	FTradeSeg& Seg = TradeSegments[CurrentSegIndex];
+	UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Segment %d/%d, Step=%d"),
+	       CurrentSegIndex, TradeSegments.Num(), int32(TradeStep));
+
+	// validate actors
+	if (!IsValid(Seg.Source) || !IsValid(Seg.Dest))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[TradingCargo] Source or Dest invalid, abort"));
+		bIsTrading = false;
+		return true;
+	}
+
+	// get sphere for overlap test
+	USphereComponent* Sphere = nullptr;
+	if (TradeStep == ETradeStep::ToSource || TradeStep == ETradeStep::Pickup)
+	{
+		Sphere = Seg.Source->FindComponentByClass<USphereComponent>();
+	}
+	else
+	{
+		Sphere = Seg.Dest->FindComponentByClass<USphereComponent>();
+	}
+
+	bool bAtNode = Sphere && Sphere->IsOverlappingActor(this);
+	UE_LOG(LogTemp, Log, TEXT("[TradingCargo] bAtNode=%s"), bAtNode ? TEXT("true") : TEXT("false"));
+
+	switch (TradeStep)
+	{
+	case ETradeStep::ToSource:
+		{
+			if (bAtNode)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Arrived at Source: %s"), *Seg.Source->GetName());
+				TradeStep = ETradeStep::Pickup;
+				if (AIController)
+				{
+					AIController->StopMovement();
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Moving to Source: %s"), *Seg.Source->GetName());
+				TradeMoveToLocation(Seg.Source->GetActorLocation());
+			}
+			return false;
+		}
+
+	case ETradeStep::Pickup:
+		{
+			auto* Inv = Seg.Source->FindComponentByClass<UOrionInventoryComponent>();
+			int32 Available = Inv ? Inv->GetItemQuantity(Seg.ItemId) : 0;
+			int32 ToTake = FMath::Min(Available, Seg.Quantity);
+			UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Pickup: Available=%d, ToTake=%d"),
+			       Available, ToTake);
+
+			if (ToTake <= 0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[TradingCargo] Nothing left to take, abort"));
+				bIsTrading = false;
+				return true;
+			}
+
+			Inv->ModifyItemQuantity(Seg.ItemId, -ToTake);
+			Seg.Moved = ToTake;
+			UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Took %d of Item %d"), ToTake, Seg.ItemId);
+
+			TradeStep = ETradeStep::ToDest;
+			return false;
+		}
+
+	case ETradeStep::ToDest:
+		{
+			if (bAtNode)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Arrived at Dest: %s"), *Seg.Dest->GetName());
+				TradeStep = ETradeStep::Dropoff;
+				if (AIController)
+				{
+					AIController->StopMovement();
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Moving to Dest: %s"), *Seg.Dest->GetName());
+				TradeMoveToLocation(Seg.Dest->GetActorLocation());
+			}
+			return false;
+		}
+
+	case ETradeStep::Dropoff:
+		{
+			auto* InvDst = Seg.Dest->FindComponentByClass<UOrionInventoryComponent>();
+			InvDst->ModifyItemQuantity(Seg.ItemId, Seg.Moved);
+			UE_LOG(LogTemp, Log, TEXT("[TradingCargo] Dropped %d of Item %d at %s"),
+			       Seg.Moved, Seg.ItemId, *Seg.Dest->GetName());
+
+			// next segment
+			CurrentSegIndex++;
+			TradeStep = ETradeStep::ToSource;
+			return false;
+		}
+	}
+
+	// should never reach here, but just in case
+	UE_LOG(LogTemp, Error, TEXT("[TradingCargo] Unexpected step, aborting"));
+	bIsTrading = false;
+	return true;
 }
 
 
@@ -516,7 +704,6 @@ void AOrionChara::RemoveAllActions(const FString& Except)
 
 	CharacterActionQueue.Actions.clear();
 }
-
 
 void AOrionChara::OnForceExceeded(const FVector& DeltaVelocity)
 {
@@ -740,7 +927,6 @@ std::vector<AOrionChara*> AOrionChara::GetOtherCharasByProximity() const
 
 	return Enemies;
 }
-
 
 bool AOrionChara::bIsLineOfSightBlocked(AActor* InTargetActor) const
 {

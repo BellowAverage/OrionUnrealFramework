@@ -17,6 +17,7 @@
 #include <algorithm>
 #include "OrionActor.h"
 #include "OrionGameMode.h"
+#include "OrionActor/OrionActorOre.h"
 
 
 AOrionPlayerController::AOrionPlayerController()
@@ -88,7 +89,17 @@ void AOrionPlayerController::Tick(float DeltaTime)
 					ActorInfoHUD->bShowActorInfo = true;
 					TArray<FString> Lines;
 
-					float Progress = OrionActor->ProductionProgress; // e.g. 72.5
+
+					float Progress;
+					if (AOrionActorOre* OrionOreActor = Cast<AOrionActorOre>(OrionActor))
+					{
+						Progress = OrionOreActor->ProductionProgress;
+					}
+					else
+					{
+						Progress = 0.0f;
+					}
+
 					int32 TotalBars = 20; // Segements number
 					int32 FilledBars = FMath::RoundToInt((Progress / 100.0f) * TotalBars);
 
@@ -101,7 +112,40 @@ void AOrionPlayerController::Tick(float DeltaTime)
 					Lines.Add(FString::Printf(TEXT("Name: %s"), *OrionActor->GetName()));
 					Lines.Add(FString::Printf(TEXT("CurrNumOfWorkers: %d"), OrionActor->CurrWorkers));
 					Lines.Add(FString::Printf(TEXT("ProductionProgress: [%s] %.1f%%"), *Bar, Progress));
-					Lines.Add(FString::Printf(TEXT("CurrInventory: %d"), OrionActor->CurrInventory));
+
+					if (AOrionActorOre* OrionOreActor = Cast<AOrionActorOre>(OrionActor))
+					{
+						if (UOrionInventoryComponent* InvComp = OrionOreActor->FindComponentByClass<
+							UOrionInventoryComponent>())
+						{
+							// 2) 拿到所有已持有的 (ItemId, Quantity)
+							TArray<FIntPoint> Items = InvComp->GetAllItems();
+							for (const FIntPoint& Pair : Items)
+							{
+								int32 ItemId = Pair.X;
+								int32 Quantity = Pair.Y;
+
+								// 3) 拿静态信息（DisplayName/ChineseDisplayName）
+								FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
+
+								// 4) 格式化成 "<Name>: <数量>"
+								Lines.Add(FString::Printf(
+									TEXT("%s: %d"),
+									*Info.DisplayName.ToString(),
+									Quantity
+								));
+							}
+						}
+						else
+						{
+							Lines.Add(TEXT("No Inventory Component"));
+						}
+					}
+					else
+					{
+						Lines.Add(TEXT("No Available Subclass of OrionActor. "));
+					}
+
 					Lines.Add(FString::Printf(TEXT("CurrHealth: %d"), OrionActor->CurrHealth));
 					ActorInfoHUD->ShowInfoAtMouse(Lines);
 				}

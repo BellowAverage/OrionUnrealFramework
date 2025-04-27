@@ -65,6 +65,15 @@ void AOrionWeapon::SpawnOrionBulletActor(
 		//UE_LOG(LogTemp, Warning, TEXT("[Weapon] Failed to spawn or setup projectile."));
 	}
 
+	if (SC_AssaultRifleShot)
+	{
+		UGameplayStatics::PlaySoundAtLocation(
+			this,
+			SC_AssaultRifleShot,
+			SpawnLocation
+		);
+	}
+
 	if (MuzzleFlashEffect)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(

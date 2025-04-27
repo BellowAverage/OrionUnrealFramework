@@ -1,15 +1,14 @@
 ﻿#include "OrionGameMode.h"
 #include "OrionChara.h"
 #include "OrionAIController.h"
-#include "Components/CapsuleComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/DamageEvents.h" // For Testing Purpose
+#include "OrionActor/OrionActorOre.h"
 #include "PhysicsEngine/RadialForceComponent.h"
-#include "Kismet/KismetMathLibrary.h"
 
 #define ORION_CHARA_HALF_HEIGHT 88.f
 
@@ -32,6 +31,61 @@ void AOrionGameMode::BeginPlay()
 
 		PlayerController->PushInputComponent(InputComponent);
 	}
+
+	TArray<AActor*> FoundOres;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionActorOre::StaticClass(), FoundOres);
+
+	if (FoundOres.Num() < 3)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Need at least 3 OrionActorOre in scene to test TradingCargo!"));
+		return;
+	}
+
+	// 2) 构造环形搬运路线：每个源点往下一个点运 1 件 ItemId=2
+	TMap<AOrionActor*, TMap<int32, int32>> TradeRoute;
+	for (int32 i = 0; i < 3; ++i)
+	{
+		AOrionActorOre* Src = Cast<AOrionActorOre>(FoundOres[i]);
+		AOrionActorOre* Dst = Cast<AOrionActorOre>(FoundOres[(i + 1) % 3]);
+		if (!Src || !Dst)
+		{
+			continue;
+		}
+
+		TMap<int32, int32> Cargo;
+		Cargo.Add(2, 1); // ItemId = 2, 数量 = 1
+		TradeRoute.Add(Src, Cargo);
+	}
+
+	TArray<AActor*> Found;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), Found);
+
+	if (Found.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No OrionChara (or subclass) found in the level."));
+		return;
+	}
+
+	// 拿第一个
+	AOrionChara* Ch = Cast<AOrionChara>(Found[0]);
+	if (!Ch)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Found actor is not AOrionChara?!"));
+		return;
+	}
+
+	// 4) 把一个 TradingCargo 的 Action 丢进它的队列
+	Ch->CharacterActionQueue.Actions.push_back(
+		Action(
+			TEXT("TestTradingCargo"),
+			[Ch, TradeRoute](float DeltaTime) -> bool
+			{
+				return Ch->TradingCargo(TradeRoute);
+			}
+		)
+	);
+
+	UE_LOG(LogTemp, Log, TEXT("Enqueued TestTradingCargo action."));
 }
 
 void AOrionGameMode::OnTestKey1Pressed()
@@ -50,7 +104,7 @@ void AOrionGameMode::OnTestKey1Pressed()
 				{
 					FDamageEvent DamageEvent; // Temporary FDamageEvent for testing purposes
 					TestOrionActor->TakeDamage(1.0f, FDamageEvent(), PlayerController->GetInstigatorController(), this);
-					TestOrionActor->CurrInventory -= 1;
+					TestOrionActor->InventoryComp->InventoryMap[1] -= 1;
 				}
 				else if (AOrionChara* TestOrionChara = Cast<AOrionChara>(ClickedActor))
 				{

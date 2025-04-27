@@ -3,9 +3,24 @@
 
 #include "OrionActor.h"
 
+#include "Components/SphereComponent.h"
+#include "OrionComponents/OrionInventoryComponent.h"
+
 AOrionActor::AOrionActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
+
+	/*
+
+	RootStaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
+
+	RootComponent = RootStaticMeshComp;
+
+	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
+
+	*/
+
+	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
 
 	MaxHealth = 30;
 	CurrHealth = MaxHealth;
@@ -18,34 +33,29 @@ AOrionActor::AOrionActor()
 void AOrionActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	InventoryComp = FindComponentByClass<UOrionInventoryComponent>();
+
+	if (InventoryComp)
+	{
+		InventoryComp->AvailableInventoryMap.Empty();
+		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s missing UOrionInventoryComponent!"), *GetName());
+	}
+
+	InventoryComp->ModifyItemQuantity(2, +2);
 }
 
 void AOrionActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-	ProductionProgressUpdate(DeltaTime);
 
-	OnInventoryUpdate(DeltaTime);
-}
-
-void AOrionActor::OnInventoryUpdate(float DeltaTime)
-{
-	if (PreviousInventory != CurrInventory)
-	{
-		OnInventoryExceeded();
-		PreviousInventory = CurrInventory;
-	}
-}
-
-void AOrionActor::OnInventoryExceeded()
-{
-	if (CurrInventory >= MaxInventory)
+	if (InventoryComp->FullInventoryStatus.FindRef(1))
 	{
 		ActorStatus = EActorStatus::NotInteractable;
-	}
-	else
-	{
-		ActorStatus = EActorStatus::Interactable;
 	}
 }
 
@@ -74,8 +84,7 @@ void AOrionActor::SpawnDeathEffect_Implementation(FVector DeathLocation)
 {
 	if (DeathEffectClass)
 	{
-		UWorld* World = GetWorld();
-		if (World)
+		if (UWorld* World = GetWorld())
 		{
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.Owner = this;
@@ -91,37 +100,34 @@ void AOrionActor::SpawnDeathEffect_Implementation(FVector DeathLocation)
 		}
 	}
 
-	this->Destroy(); // Destroy the actor after spawning the effect
+	TArray<UStaticMeshComponent*> MeshComps;
+	GetComponents<UStaticMeshComponent>(MeshComps);
+	for (UStaticMeshComponent* MeshComp : MeshComps)
+	{
+		if (!MeshComp)
+		{
+			continue;
+		}
+
+		MeshComp->SetEnableGravity(true);
+		MeshComp->SetSimulatePhysics(true);
+	}
+
+	// 3) 5 秒后调用 HandleDelayedDestroy() 来销毁自己
+	GetWorldTimerManager()
+		.SetTimer(DeathDestroyTimerHandle,
+		          this,
+		          &AOrionActor::HandleDelayedDestroy,
+		          5.0f,
+		          false);
+}
+
+void AOrionActor::HandleDelayedDestroy()
+{
+	Destroy();
 }
 
 FString AOrionActor::GetInteractType()
 {
 	return InteractType;
-}
-
-void AOrionActor::ProductionProgressUpdate(float DeltaTime)
-{
-	// Only update production if there's at least one worker.
-	if (CurrWorkers < 1)
-	{
-		return;
-	}
-
-	// Calculate the progress increment.
-	// For one worker, the progress rate is 100 / ProductionTimeCost per second.
-	// With multiple workers, the production speeds up proportionally.
-	float ProgressIncrement = (100.0f / ProductionTimeCost) * CurrWorkers * DeltaTime;
-
-	// Accumulate the progress.
-	ProductionProgress += ProgressIncrement;
-
-	// When production progress reaches or exceeds 100, consider production complete.
-	while (ProductionProgress >= 100.0f)
-	{
-		// Production cycle complete, add one item to inventory.
-		CurrInventory += 1;
-
-		// Subtract 100 from the progress, retaining any leftover progress.
-		ProductionProgress -= 100.0f;
-	}
 }

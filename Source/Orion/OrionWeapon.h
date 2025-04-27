@@ -3,23 +3,22 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "OrionProjectile.h"
-//#include "OrionChara.h"
-#include "NiagaraSystem.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Sound/SoundCue.h"
 #include "OrionWeapon.generated.h"
 
 UCLASS()
 class ORION_API AOrionWeapon : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
+
+public:
 	AOrionWeapon();
 
 protected:
 	virtual void BeginPlay() override;
 
-public:	
+public:
 	virtual void Tick(float DeltaTime) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Bullet")
 	TSubclassOf<AOrionProjectile> ProjectileClass;
@@ -36,4 +35,7 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Particles")
 	UParticleSystem* MuzzleParticleSystem;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound Effect")
+	USoundCue* SC_AssaultRifleShot;
 };

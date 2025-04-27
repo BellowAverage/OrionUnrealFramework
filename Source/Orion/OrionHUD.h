@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "OrionChara.h"
-#include "OrionUserInterface/OrionUserWidgetCharaInfo.h"
+#include "OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "OrionHUD.generated.h"
 
 UCLASS()

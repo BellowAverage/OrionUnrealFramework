@@ -209,24 +209,14 @@ void AOrionHUD::DrawHUD()
 		return;
 	}
 
-	// 在鼠标位置右侧绘制
-	// 给一点偏移量，让文本不要“压”在鼠标上
 	float XOffset = 15.f;
 	float YOffsetBetweenLines = 20.f;
 
-	// 从 Engine 获取一个合适的字体，或者你也可以自定义
 	UFont* RenderFont = GEngine->GetMediumFont();
 
 	float CurrentY = MouseY;
 	for (const FString& Line : InfoLines)
 	{
-		// DrawText 参数依次是：
-		//  *Text
-		//  *TextColor
-		//  X, Y
-		//  *Font
-		//  Scale（1.0表示正常大小）
-		//  bScalePosition（是否将X/Y应用缩放）
 		DrawText(Line,
 		         FLinearColor::Red,
 		         MouseX + XOffset,

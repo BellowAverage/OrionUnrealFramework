@@ -7,13 +7,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include <Perception/AIPerceptionStimuliSourceComponent.h>
-#include "Perception/AISense_Sight.h"
 #include <vector>
 #include <functional>
 #include "OrionWeapon.h"
 #include "OrionActor.h"
 #include "deque"
-//#include "OrionAIController.h"
+#include "Components/CapsuleComponent.h"
 #include "OrionChara.generated.h"
 
 UENUM(BlueprintType)
@@ -29,7 +28,7 @@ UENUM(BlueprintType)
 enum class EInteractType : uint8
 {
 	Unavailable UMETA(DisplayName = "Unavailable"),
-	Mining UMETA(DisplayName = "Mining")
+	Mining UMETA(DisplayName = "Mining"),
 };
 
 UENUM(BlueprintType)
@@ -48,6 +47,7 @@ enum class EAIState : uint8
 
 	Aggressive UMETA(DisplayName = "Aggressive"),
 };
+
 
 class Action
 {
@@ -154,6 +154,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
 	bool bIsCharaProcedural;
 
+	/* Trading Cargo */
+	bool TradingCargo(const TMap<AOrionActor*, TMap<int32, int32>>& TradeRoute);
+	bool TradeMoveToLocation(const FVector& Dest, float AcceptanceRadius = 20.f);
+
+	enum class ETradeStep : uint8 { ToSource, Pickup, ToDest, Dropoff };
+
+	bool bIsTrading = false;
+	ETradeStep TradeStep = ETradeStep::ToSource;
+
+	struct FTradeSeg
+	{
+		AOrionActor* Source = nullptr;
+		AOrionActor* Dest = nullptr;
+		int32 ItemId;
+		int32 Quantity;
+		int32 Moved = 0;
+	};
+
+	TArray<FTradeSeg> TradeSegments;
+	int32 CurrentSegIndex = 0;
+
+
 	/* MoveToLocation */
 	bool MoveToLocation(FVector InTargetLocation);
 	void MoveToLocationStop();
@@ -177,6 +199,7 @@ public:
 	std::unordered_map<int, int> CharaInventoryMap;
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void AddItemToInventory(int ItemID, int Quantity);
+	int TempCharaInventory;
 
 	/* Equipment */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")
@@ -287,4 +310,6 @@ public:
 	bool bMontageReady2Attack = false;
 
 	std::vector<AOrionChara*> GetOtherCharasByProximity() const;
+
+	/* Developer Only */
 };

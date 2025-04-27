@@ -1,9 +1,11 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Components/SphereComponent.h"
 #include "GameFramework/Actor.h"
+#include "OrionComponents/OrionInventoryComponent.h"
 #include "OrionActor.generated.h"
 
 
@@ -14,19 +16,28 @@ enum class EActorStatus : uint8
 	NotInteractable UMETA(DisplayName = "NotInteractable"),
 };
 
+UENUM(BlueprintType)
+enum class EActorCategory : uint8
+{
+	None UMETA(DisplayName = "None"),
+	Ore UMETA(DisplayName = "Ore"),
+	Storage UMETA(DisplayName = "Storage")
+};
+
 UCLASS()
 class ORION_API AOrionActor : public AActor
 {
 	GENERATED_BODY()
 
 public:
-	// Sets default values for this actor's properties
 	AOrionActor();
+
+
+	/* Chara Interaction */
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	EActorStatus ActorStatus;
 
-	/* Basic Properties API */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	FString InteractType;
 
@@ -34,29 +45,17 @@ public:
 	FString GetInteractType();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int OutItemId;
+	EActorCategory ActorCategory;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int InItemId;
+	/* Inventory */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Inventory")
+	TMap<int32, int32> AvailableInventoryMap;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int ProductionTimeCost;
+	/* Components */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Components")
+	UOrionInventoryComponent* InventoryComp;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int MaxWorkers;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int CurrWorkers;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	float ProductionProgress;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int CurrInventory;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int MaxInventory;
-
+	/* Gameplay Basics */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	int MaxHealth;
 
@@ -74,14 +73,22 @@ public:
 	void SpawnDeathEffect(FVector DeathLocation);
 	virtual void SpawnDeathEffect_Implementation(FVector DeathLocation);
 
-	UFUNCTION(BlueprintCallable, Category = "Basics")
-	void ProductionProgressUpdate(float DeltaTime);
+	FTimerHandle DeathDestroyTimerHandle;
+	void HandleDelayedDestroy();
 
-	/* Inventory Utility */
+	/* Working Progression */
 
-	void OnInventoryUpdate(float DeltaTime);
-	void OnInventoryExceeded();
-	int PreviousInventory;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	int MaxWorkers;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	int CurrWorkers;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Collision")
+	USphereComponent* CollisionSphere;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	UStaticMeshComponent* RootStaticMeshComp;
 
 protected:
 	virtual void BeginPlay() override;
