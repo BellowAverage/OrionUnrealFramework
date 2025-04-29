@@ -217,13 +217,23 @@ void AOrionHUD::DrawHUD()
 	float CurrentY = MouseY;
 	for (const FString& Line : InfoLines)
 	{
-		DrawText(Line,
-		         FLinearColor::Red,
-		         MouseX + XOffset,
-		         CurrentY,
-		         RenderFont,
-		         1.5f /*Scale*/,
-		         false /*bScalePosition*/);
+		Canvas->SetDrawColor(FColor::Red);
+
+		// Canvas->DrawText 原型（UE5.5）：
+		// float DrawText(const UFont* Font, const FString& Text, float X, float Y, float ScaleX=1.f, float ScaleY=1.f, const FFontRenderInfo& RenderInfo=FFontRenderInfo());
+		FFontRenderInfo RenderInfo;
+		RenderInfo.bEnableShadow = true;
+
+		// 绘制
+		Canvas->DrawText(
+			RenderFont,
+			Line,
+			MouseX + XOffset,
+			CurrentY,
+			1.5f, // ScaleX
+			1.5f, // ScaleY
+			RenderInfo
+		);
 
 		CurrentY += YOffsetBetweenLines;
 	}

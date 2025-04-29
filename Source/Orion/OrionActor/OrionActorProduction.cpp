@@ -1,34 +1,40 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "OrionActorOre.h"
+#include "OrionActorProduction.h"
 
 
-AOrionActorOre::AOrionActorOre()
+AOrionActorProduction::AOrionActorProduction()
 {
 	PrimaryActorTick.bCanEverTick = true;
+}
 
-	if (OreCategory == EOreCategory::StoneOre)
+void AOrionActorProduction::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (InventoryComp)
 	{
-		AvailableInventoryMap = {
-			{2, 10} // Stone Ore
-		};
+		//InventoryComp->ModifyItemQuantity(2, 10);
+
+		if (ProductionCategory == EProductionCategory::Bullets)
+		{
+			InventoryComp->AvailableInventoryMap.Add(2, 100);
+			InventoryComp->AvailableInventoryMap.Add(3, 2000);
+			UE_LOG(LogTemp, Log,
+			       TEXT("[Production] Set capacity for Bullets: Item2=100, Item3=10"));
+		}
 	}
 }
 
-void AOrionActorOre::BeginPlay()
-{
-	Super::BeginPlay();
-}
 
-
-void AOrionActorOre::Tick(float DeltaTime)
+void AOrionActorProduction::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
 	ProductionProgressUpdate(DeltaTime);
 
-	if (OreCategory == EOreCategory::StoneOre && InventoryComp->FullInventoryStatus.FindRef(2))
+	if (ProductionCategory == EProductionCategory::Bullets && InventoryComp->FullInventoryStatus.FindRef(3))
 	{
 		ActorStatus = EActorStatus::NotInteractable;
 	}
@@ -38,7 +44,7 @@ void AOrionActorOre::Tick(float DeltaTime)
 	}
 }
 
-void AOrionActorOre::ProductionProgressUpdate(float DeltaTime)
+void AOrionActorProduction::ProductionProgressUpdate(float DeltaTime)
 {
 	// Only update production if there's at least one worker.
 	if (CurrWorkers < 1)
@@ -51,6 +57,11 @@ void AOrionActorOre::ProductionProgressUpdate(float DeltaTime)
 	// With multiple workers, the production speeds up proportionally.
 	float ProgressIncrement = (100.0f / ProductionTimeCost) * CurrWorkers * DeltaTime;
 
+	if (ProductionCategory == EProductionCategory::Bullets && InventoryComp->InventoryMap.FindRef(2) < 2)
+	{
+		return;
+	}
+
 	// Accumulate the progress.
 	ProductionProgress += ProgressIncrement;
 
@@ -59,9 +70,10 @@ void AOrionActorOre::ProductionProgressUpdate(float DeltaTime)
 	{
 		// Production cycle complete, add one item to inventory.
 
-		if (OreCategory == EOreCategory::StoneOre)
+		if (ProductionCategory == EProductionCategory::Bullets)
 		{
-			InventoryComp->ModifyItemQuantity(2, 1);
+			InventoryComp->ModifyItemQuantity(2, -2);
+			InventoryComp->ModifyItemQuantity(3, 50);
 		}
 
 

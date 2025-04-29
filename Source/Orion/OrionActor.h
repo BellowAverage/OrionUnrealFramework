@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/SphereComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "GameFramework/Actor.h"
 #include "OrionComponents/OrionInventoryComponent.h"
 #include "OrionActor.generated.h"
@@ -21,7 +22,8 @@ enum class EActorCategory : uint8
 {
 	None UMETA(DisplayName = "None"),
 	Ore UMETA(DisplayName = "Ore"),
-	Storage UMETA(DisplayName = "Storage")
+	Storage UMETA(DisplayName = "Storage"),
+	Production UMETA(DisplayName = "Production"),
 };
 
 UCLASS()

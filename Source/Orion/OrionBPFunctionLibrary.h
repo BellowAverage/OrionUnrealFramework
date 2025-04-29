@@ -24,7 +24,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Developer")
 	static void FindSourceInURL(const FString& url);
-	
+
 	static void DisablePhysicsAndCollision(UActorComponent* Component);
 	static void DisablePhysicsAndCollisionForAllComponents(AActor* TargetActor);
 	UFUNCTION(BlueprintCallable, Category = "Developer")
@@ -32,4 +32,6 @@ public:
 
 	static bool CheckActorPhysicsStatus(AActor* TargetActor);
 
+	UFUNCTION(BlueprintCallable, Category = "Utilities|Component")
+	static void FaceComponentToPlayerCamera(USceneComponent* Component);
 };

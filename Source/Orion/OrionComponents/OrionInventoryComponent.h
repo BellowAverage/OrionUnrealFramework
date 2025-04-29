@@ -64,6 +64,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool ModifyItemQuantity(int32 ItemId, int32 DeltaQuantity);
 
+	void SpawnFloatingText(const FString& InText);
+
 	/** 获取某物品的当前数量 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	int32 GetItemQuantity(int32 ItemId) const;
@@ -83,6 +85,9 @@ public:
 	/** 返回所有预设的物品信息列表 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	const TArray<FOrionItemInfo>& GetAllItemInfos() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	void RefreshInventoryText();
 
 protected:
 	virtual void BeginPlay() override;

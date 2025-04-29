@@ -32,6 +32,8 @@ void AOrionGameMode::BeginPlay()
 		PlayerController->PushInputComponent(InputComponent);
 	}
 
+	/*
+
 	TArray<AActor*> FoundOres;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionActorOre::StaticClass(), FoundOres);
 
@@ -53,7 +55,19 @@ void AOrionGameMode::BeginPlay()
 		}
 
 		TMap<int32, int32> Cargo;
-		Cargo.Add(2, 1); // ItemId = 2, 数量 = 1
+		if (i == 0)
+		{
+			Cargo.Add(2, 1); // ItemId = 1, 数量 = 1
+		}
+		else if (i == 1)
+		{
+			Cargo.Add(2, 1); // ItemId = 2, 数量 = 2
+		}
+		else
+		{
+			Cargo.Add(2, 1); // ItemId = 1, 数量 = 1
+		}
+
 		TradeRoute.Add(Src, Cargo);
 	}
 
@@ -86,6 +100,8 @@ void AOrionGameMode::BeginPlay()
 	);
 
 	UE_LOG(LogTemp, Log, TEXT("Enqueued TestTradingCargo action."));
+
+*/
 }
 
 void AOrionGameMode::OnTestKey1Pressed()
@@ -104,7 +120,18 @@ void AOrionGameMode::OnTestKey1Pressed()
 				{
 					FDamageEvent DamageEvent; // Temporary FDamageEvent for testing purposes
 					TestOrionActor->TakeDamage(1.0f, FDamageEvent(), PlayerController->GetInstigatorController(), this);
-					TestOrionActor->InventoryComp->InventoryMap[1] -= 1;
+					if (TestOrionActor->InventoryComp && TestOrionActor->InventoryComp->InventoryMap.Find(1) != nullptr)
+					{
+						TestOrionActor->InventoryComp->ModifyItemQuantity(1, -1);
+					}
+					if (TestOrionActor->InventoryComp && TestOrionActor->InventoryComp->InventoryMap.Find(2) != nullptr)
+					{
+						TestOrionActor->InventoryComp->ModifyItemQuantity(2, -1);
+					}
+					if (TestOrionActor->InventoryComp && TestOrionActor->InventoryComp->InventoryMap.Find(3) != nullptr)
+					{
+						TestOrionActor->InventoryComp->ModifyItemQuantity(3, -1);
+					}
 				}
 				else if (AOrionChara* TestOrionChara = Cast<AOrionChara>(ClickedActor))
 				{
@@ -503,6 +530,56 @@ void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCha
 				       [charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
 				       {
 					       return charPtr->InteractWithActor(DeltaTime, targetActor);
+				       }
+				)
+			);
+		}
+	}
+}
+
+void AOrionGameMode::ApproveCollectingCargo(std::vector<AOrionChara*> OrionCharasRequested,
+                                            AOrionActorStorage* TargetActor, CommandType inCommandType)
+{
+	if (inCommandType == CommandType::Append)
+	{
+		for (auto& each : OrionCharasRequested)
+		{
+			if (!each)
+			{
+				continue;
+			}
+
+			FString ActionName = FString::Printf(TEXT("CollectingCargo_%s"), *TargetActor->GetName());
+			each->CharacterProcActionQueue.Actions.push_back(
+				Action(ActionName,
+				       [charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
+				       {
+					       return charPtr->CollectingCargo(targetActor);
+				       }
+				)
+			);
+		}
+	}
+}
+
+void AOrionGameMode::ApproveInteractWithProduction(std::vector<AOrionChara*> OrionCharasRequested,
+                                                   AOrionActorProduction* TargetActor, CommandType inCommandType)
+{
+	if (inCommandType == CommandType::Append)
+	{
+		for (auto& each : OrionCharasRequested)
+		{
+			if (!each)
+			{
+				continue;
+			}
+
+			FString ActionName = FString::Printf(TEXT("InteractWithProduction_%s"), *TargetActor->GetName());
+			each->CharacterProcActionQueue.Actions.push_back(
+				Action(ActionName,
+				       [charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
+				       {
+					       return charPtr->InteractWithProduction(DeltaTime, targetActor);
 				       }
 				)
 			);

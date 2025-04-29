@@ -52,7 +52,38 @@ void AOrionAIController::Tick(float DeltaTime)
 
 	if (ControlledPawn->CharaAIState == EAIState::Defensive)
 	{
-		RegisterDefensiveAIActon();
+		// 1) if we have ammo, enqueue an attack action
+		if (ControlledPawn->InventoryComp->GetItemQuantity(3) > 0)
+		{
+			RegisterDefensiveAIActon();
+		}
+		// 2) if we're out of ammo, enqueue a fetch‐ammo action
+		else
+		{
+			RegisterFetchingAmmoEvent();
+		}
+	}
+}
+
+void AOrionAIController::RegisterFetchingAmmoEvent()
+{
+	// only if nothing else is queued or running
+	if (ControlledPawn->CharaState == ECharaState::Alive
+		&& ControlledPawn->CurrentAction == nullptr
+		&& ControlledPawn->CharacterActionQueue.IsEmpty())
+	{
+		UE_LOG(LogTemp, Log, TEXT("Enqueuing FetchAmmo action"));
+
+		ControlledPawn->CharacterActionQueue.Actions.push_back(
+			Action(
+				TEXT("FetchAmmo"),
+				[charaPtr = ControlledPawn](float DeltaTime) -> bool
+				{
+					// CollectBullets returns true when fully done fetching
+					return charaPtr->CollectBullets(DeltaTime);
+				}
+			)
+		);
 	}
 }
 
@@ -60,7 +91,7 @@ void AOrionAIController::Tick(float DeltaTime)
 void AOrionAIController::RegisterDefensiveAIActon()
 {
 	if (ControlledPawn->CharaState == ECharaState::Alive && ControlledPawn->CurrentAction == nullptr && ControlledPawn
-		->CharacterActionQueue.IsEmpty())
+		->CharacterActionQueue.IsEmpty() && ControlledPawn->InventoryComp->GetItemQuantity(3) > 0)
 	{
 		if (AOrionChara* TargetOrionChara = GetClosestOrionCharaByRelation(
 			ERelation::Hostile, ControlledPawn->HostileGroupsIndex, ControlledPawn->FriendlyGroupsIndex))

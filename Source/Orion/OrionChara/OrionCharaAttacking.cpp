@@ -149,6 +149,23 @@ bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AActor* InTarget, FVec
 		FinalDir.Z = 0.f; // 只在 XY 平面上发射
 
 		// 5) 真正去 Spawn 子弹
+
+		if (InventoryComp->GetItemQuantity(3) > 0)
+		{
+			InventoryComp->ModifyItemQuantity(3, -1);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("AttackOnCharaLongRange: No ammo left."));
+
+			if (IsAttackOnCharaLongRange)
+			{
+				AttackOnCharaLongRangeStop();
+			}
+
+			return true;
+		}
+
 		SpawnBulletActor(MuzzleLoc, FinalDir);
 
 		return false;

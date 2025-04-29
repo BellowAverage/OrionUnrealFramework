@@ -55,4 +55,5 @@ protected:
 	) const;
 
 	void RegisterDefensiveAIActon();
+	void RegisterFetchingAmmoEvent();
 };

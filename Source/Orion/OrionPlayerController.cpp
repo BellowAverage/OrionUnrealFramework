@@ -95,6 +95,12 @@ void AOrionPlayerController::Tick(float DeltaTime)
 					{
 						Progress = OrionOreActor->ProductionProgress;
 					}
+
+					else if (AOrionActorProduction* OrionProductionActor = Cast<AOrionActorProduction>(OrionActor))
+					{
+						Progress = OrionProductionActor->ProductionProgress;
+					}
+
 					else
 					{
 						Progress = 0.0f;
@@ -141,6 +147,33 @@ void AOrionPlayerController::Tick(float DeltaTime)
 							Lines.Add(TEXT("No Inventory Component"));
 						}
 					}
+
+					else if (AOrionActorProduction* OrionProductionActor = Cast<AOrionActorProduction>(OrionActor))
+					{
+						if (UOrionInventoryComponent* InvComp = OrionProductionActor->FindComponentByClass<
+							UOrionInventoryComponent>())
+						{
+							TArray<FIntPoint> Items = InvComp->GetAllItems();
+							for (const FIntPoint& Pair : Items)
+							{
+								int32 ItemId = Pair.X;
+								int32 Quantity = Pair.Y;
+
+								FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
+
+								Lines.Add(FString::Printf(
+									TEXT("%s: %d"),
+									*Info.DisplayName.ToString(),
+									Quantity
+								));
+							}
+						}
+						else
+						{
+							Lines.Add(TEXT("No Inventory Component"));
+						}
+					}
+
 					else
 					{
 						Lines.Add(TEXT("No Available Subclass of OrionActor. "));
@@ -384,6 +417,16 @@ void AOrionPlayerController::OnRightMouseUp()
 			{
 				OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
 				                                        CommandType::Force);
+			}
+			else if (AOrionActorStorage* TempActorStorage = Cast<AOrionActorStorage>(CachedRightClickedOrionActor))
+			{
+				OrionGameMode->ApproveCollectingCargo(OrionCharaSelection, TempActorStorage, CommandType::Append);
+			}
+			else if (AOrionActorProduction* TempActorProduction = Cast<AOrionActorProduction>(
+				CachedRightClickedOrionActor))
+			{
+				OrionGameMode->ApproveInteractWithProduction(OrionCharaSelection, TempActorProduction,
+				                                             CommandType::Append);
 			}
 			else
 			{

@@ -11,8 +11,10 @@
 #include <functional>
 #include "OrionWeapon.h"
 #include "OrionActor.h"
+#include "OrionActor/OrionActorStorage.h"
 #include "deque"
-#include "Components/CapsuleComponent.h"
+#include "OrionActor/OrionActorOre.h"
+#include "OrionActor/OrionActorProduction.h"
 #include "OrionChara.generated.h"
 
 UENUM(BlueprintType)
@@ -87,6 +89,17 @@ public:
 	}
 };
 
+// Add this declaration to the AOrionChara class in OrionChara.h
+
+UENUM(BlueprintType)
+enum class ETradeStep : uint8
+{
+	ToSource UMETA(DisplayName = "To Source"),
+	Pickup UMETA(DisplayName = "Pickup"),
+	ToDest UMETA(DisplayName = "To Destination"),
+	Dropoff UMETA(DisplayName = "Dropoff")
+};
+
 UCLASS()
 class ORION_API AOrionChara : public ACharacter
 {
@@ -101,6 +114,29 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 	AAIController* AIController;
+
+	/** True while we’re in the process of fetching bullets */
+	bool bIsCollectingBullets = false;
+
+	bool CollectBullets(float DeltaTime);
+
+	/** Montage to play when picking up bullets */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	UAnimMontage* BulletPickupMontage;
+
+	/** How long (in seconds) that montage should last */
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	float BulletPickupDuration = 1.0f;
+
+	bool bBulletPickupAnimPlaying = false;
+	FTimerHandle TimerHandle_BulletPickup;
+
+	// Callback when the montage finishes
+	UFUNCTION()
+	void OnBulletPickupFinished();
+
+	/** The production building we’re currently drawing bullets from */
+	AOrionActorProduction* BulletSource = nullptr;
 
 	/* Character Movement */
 	void InitOrionCharaMovement();
@@ -155,26 +191,72 @@ public:
 	bool bIsCharaProcedural;
 
 	/* Trading Cargo */
-	bool TradingCargo(const TMap<AOrionActor*, TMap<int32, int32>>& TradeRoute);
+	bool TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute);
 	bool TradeMoveToLocation(const FVector& Dest, float AcceptanceRadius = 20.f);
 
-	enum class ETradeStep : uint8 { ToSource, Pickup, ToDest, Dropoff };
+	//enum class ETradeStep : uint8 { ToSource, Pickup, ToDest, Dropoff };
 
 	bool bIsTrading = false;
 	ETradeStep TradeStep = ETradeStep::ToSource;
 
 	struct FTradeSeg
 	{
-		AOrionActor* Source = nullptr;
-		AOrionActor* Dest = nullptr;
+		AActor* Source;
+		AActor* Destination;
 		int32 ItemId;
 		int32 Quantity;
 		int32 Moved = 0;
 	};
 
+
 	TArray<FTradeSeg> TradeSegments;
 	int32 CurrentSegIndex = 0;
 
+	UPROPERTY(EditAnywhere, Category = "Trading|Animation")
+	UAnimMontage* PickupMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Trading|Animation")
+	float PickupDuration = 3.0f;
+
+	UPROPERTY(EditAnywhere, Category = "Trading|Animation")
+	UAnimMontage* DropoffMontage = nullptr;
+
+	UPROPERTY(EditAnywhere, Category = "Trading|Animation")
+	float DropoffDuration = 3.0f;
+
+	bool bPickupAnimPlaying = false;
+	bool bDropoffAnimPlaying = false;
+	FTimerHandle TimerHandle_Pickup, TimerHandle_Dropoff;
+
+	void OnPickupAnimFinished();
+	void OnDropoffAnimFinished();
+
+	UPROPERTY(VisibleAnywhere, Category = "Inventory")
+	UOrionInventoryComponent* InventoryComp;
+
+	/* Interact With Production */
+	bool InteractWithProduction(float DeltaTime, AOrionActorProduction* InTargetProduction);
+
+	FTimerHandle ProductionTimerHandle;
+	bool bIsInteractProd = false;
+	bool bPreparingInteractProd = false;
+	TWeakObjectPtr<AOrionActorProduction> CurrentInteractProduction;
+	void InteractWithProductionStop();
+
+	/* Collecting Cargo */
+
+	UFUNCTION(BlueprintCallable, Category = "Basics")
+	bool CollectingCargo(AOrionActorStorage* OrionStorageActor);
+	bool bIsCollectingCargo = false;
+	void ResetCollectingState();
+	TWeakObjectPtr<AOrionActorStorage> CollectStorageTarget;
+	int32 CollectItemId;
+	int32 CollectRemaining;
+
+	enum class ECollectStep : uint8 { ToSource, Pickup, ToStorage, Dropoff };
+
+	ECollectStep CollectStep = ECollectStep::ToSource;
+	TWeakObjectPtr<AOrionActorOre> CollectSource;
 
 	/* MoveToLocation */
 	bool MoveToLocation(FVector InTargetLocation);
@@ -194,6 +276,11 @@ public:
 
 	bool DoOnceInteractWithActor = false;
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
+	void SpawnAxeOnChara();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
+	void RemoveAxeOnChara();
 
 	/* Inventory */
 	std::unordered_map<int, int> CharaInventoryMap;

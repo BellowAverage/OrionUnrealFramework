@@ -4,36 +4,33 @@
 
 #include "CoreMinimal.h"
 #include "../OrionActor.h"
-#include "OrionActorOre.generated.h"
+#include "OrionActorProduction.generated.h"
 
 /**
  * 
  */
 
 UENUM(BlueprintType)
-enum class EOreCategory : uint8
+enum class EProductionCategory : uint8
 {
 	None UMETA(DisplayName = "None"),
-	StoneOre UMETA(DisplayName = "Stone Ore"),
-	CopperOre UMETA(DisplayName = "Copper Ore"),
-	GoldOre UMETA(DisplayName = "Gold Ore"),
-	SilverOre UMETA(DisplayName = "Silver Ore"),
+	Bullets UMETA(DisplayName = "Bullets"),
 };
 
 UCLASS()
-class ORION_API AOrionActorOre : public AOrionActor
+class ORION_API AOrionActorProduction : public AOrionActor
 {
 	GENERATED_BODY()
 
 public:
-	AOrionActorOre();
+	AOrionActorProduction();
 
 	virtual void BeginPlay() override;
 
 	virtual void Tick(float DeltaTime) override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	EOreCategory OreCategory;
+	EProductionCategory ProductionCategory;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	int ProductionTimeCost;

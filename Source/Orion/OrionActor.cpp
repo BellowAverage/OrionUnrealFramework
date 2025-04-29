@@ -2,8 +2,6 @@
 
 
 #include "OrionActor.h"
-
-#include "Components/SphereComponent.h"
 #include "OrionComponents/OrionInventoryComponent.h"
 
 AOrionActor::AOrionActor()
@@ -20,7 +18,9 @@ AOrionActor::AOrionActor()
 
 	*/
 
+
 	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
+
 
 	MaxHealth = 30;
 	CurrHealth = MaxHealth;
@@ -35,6 +35,8 @@ void AOrionActor::BeginPlay()
 	Super::BeginPlay();
 
 	InventoryComp = FindComponentByClass<UOrionInventoryComponent>();
+
+	CollisionSphere = FindComponentByClass<USphereComponent>();
 
 	if (InventoryComp)
 	{
@@ -52,11 +54,6 @@ void AOrionActor::BeginPlay()
 void AOrionActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
-	if (InventoryComp->FullInventoryStatus.FindRef(1))
-	{
-		ActorStatus = EActorStatus::NotInteractable;
-	}
 }
 
 float AOrionActor::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator,
