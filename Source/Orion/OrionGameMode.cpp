@@ -578,4 +578,24 @@ void AOrionGameMode::ApproveInteractWithProduction(std::vector<AOrionChara*> Ori
 			);
 		}
 	}
+	else if (inCommandType == CommandType::Force)
+	{
+		for (auto& each : OrionCharasRequested)
+		{
+			if (!each)
+			{
+				continue;
+			}
+
+			FString ActionName = FString::Printf(TEXT("InteractWithProduction_%s"), *TargetActor->GetName());
+			each->CharacterActionQueue.Actions.push_back(
+				Action(ActionName,
+				       [charPtr = each, targetActor = TargetActor](float DeltaTime) -> bool
+				       {
+					       return charPtr->InteractWithProduction(DeltaTime, targetActor);
+				       }
+				)
+			);
+		}
+	}
 }

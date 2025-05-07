@@ -413,25 +413,50 @@ void AOrionPlayerController::OnRightMouseUp()
 		AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
 		if (OrionGameMode && !OrionCharaSelection.empty())
 		{
-			if (!bIsShiftPressed)
+			if (AOrionActorStorage* TempActorStorage = Cast<AOrionActorStorage>(CachedRightClickedOrionActor))
 			{
-				OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
-				                                        CommandType::Force);
-			}
-			else if (AOrionActorStorage* TempActorStorage = Cast<AOrionActorStorage>(CachedRightClickedOrionActor))
-			{
-				OrionGameMode->ApproveCollectingCargo(OrionCharaSelection, TempActorStorage, CommandType::Append);
+				if (bIsShiftPressed)
+				{
+					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
+					                                        CommandType::Force);
+				}
+				else
+				{
+					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
+					                                        CommandType::Append);
+				}
 			}
 			else if (AOrionActorProduction* TempActorProduction = Cast<AOrionActorProduction>(
 				CachedRightClickedOrionActor))
 			{
-				OrionGameMode->ApproveInteractWithProduction(OrionCharaSelection, TempActorProduction,
-				                                             CommandType::Append);
+				if (!bIsShiftPressed)
+				{
+					OrionGameMode->ApproveInteractWithProduction(OrionCharaSelection, TempActorProduction,
+					                                             CommandType::Force);
+				}
+				else
+				{
+					OrionGameMode->ApproveInteractWithProduction(OrionCharaSelection, TempActorProduction,
+					                                             CommandType::Append);
+				}
+			}
+			else if (AOrionActorOre* TempActorOre = Cast<AOrionActorOre>(CachedRightClickedOrionActor))
+			{
+				if (!bIsShiftPressed)
+				{
+					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
+					                                        CommandType::Force);
+				}
+
+				else
+				{
+					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
+					                                        CommandType::Append);
+				}
 			}
 			else
 			{
-				OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
-				                                        CommandType::Append);
+				UE_LOG(LogTemp, Warning, TEXT("Right Clicked on an unknown Actor."));
 			}
 		}
 	}

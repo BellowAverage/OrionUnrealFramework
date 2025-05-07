@@ -1,9 +1,7 @@
 ﻿#include "OrionHUD.h"
 #include "Engine/Canvas.h"
-#include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
 #include "OrionChara.h"
-#include "OrionPlayerController.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include <vector>
@@ -184,12 +182,12 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				FStringView(*CombinedText), // <-- changed
+				CombinedText, // <- 传 FString 而不是 FStringView
 				ScreenPos.X,
 				ScreenPos.Y,
-				1.5f, // XScale
-				1.5f, // YScale
-				RenderInfo // 字体渲染信息
+				1.5f,
+				1.5f,
+				RenderInfo
 			);
 
 			// 如果需要再次换别的颜色，就再次 SetDrawColor(...) 后再绘制
@@ -235,11 +233,11 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			FStringView(*Line), // <-- and here
+			Line, // <- 这里直接传 FString
 			MouseX + XOffset,
 			CurrentY,
-			1.5f, // ScaleX
-			1.5f, // ScaleY
+			1.5f,
+			1.5f,
 			RenderInfo
 		);
 
