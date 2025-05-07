@@ -475,7 +475,6 @@ void AOrionPlayerController::OnRightMouseUp()
 
 void AOrionPlayerController::OnRightMouseDown()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Right mouse button pressed - 0418."));
 	RightMouseDownTime = GetWorld()->GetTimeSeconds();
 
 	CachedRightClickedOrionActor = nullptr;
@@ -487,14 +486,11 @@ void AOrionPlayerController::OnRightMouseDown()
 		HitResult
 	);
 
-	UE_LOG(LogTemp, Log, TEXT("bBlockingHit is %s"), HitResult.bBlockingHit ? TEXT("true") : TEXT("false"));
-
 	if (!HitResult.bBlockingHit)
 	{
 		// Pass Custom Channel directly if that overload exists: ECC_GameTraceChannel1 is mapped as "Landscape" in Editor. See DefaultEngine.ini.
 		// Try to trace landscape using landscape channel
 
-		UE_LOG(LogTemp, Warning, TEXT("Called Landscape Channel. "));
 		GetHitResultUnderCursorByChannel(
 			UEngineTypes::ConvertToTraceType(ECC_GameTraceChannel1),
 			false,
@@ -505,8 +501,6 @@ void AOrionPlayerController::OnRightMouseDown()
 		// 0. If clicked on Landscape => Default action is MoveToLocation
 		if (HitResult.bBlockingHit)
 		{
-			UE_LOG(LogTemp, Log, TEXT("Hit ON GROUND component: %s"), *HitResult.Component->GetName());
-
 			if (NiagaraHitResultEffect)
 			{
 				UNiagaraFunctionLibrary::SpawnSystemAtLocation(
@@ -528,7 +522,7 @@ void AOrionPlayerController::OnRightMouseDown()
 						if (OrionHUD)
 						{
 							std::vector<std::string> ArrOptionNames;
-							ArrOptionNames.push_back("SpawnOrionCharacterHere");
+							ArrOptionNames.push_back("SpawnHostileOrionCharacterHere");
 							ArrOptionNames.push_back("Operation2");
 							ArrOptionNames.push_back("Operation3");
 							OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
@@ -619,7 +613,8 @@ void AOrionPlayerController::SelectAll()
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
 
-	int32 TempCounter = FoundActors.Num() - 1;
+	int32 NumLeaveUnselected = 1;
+	int32 TempCounter = FoundActors.Num() - NumLeaveUnselected;
 	for (AActor* Actor : FoundActors)
 	{
 		if (TempCounter > 0)

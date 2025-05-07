@@ -140,13 +140,21 @@ void AOrionHUD::DrawHUD()
 
 		FString CurrHealthDebug = FString::Printf(TEXT("Health: %f"), OrionChara->CurrHealth);
 
+		FString CurrUnifiedAction = OrionChara->GetUnifiedActionName();
+
+		if (CurrUnifiedAction.IsEmpty())
+		{
+			CurrUnifiedAction = TEXT("None");
+		}
+
 		FString CombinedText = FString::Printf(
-			TEXT("Name: %s\nActionQueue: %s\nCurrHealth: %s"),
+			TEXT("Name: %s\nActionQueue: %s\nCurrHealth: %s\nCurrUnifiedAction: %s"),
 			*CurrObjectName,
 			//*CurrObjectLocation,
 			*ActionQueueContent,
 			//*CurrActionDebug,
-			*CurrHealthDebug
+			*CurrHealthDebug,
+			*CurrUnifiedAction
 		);
 
 		// 2) 将OrionChara的世界坐标 转成 屏幕坐标
@@ -176,7 +184,7 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				CombinedText,
+				FStringView(*CombinedText), // <-- changed
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f, // XScale
@@ -227,7 +235,7 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			Line,
+			FStringView(*Line), // <-- and here
 			MouseX + XOffset,
 			CurrentY,
 			1.5f, // ScaleX

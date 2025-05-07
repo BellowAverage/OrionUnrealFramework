@@ -6,13 +6,6 @@
 AOrionActorStorage::AOrionActorStorage()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
-	if (StorageCategory == EStorageCategory::StoneStorage)
-	{
-		AvailableInventoryMap = {
-			{2, 50} // Stone Storage
-		};
-	}
 }
 
 void AOrionActorStorage::BeginPlay()

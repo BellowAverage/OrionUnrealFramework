@@ -6,22 +6,22 @@
 #include "GameFramework/PlayerController.h"
 #include "OrionPlayerController.h"
 
-void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)  
-{  
-   check(PlayerInputComponent);  
+void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	check(PlayerInputComponent);
 
-   PlayerInputComponent->BindAxis(TEXT("CameraMoveForward"), this, &AOrionCameraPawn::MoveForward);  
-   PlayerInputComponent->BindAxis(TEXT("CameraMoveRight"), this, &AOrionCameraPawn::MoveRight);  
-   PlayerInputComponent->BindAxis(TEXT("CameraZoom"), this, &AOrionCameraPawn::Zoom);  
+	PlayerInputComponent->BindAxis(TEXT("CameraMoveForward"), this, &AOrionCameraPawn::MoveForward);
+	PlayerInputComponent->BindAxis(TEXT("CameraMoveRight"), this, &AOrionCameraPawn::MoveRight);
+	PlayerInputComponent->BindAxis(TEXT("CameraZoom"), this, &AOrionCameraPawn::Zoom);
 
-   PlayerInputComponent->BindAxis(TEXT("CameraTurn"), this, &AOrionCameraPawn::CameraYaw);  
-   PlayerInputComponent->BindAxis(TEXT("CameraLookUp"), this, &AOrionCameraPawn::CameraPitch);  
+	PlayerInputComponent->BindAxis(TEXT("CameraTurn"), this, &AOrionCameraPawn::CameraYaw);
+	PlayerInputComponent->BindAxis(TEXT("CameraLookUp"), this, &AOrionCameraPawn::CameraPitch);
 
-   PlayerInputComponent->BindAction(TEXT("CameraRotate"), IE_Pressed, this, &AOrionCameraPawn::StartRotate);  
-   PlayerInputComponent->BindAction(TEXT("CameraRotate"), IE_Released, this, &AOrionCameraPawn::StopRotate);  
+	PlayerInputComponent->BindAction(TEXT("CameraRotate"), IE_Pressed, this, &AOrionCameraPawn::StartRotate);
+	PlayerInputComponent->BindAction(TEXT("CameraRotate"), IE_Released, this, &AOrionCameraPawn::StopRotate);
 
-   PlayerInputComponent->BindAction("CameraToggleFollow", IE_Pressed,
-	   this, &AOrionCameraPawn::ToggleFollow);
+	PlayerInputComponent->BindAction("CameraToggleFollow", IE_Pressed,
+	                                 this, &AOrionCameraPawn::ToggleFollow);
 }
 
 AOrionCameraPawn::AOrionCameraPawn()
@@ -61,6 +61,18 @@ void AOrionCameraPawn::BeginPlay()
 		PC->bShowMouseCursor = true;
 		PC->bEnableClickEvents = true;
 		PC->bEnableMouseOverEvents = true;
+
+
+		// --- 新增：设置 InputMode 为 GameAndUI，同时不锁定鼠标到视口 ---
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		PC->SetInputMode(InputMode);
+
+		// --- 新增：禁用 Viewport 的自动捕获（项目默认是 CaptureDuringMouseDown） ---
+		//if (GetWorld()->GetGameViewport())
+		//{
+		//	GetWorld()->GetGameViewport()->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);
+		//}
 	}
 }
 
@@ -85,9 +97,9 @@ void AOrionCameraPawn::Tick(float DeltaSeconds)
 
 		SetActorLocation(
 			FMath::VInterpTo(GetActorLocation(),
-				Desired,
-				DeltaSeconds,
-				FollowInterpSpeed));
+			                 Desired,
+			                 DeltaSeconds,
+			                 FollowInterpSpeed));
 	}
 }
 
@@ -102,7 +114,6 @@ void AOrionCameraPawn::MoveForward(float Value)
 
 void AOrionCameraPawn::MoveRight(float Value)
 {
-
 	if (!FMath::IsNearlyZero(Value))
 	{
 		AddMovementInput(GetActorRightVector(), Value);
@@ -115,7 +126,7 @@ void AOrionCameraPawn::Zoom(float AxisValue)
 	if (!FMath::IsNearlyZero(AxisValue))
 	{
 		TargetArmLength = FMath::Clamp(TargetArmLength - AxisValue * ZoomStep,
-			MinArmLength, MaxArmLength);
+		                               MinArmLength, MaxArmLength);
 	}
 }
 
@@ -144,7 +155,6 @@ void AOrionCameraPawn::StopRotate()
 
 void AOrionCameraPawn::CameraYaw(float Value)
 {
-
 	if (bRotatingCamera && !FMath::IsNearlyZero(Value))
 	{
 		AddActorWorldRotation(FRotator(0.f, Value * RotateSpeed, 0.f));
@@ -153,7 +163,6 @@ void AOrionCameraPawn::CameraYaw(float Value)
 
 void AOrionCameraPawn::CameraPitch(float Value)
 {
-
 	Value = -Value;
 
 	if (bRotatingCamera && !FMath::IsNearlyZero(Value))
@@ -166,7 +175,7 @@ void AOrionCameraPawn::CameraPitch(float Value)
 
 void AOrionCameraPawn::ToggleFollow()
 {
-	if (bIsFollowing)            // 已锁定 → 解除
+	if (bIsFollowing) // 已锁定 → 解除
 	{
 		bIsFollowing = false;
 		FollowTarget = nullptr;

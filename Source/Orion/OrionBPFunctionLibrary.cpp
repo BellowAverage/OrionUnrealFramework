@@ -190,3 +190,14 @@ void UOrionBPFunctionLibrary::FaceComponentToPlayerCamera(USceneComponent* Compo
 	// apply it
 	Component->SetWorldRotation(LookAtRot);
 }
+
+void UOrionBPFunctionLibrary::OrionSetInputMode()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GEngine->GetFirstLocalPlayerController(GWorld)))
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		//PC->SetInputMode(FInputModeGameAndUI());
+		PC->SetInputMode(InputMode);
+	}
+}

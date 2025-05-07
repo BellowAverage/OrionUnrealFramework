@@ -34,4 +34,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Utilities|Component")
 	static void FaceComponentToPlayerCamera(USceneComponent* Component);
+
+	UFUNCTION(BlueprintCallable, Category = "Developer")
+	static void OrionSetInputMode();
 };

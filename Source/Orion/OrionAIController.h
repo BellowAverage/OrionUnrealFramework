@@ -56,4 +56,6 @@ protected:
 
 	void RegisterDefensiveAIActon();
 	void RegisterFetchingAmmoEvent();
+
+	EAIState CachedAIState;
 };

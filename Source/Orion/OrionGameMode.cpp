@@ -289,9 +289,10 @@ void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 		}
 
 		OrionChara->MaxHealth = 10.0f;
-		OrionChara->FireRange = 0;
+		OrionChara->FireRange = 2000.0f;
 		OrionChara->CharaSide = 1;
-		OrionChara->CharaAIState = EAIState::Defensive;
+		OrionChara->HostileGroupsIndex.Add(0);
+		OrionChara->CharaAIState = EAIState::Unavailable;
 	}
 	else
 	{
@@ -302,8 +303,6 @@ void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCharasRequested, AActor* TargetActor,
                                                FVector HitOffset, CommandType inCommandType)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Server: ApproveCharaAttackOnActor called."));
-
 	if (TargetActor)
 	{
 		if (inCommandType == CommandType::Force)
@@ -387,8 +386,6 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
 bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionCharasRequested, FVector TargetLocation,
                                                 CommandType inCommandType)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Server: ApproveCharaMoveToLocation called."));
-
 	if (inCommandType == CommandType::Force)
 	{
 		if (!OrionCharasRequested.empty())
@@ -455,8 +452,6 @@ bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionC
 bool AOrionGameMode::ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*> OrionPawnsRequested,
                                                FVector TargetLocation, CommandType inCommandType)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Server: ApprovePawnMoveToLocation called."));
-
 	if (inCommandType == CommandType::Force)
 	{
 		if (!OrionPawnsRequested.empty())
@@ -487,8 +482,6 @@ bool AOrionGameMode::ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*>
 void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor,
                                               CommandType inCommandType)
 {
-	UE_LOG(LogTemp, Warning, TEXT("Server: ApproveInteractWithActor called."));
-
 	if (inCommandType == CommandType::Force)
 	{
 		for (auto& each : OrionCharasRequested)

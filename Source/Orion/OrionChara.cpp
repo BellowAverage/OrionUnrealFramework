@@ -2,7 +2,6 @@
 
 #include "OrionChara.h"
 #include "OrionAIController.h"
-
 #include "AIController.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "NavigationSystem.h"
@@ -10,12 +9,12 @@
 #include "Engine/World.h"
 #include "Animation/AnimInstance.h"
 #include "Navigation/PathFollowingComponent.h"
-
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
 
 #include "DrawDebugHelpers.h"
-
+#include "OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -23,6 +22,7 @@
 #include <algorithm>
 #include "TimerManager.h"
 #include "EngineUtils.h"
+#include "NavigationPath.h"
 //#include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include <Components/SphereComponent.h>
@@ -63,8 +63,6 @@ AOrionChara::AOrionChara()
 void AOrionChara::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// UE_LOG(LogTemp, Log, TEXT("%s has been constructed."), *GetName());
 
 	AIController = Cast<AOrionAIController>(GetController());
 
@@ -124,7 +122,7 @@ void AOrionChara::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	//UE_LOG(LogTemp, Log, TEXT("AOrionChara::Tick()"));
+	//UE_LOG(LogTemp, Log, TEXT("Current Action: %s"), *GetUnifiedActionName());
 
 	if (CharaState == ECharaState::Dead || CharaState == ECharaState::Incapacitated)
 	{
@@ -138,41 +136,39 @@ void AOrionChara::Tick(float DeltaTime)
 
 	/* AI Controlling */
 
-	const FString PrevName = LastNonEmptyActionName;
-
-	/*
-	UE_LOG(LogTemp, Warning,
-	       TEXT("[DEBUG] %s PrevAction='%s'"),
-	       *GetName(),
-	       PrevName.IsEmpty() ? TEXT("None") : *PrevName
-	);
-	*/
+	const FString PrevName = LastActionName;
 
 	DistributeCharaAction(DeltaTime);
 
 	const FString CurrName = GetUnifiedActionName();
 
-	/*
-	UE_LOG(LogTemp, Warning,
-	       TEXT("[DEBUG] %s CurrAction='%s'"),
-	       *GetName(),
-	       CurrName.IsEmpty() ? TEXT("None") : *CurrName
-	);
-	*/
+	if (this->GetName().Contains("1")) UE_LOG(LogTemp, Log, TEXT("Previous: %s, Current: %s, bIsCached: %s"), *PrevName,
+	                                          *CurrName, bCachedEmptyAction ? TEXT("True") : TEXT("False"));
 
-	// if both non-empty and changed, invoke state transition
-	if (!PrevName.IsEmpty() && !CurrName.IsEmpty() && PrevName != CurrName)
+	if (!bCachedEmptyAction && CurrName.IsEmpty())
 	{
-		UE_LOG(LogTemp, Log,
-		       TEXT("SwitchingStateHandle: %s -> %s"),
-		       *PrevName, *CurrName
-		);
-		SwitchingStateHandle(PrevName, CurrName);
+		bCachedEmptyAction = true;
 	}
 
-	if (!CurrName.IsEmpty())
+	else if (bCachedEmptyAction)
 	{
-		LastNonEmptyActionName = CurrName;
+		if (PrevName != CurrName)
+		{
+			SwitchingStateHandle(PrevName, CurrName);
+		}
+
+		bCachedEmptyAction = false;
+		LastActionName = CurrName;
+	}
+
+	else
+	{
+		if (PrevName != CurrName)
+		{
+			SwitchingStateHandle(PrevName, CurrName);
+		}
+
+		LastActionName = CurrName;
 	}
 
 
@@ -233,9 +229,6 @@ void AOrionChara::DistributeProceduralAction(float DeltaTime)
 	{
 		bool bInterrupted = ProcAction.ExecuteFunction(DeltaTime);
 
-		UE_LOG(LogTemp, Log, TEXT("DistributeProceduralAction: bInterrupted = %s"),
-		       bInterrupted ? TEXT("true") : TEXT("false"));
-
 		if (!bInterrupted)
 		{
 			CurrentProcAction = &ProcAction;
@@ -246,184 +239,500 @@ void AOrionChara::DistributeProceduralAction(float DeltaTime)
 
 void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 {
+	UE_LOG(LogTemp, Log,
+	       TEXT("SwitchingStateHandle: %s -> %s"),
+	       *Prev, *Curr
+	);
+
 	if (Prev.Contains(TEXT("InteractWithActor")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
-		InteractWithActorStop();
+		if (IsInteractWithActor)
+		{
+			InteractWithActorStop();
+		}
+		else if (bIsMovingToInteraction)
+		{
+			MoveToLocationStop();
+		}
 	}
+	else if (Prev.Contains(TEXT("InteractWithActor")) && Curr.IsEmpty())
+	{
+		if (IsInteractWithActor)
+		{
+			InteractWithActorStop();
+		}
+		else if (bIsMovingToInteraction)
+		{
+			MoveToLocationStop();
+		}
+	}
+
 	else if (Prev.Contains(TEXT("InteractWithProduction")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
 		InteractWithProductionStop();
 	}
+	else if (Prev.Contains(TEXT("InteractWithProduction")) && Curr.IsEmpty())
+	{
+		InteractWithProductionStop();
+	}
+
+	else if (Prev.Contains(TEXT("CollectingCargo")) && Curr.Contains(TEXT("MoveToLocation")))
+	{
+		MoveToLocationStop();
+	}
+	else if (Prev.Contains(TEXT("CollectingCargo")) && Curr.IsEmpty())
+	{
+		MoveToLocationStop();
+	}
+}
+
+
+AOrionActor* AOrionChara::FindClosetAvailableCargoContainer(int32 ItemId) const
+{
+	UWorld* World = GetWorld();
+
+	AOrionActor* ClosestAvailableActor = nullptr;
+
+	for (TActorIterator<AOrionActor> It(World); It; ++It)
+	{
+		AOrionActor* OrionActor = *It;
+		if (!OrionActor)
+		{
+			continue;
+		}
+
+		int32 Quantity = OrionActor->InventoryComp->GetItemQuantity(ItemId);
+
+		if (Quantity > 0)
+		{
+			float Distance = FVector::Dist(GetActorLocation(), OrionActor->GetActorLocation());
+			if (!ClosestAvailableActor || Distance < FVector::Dist(GetActorLocation(),
+			                                                       ClosestAvailableActor->GetActorLocation()))
+			{
+				ClosestAvailableActor = OrionActor;
+			}
+		}
+	}
+
+	if (!ClosestAvailableActor)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("FindClosetAvailableCargoContainer: No available cargo container found."));
+		return nullptr;
+	}
+
+	return ClosestAvailableActor;
+}
+
+TArray<AOrionActor*> AOrionChara::FindAvailableCargoContainersByDistance(int32 ItemId) const
+{
+	TArray<AOrionActor*> AvailableContainers;
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return AvailableContainers;
+	}
+
+	for (TActorIterator<AOrionActor> It(World); It; ++It)
+	{
+		AOrionActor* OrionActor = *It;
+		if (!OrionActor || !OrionActor->InventoryComp)
+		{
+			continue;
+		}
+
+		// ❌ 排除 Storage 或 Production
+		if (OrionActor->IsA<AOrionActorStorage>() ||
+			OrionActor->IsA<AOrionActorProduction>())
+		{
+			continue;
+		}
+
+		if (OrionActor->InventoryComp->GetItemQuantity(ItemId) > 0)
+		{
+			AvailableContainers.Add(OrionActor);
+		}
+	}
+
+	if (AvailableContainers.Num() > 1)
+	{
+		AOrionActor** DataPtr = AvailableContainers.GetData();
+		int32 Count = AvailableContainers.Num();
+
+		std::sort(
+			DataPtr,
+			DataPtr + Count,
+			[this](AOrionActor* A, AOrionActor* B)
+			{
+				const float DistA = FVector::DistSquared(GetActorLocation(), A->GetActorLocation());
+				const float DistB = FVector::DistSquared(GetActorLocation(), B->GetActorLocation());
+				return DistA < DistB;
+			}
+		);
+	}
+
+	return AvailableContainers;
 }
 
 bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 {
-	// 每帧进到这里先打个 tick 日志
-	UE_LOG(LogTemp, Warning, TEXT("=== CollectingCargo Tick ==="));
+	constexpr int32 StoneItemId = 2;
 
-	// 只有石料仓库才处理 ItemId=2
+	// 1) 验证目标仓库
 	if (!IsValid(StorageActor) ||
 		StorageActor->StorageCategory != EStorageCategory::StoneStorage)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("CollectingCargo: invalid storage or not StoneStorage"));
-
 		return true;
 	}
 
-	TMap<AActor*, TMap<int32, int32>> TradeRoute;
-
-	// 初始化：只在第一次调用时构建路由
-	if (!bIsCollectingCargo)
+	// 2) 先把自身已有的石料送一趟（只做一次）
+	if (!bSelfDeliveryDone)
 	{
-		// 在场景中找第一个有货的 Ore
-		TArray<AActor*> FoundActors;
-		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionActorOre::StaticClass(), FoundActors);
+		int32 Have = InventoryComp
+			             ? InventoryComp->GetItemQuantity(StoneItemId)
+			             : 0;
 
-		AOrionActorOre* ChosenOre = nullptr;
-
-
-		for (AActor* A : FoundActors)
+		if (Have > 0)
 		{
-			auto* Ore = Cast<AOrionActorOre>(A);
-			if (!Ore)
-			{
-				continue;
-			}
+			// 构建 this -> Storage 的路由（自身取货、放到仓库）
+			TMap<AActor*, TMap<int32, int32>> SelfRoute;
+			SelfRoute.Add(this, {{StoneItemId, Have}});
+			SelfRoute.Add(StorageActor, {});
 
-			int32 Qty = Ore->InventoryComp->GetItemQuantity(2);
-			UE_LOG(LogTemp, Warning, TEXT("CollectingCargo: checking Ore %s, Qty=%d"), *Ore->GetName(), Qty);
-
-			if (Qty > 0)
+			// 交给 TradingCargo 去跑这一段
+			bool bDone = TradingCargo(SelfRoute);
+			if (!bDone)
 			{
-				ChosenOre = Ore;
-				break;
+				// 还在送自身库存，下一帧继续
+				return false;
 			}
+			// 送完了就标记，下面才进入场上容器逻辑
+		}
+		bSelfDeliveryDone = true;
+	}
+
+	// 3) 每次 bIsTrading==false，都重新选下一个源头 并发起新一段运输
+	if (!bIsTrading)
+	{
+		// 3.1) 现场所有可用矿 + （不含自身，这里自身库存已送完）
+		TArray<AOrionActor*> Sources =
+			FindAvailableCargoContainersByDistance(
+				StoneItemId
+			);
+
+		if (Sources.Num() == 0)
+		{
+			// 连一个都没—结束
+			UE_LOG(LogTemp, Log, TEXT("CollectingCargo: no more sources, done"));
+			// 重置，以便下次再调用能重跑自身送货
+			bSelfDeliveryDone = false;
+			return true;
 		}
 
-		if (!ChosenOre)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("CollectingCargo: no Ore has ItemId=2"));
-			return true; // 没货就直接完成
-		}
+		// 3.2) 选最近的那个，构建 一段 Source -> Storage
+		AOrionActor* NextSource = Sources[0];
+		int32 Qty = NextSource->InventoryComp->GetItemQuantity(StoneItemId);
 
-		// 构建单向运输路线：从 ChosenOre -> StorageActor
+		TMap<AActor*, TMap<int32, int32>> Route;
+		Route.Add(NextSource, {{StoneItemId, Qty}});
+		Route.Add(StorageActor, {});
 
-		TradeRoute.Empty();
-		TradeRoute.Add(ChosenOre, {{2, ChosenOre->InventoryComp->GetItemQuantity(2)}});
-		TradeRoute.Add(StorageActor, {}); // 目标仓库不送出任何东西
+		// 发起这段运输
+		TradingCargo(Route);
 
-		UE_LOG(LogTemp, Warning, TEXT(
-			       "CollectingCargo: route built: %s -> %s x%d"),
-		       *ChosenOre->GetName(),
-		       *StorageActor->GetName(),
-		       TradeRoute[ChosenOre][2]
-		);
-
-		bIsCollectingCargo = true;
+		// 始终 return false，等待 TradingCargo 状态机自行推进
+		return false;
 	}
 
-	// 委托给你现成的 TradingCargo 去跑整个运输
-	const bool bDone = TradingCargo(TradeRoute);
-
-	if (bDone)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("CollectingCargo: TradingCargo completed, clearing state"));
-		bIsCollectingCargo = false;
-		TradeRoute.Empty();
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("CollectingCargo: TradingCargo still in progress"));
-	}
-
-	return bDone;
+	// 4) bIsTrading 为 true，说明上一段正在执行 → 继续推进
+	TradingCargo(TMap<AActor*, TMap<int32, int32>>());
+	return false;
 }
 
-void AOrionChara::ResetCollectingState()
+void AOrionChara::CollectingCargoStop()
 {
+	if (bIsTrading)
+	{
+		// 停止任何挂起的拾取/放下动画回调
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Pickup);
+		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Dropoff);
+		// 重置TradingCargo状态机
+		bIsTrading = false;
+		bPickupAnimPlaying = false;
+		bDropoffAnimPlaying = false;
+		TradeSegments.Empty();
+		CurrentSegIndex = 0;
+		TradeStep = ETradeStep::ToSource;
+	}
+
+	// 2) 停止导航
+	MoveToLocationStop();
+
+	// 3) 清理 CollectingCargo 自身状态
+	bSelfDeliveryDone = false;
 	bIsCollectingCargo = false;
-	CollectStorageTarget = nullptr;
-	CollectItemId = 0;
-	CollectRemaining = 0;
+	AvailableCargoSources.Empty();
+	CurrentCargoIndex = 0;
+	CollectStep = ECollectStep::ToSource;
+	CollectSource.Reset();
 }
 
-bool AOrionChara::MoveToLocation(FVector InTargetLocation)
+
+/* Deprecated MoveToLocation */
+//bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
+//{
+//	constexpr float AcceptanceRadius = 50.f;
+//	const FVector SearchExtent(500.f, 500.f, 500.f);
+//
+//	// 0) 检查 AIController
+//	if (!AIController)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No AIController - treating as arrived"));
+//		return true;
+//	}
+//
+//	// 1) 拿导航系统
+//	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+//	if (!NavSys)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No NavigationSystem - treating as arrived"));
+//		return true;
+//	}
+//
+//	// 2) 投影目标到 NavMesh
+//	FNavLocation ProjectedNav;
+//	FVector DestLocation = InTargetLocation;
+//	if (NavSys->ProjectPointToNavigation(InTargetLocation, ProjectedNav, SearchExtent))
+//	{
+//		DestLocation = ProjectedNav.Location;
+//		UE_LOG(LogTemp, Log,
+//		       TEXT("[MoveToLocation] Projected to NavMesh: %s"),
+//		       *DestLocation.ToString());
+//	}
+//	else
+//	{
+//		UE_LOG(LogTemp, Warning,
+//		       TEXT("[MoveToLocation] ProjectPointToNavigation failed at %s, using raw target"),
+//		       *InTargetLocation.ToString());
+//	}
+//
+//	// 3) 水平距离检查
+//	float Dist2D = FVector::Dist2D(GetActorLocation(), DestLocation);
+//	UE_LOG(LogTemp, Log,
+//	       TEXT("[MoveToLocation] Curr=%s, Dest=%s, Dist2D=%.1f, Radius=%.1f"),
+//	       *GetActorLocation().ToString(),
+//	       *DestLocation.ToString(),
+//	       Dist2D,
+//	       AcceptanceRadius);
+//
+//	if (Dist2D <= AcceptanceRadius)
+//	{
+//		UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Within acceptance radius → Arrived"));
+//		AIController->StopMovement();
+//		return true;
+//	}
+//
+//	// 4) 发起寻路请求
+//	UE_LOG(LogTemp, Log,
+//	       TEXT("[MoveToLocation] Moving to %s (radius=%.1f)"),
+//	       *DestLocation.ToString(),
+//	       AcceptanceRadius);
+//
+//	EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
+//		DestLocation,
+//		AcceptanceRadius,
+//		/*StopOnOverlap=*/ true,
+//		/*UsePathfinding=*/ true,
+//		/*ProjectDestinationToNavigation=*/ false,
+//		/*bCanStrafe=*/ true,
+//		/*FilterClass=*/ nullptr,
+//		/*bAllowPartialPath=*/ true
+//	);
+//
+//	if (RequestResult == EPathFollowingRequestResult::AlreadyAtGoal)
+//	{
+//		UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] AlreadyAtGoal"));
+//		return true;
+//	}
+//	if (RequestResult == EPathFollowingRequestResult::Failed)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] MoveToLocation request FAILED → treat as arrived"));
+//		return true;
+//	}
+//	// RequestSuccessful
+//	UE_LOG(LogTemp, Verbose, TEXT("[MoveToLocation] MoveToLocation request accepted"));
+//
+//	// 正在移动
+//	return false;
+//}
+
+// In AOrionChara.cpp, replace MoveToLocation 实现为：
+
+bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 {
-	/*
-	static auto DoOnce = []() -> bool
-	    {
-	        static bool bHasExecuted = false;
-	        if (!bHasExecuted)
-	        {
-	            bHasExecuted = true;
-	            return true;
-	        }
-	        return false;
-	    };
-	*/
+	// 记录目标以备“重新规划”时使用
+	LastMoveDestination = InTargetLocation;
+	bHasMoveDestination = true;
 
-	if (bIsPlayingMontage)
+	constexpr float AcceptanceRadius = 50.f;
+	const FVector SearchExtent(500.f, 500.f, 500.f);
+
+	if (!AIController)
 	{
-		OnEquipWeaponMontageInterrupted();
-		bIsPlayingMontage = false;
+		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No AIController → treat as arrived"));
+		return true;
 	}
 
-	if (AIController)
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	if (!NavSys)
 	{
-		FNavAgentProperties AgentProperties = AIController->GetNavAgentPropertiesRef();
+		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No NavigationSystem → treat as arrived"));
+		return true;
+	}
 
-		UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-		FNavLocation ProjectedLocation;
-		if (NavSys && NavSys->ProjectPointToNavigation(InTargetLocation, ProjectedLocation))
+	// 如果还没有生成路径，则同步计算一次
+	if (NavPathPoints.Num() == 0)
+	{
+		FNavLocation ProjectedNav;
+		FVector DestLocation = InTargetLocation;
+		if (NavSys->ProjectPointToNavigation(InTargetLocation, ProjectedNav, SearchExtent))
 		{
-			// ProjectedLocation.Location 就是投影到可行走区域后的坐标，Z 值将是地面或 NavMesh 的真实高度
-			InTargetLocation = ProjectedLocation.Location;
+			DestLocation = ProjectedNav.Location;
 		}
+		// 计算路径
+		FPathFindingQuery Query;
+		UNavigationPath* Path = NavSys->FindPathToLocationSynchronously(GetWorld(), GetActorLocation(), DestLocation,
+		                                                                this);
+		if (!Path || Path->PathPoints.Num() <= 1)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] Failed to build path or already at goal"));
+			return true;
+		}
+		NavPathPoints = Path->PathPoints;
+		CurrentNavPointIndex = 1; // 跳过起点
 
-		EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
-			InTargetLocation, 5.0f, true, true, true, false, nullptr, true);
-
-		/*
-		    if (DoOnce())
-		    {
-		        // 根据请求结果处理逻辑
-		        if (RequestResult == EPathFollowingRequestResult::RequestSuccessful)
-		        {
-		            UE_LOG(LogTemp, Log, TEXT("MoveToLocation called successfully with TargetLocation: %s"), *InTargetLocation.ToString());
-		        }
-		        else if (RequestResult == EPathFollowingRequestResult::Failed)
-		        {
-		            UE_LOG(LogTemp, Warning, TEXT("MoveToLocation failed for TargetLocation: %s"), *InTargetLocation.ToString());
-		        }
-		        else if (RequestResult == EPathFollowingRequestResult::AlreadyAtGoal)
-		        {
-		            UE_LOG(LogTemp, Log, TEXT("Already at TargetLocation: %s"), *InTargetLocation.ToString());
-		        }
-		    }
-		*/
+		for (int32 i = 0; i < NavPathPoints.Num(); ++i)
+		{
+			// 绘制路径点球体
+			DrawDebugSphere(
+				GetWorld(),
+				NavPathPoints[i],
+				20.f, // 半径
+				12, // 分段数
+				FColor::Green,
+				false, // 不持续
+				5.f // 显示时长
+			);
+			// 绘制点与点之间的连线
+			if (i > 0)
+			{
+				DrawDebugLine(
+					GetWorld(),
+					NavPathPoints[i - 1],
+					NavPathPoints[i],
+					FColor::Green,
+					false, // 不持续
+					5.f, // 显示时长
+					0,
+					2.f // 线宽
+				);
+			}
+		}
 	}
-	else
+
+	// 当前目标点
+	FVector TargetPoint = NavPathPoints[CurrentNavPointIndex];
+	float Dist2D = FVector::Dist2D(GetActorLocation(), TargetPoint);
+	UE_LOG(LogTemp, Verbose, TEXT("[MoveToLocation] NextPt=%s, Dist2D=%.1f"), *TargetPoint.ToString(), Dist2D);
+
+	// 到达当前路径点后推进到下一个
+	if (Dist2D <= AcceptanceRadius)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AIController is not assigned!"));
+		CurrentNavPointIndex++;
+		if (CurrentNavPointIndex >= NavPathPoints.Num())
+		{
+			// 全部点到齐，停止移动
+			NavPathPoints.Empty();
+			CurrentNavPointIndex = 0;
+			UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Arrived at final destination"));
+			return true;
+		}
 	}
 
-	FVector AjustedActorLocation = GetActorLocation();
-	AjustedActorLocation.Z -= 85.f - 1.548;
+	// 通过添加输入来移动：朝向下一个路径点
+	FVector Dir = (TargetPoint - GetActorLocation()).GetSafeNormal2D();
+	AddMovementInput(Dir, 1.0f, true);
 
-	return FVector::Dist(AjustedActorLocation, InTargetLocation) < 60.0f;
+	return false; // 仍在移动
 }
+
+//void AOrionChara::MoveToLocationStop()
+//{
+//	AOrionAIController* OrionAC = Cast<AOrionAIController>(GetController());
+//	if (OrionAC)
+//	{
+//		OrionAC->StopMovement();
+//	}
+//	else
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("MoveToLocationStop: OrionAC is nullptr or not of type AOrionAIController."));
+//	}
+//}
 
 void AOrionChara::MoveToLocationStop()
 {
-	AOrionAIController* OrionAC = Cast<AOrionAIController>(GetController());
-	if (OrionAC)
+	if (AIController)
 	{
-		OrionAC->StopMovement();
+		AIController->StopMovement();
 	}
-	else
+	bHasMoveDestination = false;
+	NavPathPoints.Empty();
+	CurrentNavPointIndex = 0;
+}
+
+void AOrionChara::ReRouteMoveToLocation()
+{
+	if (!bHasMoveDestination || !AIController)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveToLocationStop: OrionAC is nullptr or not of type AOrionAIController."));
+		return;
 	}
+
+	// 1) 清空旧导航点
+	NavPathPoints.Empty();
+	CurrentNavPointIndex = 0;
+
+	// 2) 立刻向 AIController 发一个新的 MoveToLocation 请求
+	constexpr float AcceptanceRadius = 50.f;
+	const FVector SearchExtent(500.f, 500.f, 500.f);
+
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+	if (!NavSys)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[RefreshMoveToLocation] No NavSys"));
+		return;
+	}
+
+	// 投影到 NavMesh
+	FNavLocation ProjectedNav;
+	FVector Dest = LastMoveDestination;
+	if (NavSys->ProjectPointToNavigation(LastMoveDestination, ProjectedNav, SearchExtent))
+	{
+		Dest = ProjectedNav.Location;
+	}
+
+	// 发起寻路
+	AIController->MoveToLocation(
+		Dest,
+		AcceptanceRadius,
+		/*StopOnOverlap=*/ true,
+		/*UsePathfinding=*/ true,
+		/*ProjectDestinationToNavigation=*/ false,
+		/*bCanStrafe=*/ true,
+		/*FilterClass=*/ nullptr,
+		/*bAllowPartialPath=*/ true
+	);
+
+	UE_LOG(LogTemp, Log, TEXT("[RefreshMoveToLocation] Re-routed to %s"), *Dest.ToString());
 }
 
 bool AOrionChara::CollectBullets(float DeltaTime)
@@ -445,33 +754,7 @@ bool AOrionChara::CollectBullets(float DeltaTime)
 	// 1) Initialization: pick nearest production actor that has bullets
 	if (!bIsCollectingBullets)
 	{
-		AOrionActorProduction* Best = nullptr;
-		float BestDistSq = TNumericLimits<float>::Max();
-
-		for (TActorIterator<AOrionActorProduction> It(GetWorld()); It; ++It)
-		{
-			AOrionActorProduction* Prod = *It;
-			if (!IsValid(Prod))
-			{
-				continue;
-			}
-
-			if (auto* ProdInv = Prod->InventoryComp)
-			{
-				int32 Available = ProdInv->GetItemQuantity(BulletItemId);
-				if (Available <= 0)
-				{
-					continue;
-				}
-
-				float d2 = FVector::DistSquared(Prod->GetActorLocation(), GetActorLocation());
-				if (d2 < BestDistSq)
-				{
-					BestDistSq = d2;
-					Best = Prod;
-				}
-			}
-		}
+		AOrionActor* Best = FindClosetAvailableCargoContainer(3);
 
 		if (!Best)
 		{
@@ -508,6 +791,8 @@ bool AOrionChara::CollectBullets(float DeltaTime)
 
 	if (bAtSource)
 	{
+		MoveToLocationStop();
+
 		// if montage not yet playing, start it
 		if (!bBulletPickupAnimPlaying && BulletPickupMontage)
 		{
@@ -538,7 +823,7 @@ bool AOrionChara::CollectBullets(float DeltaTime)
 	}
 
 	// 5) Not at source yet → move toward it
-	TradeMoveToLocation(BulletSource->GetActorLocation(), 50.f);
+	MoveToLocation(BulletSource->GetActorLocation());
 	return false;
 }
 
@@ -595,6 +880,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime, AOrionActorProduction*
 		}
 
 		UE_LOG(LogTemp, Warning, TEXT("[IP] 111"));
+
 		return true;
 	}
 
@@ -782,134 +1068,136 @@ bool AOrionChara::InteractWithProduction(float DeltaTime, AOrionActorProduction*
 
 void AOrionChara::InteractWithProductionStop()
 {
-	if (CurrentInteractProduction.IsValid())
+	// 如果已经进入“正式交互”阶段，需要减少生产点的工人数
+	if (IsInteractWithActor)
 	{
-		UE_LOG(LogTemp, Log,
-		       TEXT("InteractWithProduction: stopped interacting with %s"),
-		       *CurrentInteractProduction->GetName());
-		CurrentInteractProduction->CurrWorkers--;
+		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithProductionStop: bIsInteractProd = true"));
+		InteractWithActorStop();
 	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithProductionStop: bIsInteractProd = false"));
+		MoveToLocationStop();
+	}
+
+	// 停止“正式交互”状态
+	IsInteractWithActor = false;
+
+
+	// 重置“准备交互”标记
 	bPreparingInteractProd = false;
-	CurrentInteractProduction = nullptr;
-	// TODO: 清除手上工具、播放收工动画…
+
+	// 清空当前生产目标
+	//CurrentInteractProduction = nullptr;
 }
 
 bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 {
-	// UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: InTarget is being interacted."));
-
+	// 1) 无效目标立即终止
 	if (!IsValid(InTarget))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: InTarget is not valid."));
-
 		if (IsInteractWithActor)
 		{
 			InteractWithActorStop();
 		}
-
 		IsInteractWithActor = false;
 		return true;
 	}
 
+	// 2) 不可交互立即终止
 	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: InTarget is not Interactable."));
-
 		if (IsInteractWithActor)
 		{
 			InteractWithActorStop();
 		}
-
 		IsInteractWithActor = false;
 		return true;
 	}
 
-	USphereComponent* CollisionSphere = InTarget->FindComponentByClass<USphereComponent>();
+	// 3) 只查一次 SphereComponent
+	USphereComponent* CollisionSphere = InTarget->CollisionSphere;
+	const bool bOverlapping = CollisionSphere && CollisionSphere->IsOverlappingActor(this);
 
-	if (CollisionSphere && CollisionSphere->IsOverlappingActor(this))
+	if (bOverlapping)
 	{
-		// Determine the type of interaction
+		MoveToLocationStop();
 
-		FString TargetInteractType = InTarget->GetInteractType();
-		if (TargetInteractType == "Mining")
+		// 4) 缓存一次字符串引用，避免拷贝
+		const FString& TargetType = InTarget->GetInteractType();
+
+		// 5) 根据类型设置交互类别
+		if (TargetType == TEXT("Mining"))
 		{
-			InteractType = EInteractType::Mining;
+			InteractType = EInteractCategory::Mining;
+		}
+		else if (TargetType == TEXT("CraftingBullets"))
+		{
+			InteractType = EInteractCategory::CraftingBullets;
 		}
 		else
 		{
-			InteractType = EInteractType::Unavailable;
+			// 不支持的类型
+			InteractType = EInteractCategory::Unavailable;
 			UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: Unavailable interact type."));
 
 			if (IsInteractWithActor)
 			{
 				InteractWithActorStop();
 			}
-
 			IsInteractWithActor = false;
 			return true;
 		}
 
+		// 6) 第一次到达，触发开始交互
 		if (!IsInteractWithActor)
 		{
-			SpawnAxeOnChara();
+			if (InteractType == EInteractCategory::Mining)
+			{
+				SpawnAxeOnChara();
+			}
+			else // CraftingBullets
+			{
+				SpawnHammerOnChara();
+			}
+
 			IsInteractWithActor = true;
+
+			MoveToLocationStop();
+
+			bIsMovingToInteraction = false;
 			CurrentInteractActor = InTarget;
 			InTarget->CurrWorkers += 1;
-			//InTarget->ArrInteractingCharas.Add(this);
 		}
 
+		// 7) 停止移动并面向目标
 		if (AIController)
 		{
 			AIController->StopMovement();
 		}
-
 		FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
 			GetActorLocation(),
 			InTarget->GetActorLocation()
 		);
-
-		LookAtRot.Pitch = 0.0f;
-		LookAtRot.Roll = 0.0f;
-
+		LookAtRot.Pitch = 0;
+		LookAtRot.Roll = 0;
 		SetActorRotation(LookAtRot);
 
 		return false;
 	}
 
-	if (AIController)
-	{
-		if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
-		{
-			FNavLocation ProjectedLocation;
+	// —— 此处进入「移动到目标」分支 ——
 
-			FVector SearchExtent(500.0f, 500.0f, 500.0f);
+	bIsMovingToInteraction = true;
+	MoveToLocation(InTarget->GetActorLocation());
 
-			if (NavSys->ProjectPointToNavigation(
-				InTarget->GetActorLocation(),
-				ProjectedLocation,
-				SearchExtent
-			))
-			{
-				EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
-					ProjectedLocation.Location,
-					20.0f,
-					true,
-					true,
-					true,
-					false,
-					nullptr,
-					true
-				);
-			}
-		}
-	}
-
+	// 8) 如果我们正处于「已经开始交互」状态，但又脱离了范围，取消之前的交互
 	if (IsInteractWithActor)
 	{
 		InteractWithActorStop();
 	}
-
 	IsInteractWithActor = false;
+
 	return false;
 }
 
@@ -920,76 +1208,23 @@ void AOrionChara::InteractWithActorStop()
 		return;
 	}
 
-	RemoveAxeOnChara();
+	if (InteractType == EInteractCategory::Mining)
+	{
+		RemoveAxeOnChara();
+	}
+	else if (InteractType == EInteractCategory::CraftingBullets)
+	{
+		RemoveHammerOnChara();
+	}
+
+	bIsMovingToInteraction = false;
+
 	IsInteractWithActor = false;
 	DoOnceInteractWithActor = false;
 	CurrentInteractActor->CurrWorkers -= 1;
 	//CurrentInteractActor->ArrInteractingCharas.Remove(this);
 	CurrentInteractActor = nullptr;
-	InteractType = EInteractType::Unavailable;
-}
-
-bool AOrionChara::TradeMoveToLocation(const FVector& Dest, float AcceptanceRadius)
-{
-	if (!AIController)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] No AIController"));
-		return true; // 没控制器就当到位了
-	}
-
-	auto* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-	if (!Nav)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] No NavigationSystem"));
-		return true;
-	}
-
-	// 1) Project to NavMesh
-	FNavLocation Projected;
-	// 尝试一个较大的搜索范围
-	FVector SearchExtent(500.f, 500.f, 500.f);
-
-	if (Nav->ProjectPointToNavigation(Dest, Projected, SearchExtent))
-	{
-		//UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] Projected to NavMesh at %s"),
-		//*Projected.Location.ToString());
-
-		// 发起寻路
-		AIController->MoveToLocation(
-			Projected.Location,
-			AcceptanceRadius,
-			/*StopOnOverlap=*/ true,
-			/*UsePathfinding=*/ true,
-			/*ProjectDestinationToNavigation=*/ false,
-			/*bCanStrafe=*/ true,
-			/*FilterClass=*/ nullptr,
-			/*bAllowPartialPath=*/ true
-		);
-
-		return false; // 正在移动
-	}
-
-	//UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] ProjectPointToNavigation failed at %s"),
-	//       *Destination.ToString());
-
-	// 2) 退而求其次：只看水平距离
-	float Dist2D = FVector::Dist2D(GetActorLocation(), Dest);
-	if (Dist2D <= AcceptanceRadius)
-	{
-		//UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] Already within radius (%.1f <= %.1f)"),
-		//       Dist2D, AcceptanceRadius);
-
-		return true; // 已经到位
-	}
-	// 3) 尝试直接移动到原始点
-	//UE_LOG(LogTemp, Warning, TEXT("[TradeMoveToLocation] Attempting raw MoveToLocation to %s"),
-	//       *Destination.ToString());
-	AIController->MoveToLocation(
-		Dest,
-		AcceptanceRadius,
-		true, true, false, true, nullptr, true
-	);
-	return false;
+	InteractType = EInteractCategory::Unavailable;
 }
 
 bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
@@ -1015,17 +1250,17 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 
 		for (int32 i = 0; i < Nodes.Num(); ++i)
 		{
-			AActor* Src = Nodes[i];
-			AActor* Dst = Nodes[(i + 1) % Nodes.Num()];
-			for (auto& C : TradeRoute[Src])
+			AActor* Source = Nodes[i];
+			AActor* Destination = Nodes[(i + 1) % Nodes.Num()];
+			for (auto& CargoMap : TradeRoute[Source])
 			{
-				FTradeSeg Seg;
-				Seg.Source = Src;
-				Seg.Destination = Dst;
-				Seg.ItemId = C.Key;
-				Seg.Quantity = C.Value;
-				Seg.Moved = 0;
-				TradeSegments.Add(Seg);
+				FTradeSeg TradeSegment;
+				TradeSegment.Source = Source;
+				TradeSegment.Destination = Destination;
+				TradeSegment.ItemId = CargoMap.Key;
+				TradeSegment.Quantity = CargoMap.Value;
+				TradeSegment.Moved = 0;
+				TradeSegments.Add(TradeSegment);
 			}
 		}
 	}
@@ -1052,13 +1287,15 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 
 	bool bAtNode = Sphere && Sphere->IsOverlappingActor(this);
 
-	UE_LOG(LogTemp, Log, TEXT("Current TradeStep: %s"), *UEnum::GetValueAsString(TradeStep));
+	// UE_LOG(LogTemp, Log, TEXT("Current TradeStep: %s"), *UEnum::GetValueAsString(TradeStep));
 
 	switch (TradeStep)
 	{
 	case ETradeStep::ToSource:
 		if (bAtNode)
 		{
+			MoveToLocationStop();
+
 			TradeStep = ETradeStep::Pickup;
 			if (AIController)
 			{
@@ -1067,7 +1304,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		}
 		else
 		{
-			TradeMoveToLocation(TradeSegment.Source->GetActorLocation());
+			MoveToLocation(TradeSegment.Source->GetActorLocation());
 		}
 		return false;
 
@@ -1115,6 +1352,8 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	case ETradeStep::ToDest:
 		if (bAtNode)
 		{
+			MoveToLocationStop();
+
 			TradeStep = ETradeStep::Dropoff;
 			if (AIController)
 			{
@@ -1124,7 +1363,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		else
 		{
 			UE_LOG(LogTemp, Log, TEXT("TradeSegment Destination: %s"), *TradeSegment.Destination->GetName());
-			TradeMoveToLocation(TradeSegment.Destination->GetActorLocation());
+			MoveToLocation(TradeSegment.Destination->GetActorLocation());
 		}
 		return false;
 
@@ -1167,13 +1406,12 @@ void AOrionChara::OnPickupAnimFinished()
 
 void AOrionChara::OnDropoffAnimFinished()
 {
-	// 从自己身上扣除已搬运的物量
-	FTradeSeg& Seg = TradeSegments[CurrentSegIndex];
+	FTradeSeg& TradeSegment = TradeSegments[CurrentSegIndex];
 	if (InventoryComp)
 	{
-		InventoryComp->ModifyItemQuantity(Seg.ItemId, -Seg.Moved);
+		InventoryComp->ModifyItemQuantity(TradeSegment.ItemId, -TradeSegment.Moved);
 	}
-	// 进入下一段
+
 	CurrentSegIndex++;
 	TradeStep = ETradeStep::ToSource;
 	bDropoffAnimPlaying = false;
@@ -1187,8 +1425,14 @@ void AOrionChara::RemoveAllActions(const FString& Except)
 
 		if (OngoingActionName.Contains("ForceMoveToLocation") || OngoingActionName.Contains("MoveToLocation"))
 		{
-			if (!Except.Contains("TempDoNotStopMovement"))
+			if (!Except.Contains(TEXT("TempDoNotStopMovement")))
 			{
+				MoveToLocationStop();
+			}
+			else
+			{
+				// 不停止，而是重新规划当前移动目标
+				//ReRouteMoveToLocation();
 				MoveToLocationStop();
 			}
 		}

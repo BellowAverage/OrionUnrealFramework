@@ -27,10 +27,11 @@ enum class ECharaState : uint8
 };
 
 UENUM(BlueprintType)
-enum class EInteractType : uint8
+enum class EInteractCategory : uint8
 {
 	Unavailable UMETA(DisplayName = "Unavailable"),
 	Mining UMETA(DisplayName = "Mining"),
+	CraftingBullets UMETA(DisplayName = "Crafting Bullets"),
 };
 
 UENUM(BlueprintType)
@@ -115,6 +116,21 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	AAIController* AIController;
 
+	/* Call Back Handle */
+
+
+	/* Armed */
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	bool bIsCharaArmed = false;
+
+	/** BlendSpace 用的移动输入量 */
+	UPROPERTY(BlueprintReadOnly, Category = "CombatMove")
+	float MoveForwardScale;
+
+	UPROPERTY(BlueprintReadOnly, Category = "CombatMove")
+	float MoveRightScale;
+
 	/** True while we’re in the process of fetching bullets */
 	bool bIsCollectingBullets = false;
 
@@ -136,7 +152,7 @@ public:
 	void OnBulletPickupFinished();
 
 	/** The production building we’re currently drawing bullets from */
-	AOrionActorProduction* BulletSource = nullptr;
+	AOrionActor* BulletSource = nullptr;
 
 	/* Character Movement */
 	void InitOrionCharaMovement();
@@ -184,7 +200,10 @@ public:
 	void RemoveAllActions(const FString& Except = FString());
 	FString GetUnifiedActionName() const;
 	/** last non-empty action name, persists across frames when current action is interrupted */
-	FString LastNonEmptyActionName;
+	FString LastActionName;
+
+	bool bCachedEmptyAction = false;
+
 
 	/* AI: Character Procedural Action Distributor */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
@@ -192,9 +211,11 @@ public:
 
 	/* Trading Cargo */
 	bool TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute);
-	bool TradeMoveToLocation(const FVector& Dest, float AcceptanceRadius = 20.f);
 
 	//enum class ETradeStep : uint8 { ToSource, Pickup, ToDest, Dropoff };
+
+	AOrionActor* FindClosetAvailableCargoContainer(int32 ItemId) const;
+	TArray<AOrionActor*> FindAvailableCargoContainersByDistance(int32 ItemId) const;
 
 	bool bIsTrading = false;
 	ETradeStep TradeStep = ETradeStep::ToSource;
@@ -245,13 +266,17 @@ public:
 
 	/* Collecting Cargo */
 
+	bool bSelfDeliveryDone = false;
+
 	UFUNCTION(BlueprintCallable, Category = "Basics")
 	bool CollectingCargo(AOrionActorStorage* OrionStorageActor);
+
+	void CollectingCargoStop();
+
 	bool bIsCollectingCargo = false;
-	void ResetCollectingState();
-	TWeakObjectPtr<AOrionActorStorage> CollectStorageTarget;
-	int32 CollectItemId;
-	int32 CollectRemaining;
+
+	TArray<AOrionActor*> AvailableCargoSources;
+	int32 CurrentCargoIndex = 0;
 
 	enum class ECollectStep : uint8 { ToSource, Pickup, ToStorage, Dropoff };
 
@@ -259,8 +284,22 @@ public:
 	TWeakObjectPtr<AOrionActorOre> CollectSource;
 
 	/* MoveToLocation */
-	bool MoveToLocation(FVector InTargetLocation);
+	bool MoveToLocation(const FVector& InTargetLocation);
 	void MoveToLocationStop();
+
+	/** 当前寻路路径点列表 */
+	TArray<FVector> NavPathPoints;
+	/** 当前目标路径点索引 */
+	int32 CurrentNavPointIndex = 0;
+
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	void ReRouteMoveToLocation();
+
+	FVector LastMoveDestination;
+
+	/** 标记是否已有有效的 MoveToLocation 目标 */
+	bool bHasMoveDestination = false;
+
 
 	/* InteractWithActor */
 	bool InteractWithActor(float DeltaTime, AOrionActor* InTarget);
@@ -268,8 +307,13 @@ public:
 	bool IsInteractWithActor = false;
 	void InteractWithActorStop();
 
+	bool bIsMovingToInteraction = false;
+
+	TWeakObjectPtr<AOrionActor> MoveTargetActor;
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | InteractWithActor")
-	EInteractType InteractType = EInteractType::Unavailable;
+	EInteractCategory InteractType = EInteractCategory::Unavailable;
 
 	UPROPERTY()
 	AOrionActor* CurrentInteractActor = nullptr;
@@ -281,6 +325,12 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
 	void RemoveAxeOnChara();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
+	void SpawnHammerOnChara();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
+	void RemoveHammerOnChara();
 
 	/* Inventory */
 	std::unordered_map<int, int> CharaInventoryMap;

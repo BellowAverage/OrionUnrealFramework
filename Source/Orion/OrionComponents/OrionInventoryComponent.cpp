@@ -16,7 +16,7 @@ void UOrionInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (GetOwner() && GetOwner()->GetName().Contains("OrionChara"))
+	if (GetOwner() && (GetOwner()->GetName().Contains("OrionChara") || GetOwner()->GetName().Contains("OrionCChara")))
 	{
 		AvailableInventoryMap = {
 			{1, 10}, // Log

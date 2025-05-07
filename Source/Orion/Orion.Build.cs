@@ -7,8 +7,10 @@ public class Orion : ModuleRules
 	public Orion(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "Niagara", "UMG", "Slate", "SlateCore", "ChaosVehicles" });
+
+        //AddEngineThirdPartyPrivateStaticDependencies(Target, "Eigen");
+
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "Niagara", "UMG", "Slate", "SlateCore", "ChaosVehicles" });
 
         PrivateDependencyModuleNames.AddRange(new string[] { "NavigationSystem" });
 
@@ -20,4 +22,5 @@ public class Orion : ModuleRules
 
         // To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
     }
+
 }
