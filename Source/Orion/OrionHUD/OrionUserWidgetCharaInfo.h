@@ -5,9 +5,11 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "../OrionChara.h"
+#include "Orion/OrionComponents/OrionInventoryComponent.h"
 #include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
 //#include "Components/ProgressBar.h"
+#include "OrionUserWidgetCharaDetails.h"
 #include "OrionUserWidgetProceduralAction.h"
 #include "Components/Border.h"
 #include "Components/Slider.h"
@@ -24,6 +26,19 @@ class ORION_API UOrionUserWidgetCharaInfo : public UUserWidget
 
 public:
 	virtual void NativeConstruct() override;
+
+	void BindInventoryEvents(AOrionChara* NewChara);
+
+	virtual void NativeDestruct() override;
+
+	UFUNCTION()
+	void BroadcastCharaActionChange(FString PrevActionName, FString CurrActionName);
+
+	UFUNCTION()
+	void BroadcastInventoryChanged();
+
+	UFUNCTION()
+	void BroadcastOnInteractWithInventory(AOrionActor* OrionActor);
 
 	UPROPERTY()
 	AOrionChara* CharaRef = nullptr;
@@ -69,7 +84,6 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UBorder* ProceduralActionBorder = nullptr;
 
-	// 上/下/删 三个按钮
 	UPROPERTY(meta = (BindWidget))
 	UButton* ButtonMoveUp = nullptr;
 	UPROPERTY(meta = (BindWidget))
@@ -77,7 +91,29 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UButton* ButtonDelete = nullptr;
 
+	UPROPERTY(meta = (BindWidget))
+	UButton* ButtonBag = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UBorder* BorderCharaDetails = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UBorder* BorderActorDetails = nullptr;
+
+
+	UPROPERTY(meta = (BindWidget))
+	UImage* ImageTradeIcon = nullptr;
+
+	bool bActorDetailShow = false;
+
+	bool bCharaDetailShow = false;
+
+	AOrionActor* InventoryInteractActorRef = nullptr;
+
 	/* Call Back */
+
+	UFUNCTION()
+	void OnBagClicked();
 
 	UFUNCTION()
 	void OnSliderChange(float InValue);
@@ -99,12 +135,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Procedural")
 	TSubclassOf<UOrionUserWidgetProceduralAction> ProceduralActionItemClass;
 
+	UPROPERTY(EditDefaultsOnly, Category = "CharaDetails")
+	TSubclassOf<UOrionUserWidgetCharaDetails> CharaDetailsClass;
+
 	int32 SelectedIndex = INDEX_NONE;
 
 	UFUNCTION()
 	void OnProcSelected(int32 ItemIndex);
 
-	// 回调：上移/下移/删除 按钮
 	UFUNCTION()
 	void OnMoveUpClicked();
 	UFUNCTION()

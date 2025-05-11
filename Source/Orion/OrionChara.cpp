@@ -142,8 +142,8 @@ void AOrionChara::Tick(float DeltaTime)
 
 	const FString CurrName = GetUnifiedActionName();
 
-	if (this->GetName().Contains("1")) UE_LOG(LogTemp, Log, TEXT("Previous: %s, Current: %s, bIsCached: %s"), *PrevName,
-	                                          *CurrName, bCachedEmptyAction ? TEXT("True") : TEXT("False"));
+	//if (this->GetName().Contains("1")) UE_LOG(LogTemp, Log, TEXT("Previous: %s, Current: %s, bIsCached: %s"), *PrevName,
+	//                                          *CurrName, bCachedEmptyAction ? TEXT("True") : TEXT("False"));
 
 	if (!bCachedEmptyAction && CurrName.IsEmpty())
 	{
@@ -244,6 +244,10 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 	       *Prev, *Curr
 	);
 
+	OnCharaActionChange.Broadcast(Prev, Curr);
+
+	UE_LOG(LogTemp, Log, TEXT("000000000"));
+
 	if (Prev.Contains(TEXT("InteractWithActor")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
 		if (IsInteractWithActor)
@@ -266,13 +270,31 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 			MoveToLocationStop();
 		}
 	}
+	else if (Prev.Contains(TEXT("InteractWithActor")))
+	{
+		if (IsInteractWithActor)
+		{
+			InteractWithActorStop();
+		}
+		else if (bIsMovingToInteraction)
+		{
+			MoveToLocationStop();
+		}
+	}
 
 	else if (Prev.Contains(TEXT("InteractWithProduction")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
+		UE_LOG(LogTemp, Log, TEXT("111111"));
 		InteractWithProductionStop();
 	}
 	else if (Prev.Contains(TEXT("InteractWithProduction")) && Curr.IsEmpty())
 	{
+		UE_LOG(LogTemp, Log, TEXT("222222"));
+		InteractWithProductionStop();
+	}
+	else if (Prev.Contains(TEXT("InteractWithProduction")))
+	{
+		UE_LOG(LogTemp, Log, TEXT("33333"));
 		InteractWithProductionStop();
 	}
 
@@ -281,6 +303,10 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 		MoveToLocationStop();
 	}
 	else if (Prev.Contains(TEXT("CollectingCargo")) && Curr.IsEmpty())
+	{
+		MoveToLocationStop();
+	}
+	else if (Prev.Contains(TEXT("CollectingCargo")))
 	{
 		MoveToLocationStop();
 	}
@@ -857,218 +883,445 @@ void AOrionChara::OnBulletPickupFinished()
 	bIsCollectingBullets = false;
 }
 
-bool AOrionChara::InteractWithProduction(float DeltaTime, AOrionActorProduction* InTarget)
+//bool AOrionChara::InteractWithProduction(float DeltaTime, AOrionActorProduction* InTarget)
+//{
+//	UE_LOG(LogTemp, Warning, TEXT("[IP] Tick -- InTarget=%p"), InTarget);
+//
+//	bPreparingInteractProd = true;
+//
+//	// ① 有效性检查
+//	if (!IsValid(InTarget))
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("[IP] target invalid"));
+//		if (bPreparingInteractProd)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] stopping because invalid"));
+//			InteractWithProductionStop();
+//		}
+//
+//		if (bIsInteractProd)
+//		{
+//			InteractWithActorStop();
+//			bIsInteractProd = false;
+//		}
+//
+//		UE_LOG(LogTemp, Warning, TEXT("[IP] 111"));
+//
+//		return true;
+//	}
+//
+//	// ② 检查生产点可交互状态
+//	UE_LOG(LogTemp, Warning, TEXT("[IP] target ActorStatus=%d"), int32(InTarget->ActorStatus));
+//	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("[IP] target not interactable"));
+//		if (bPreparingInteractProd)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] stopping because not interactable"));
+//			InteractWithProductionStop();
+//		}
+//
+//		if (bIsInteractProd)
+//		{
+//			InteractWithActorStop();
+//			bIsInteractProd = false;
+//		}
+//
+//		UE_LOG(LogTemp, Warning, TEXT("[IP] 222"));
+//		return true;
+//	}
+//
+//	constexpr int32 NeedPerCycle = 2;
+//
+//	// ③ 如果生产点库存中 2 号物品不够，就先触发搬运
+//	UOrionInventoryComponent* ProdInv = InTarget->InventoryComp;
+//	int32 HaveProd = ProdInv ? ProdInv->GetItemQuantity(2) : 0;
+//	if (HaveProd < NeedPerCycle)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("[IP] need to trade in raw materials first"));
+//
+//		// ----------------- 新增：优先用自己身上的原料 -----------------
+//		if (InventoryComp && InventoryComp->GetItemQuantity(2) >= NeedPerCycle)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] supplying from self-inventory"));
+//			if (bIsInteractProd)
+//			{
+//				InteractWithActorStop();
+//			}
+//
+//			TMap<AActor*, TMap<int32, int32>> Route;
+//			Route.Add(this, {{2, NeedPerCycle}});
+//			Route.Add(InTarget, {{}});
+//			bool bDone = TradingCargo(Route);
+//			UE_LOG(LogTemp, Warning,
+//			       TEXT("[IP] TradingCargo(self->prod) returned %s"),
+//			       bDone ? TEXT("true") : TEXT("false"));
+//
+//			// 如果搬运还没完成，就返回 false 继续本 Action
+//			if (!bDone)
+//			{
+//				UE_LOG(LogTemp, Warning, TEXT("[IP] self->prod transport ongoing -> return false"));
+//				return false;
+//			}
+//			// 搬运完成，继续下面的生产逻辑
+//		}
+//		// --------------------------------------------------------------
+//
+//
+//		// 1) 找到最近的 Ore 源
+//		AOrionActorOre* BestSourceOfRawMaterial = nullptr;
+//		float BestDist2 = TNumericLimits<float>::Max();
+//
+//		for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
+//		{
+//			AOrionActorOre* Ore = *It;
+//			if (!IsValid(Ore))
+//			{
+//				continue;
+//			}
+//			if (UOrionInventoryComponent* SourceInventory = Ore->InventoryComp)
+//			{
+//				int32 AvailableRawMaterialNumber = SourceInventory->GetItemQuantity(2);
+//				if (AvailableRawMaterialNumber < 2)
+//				{
+//					continue;
+//				}
+//				float d2 = FVector::DistSquared(
+//					Ore->GetActorLocation(),
+//					InTarget->GetActorLocation()
+//				);
+//				if (d2 < BestDist2)
+//				{
+//					BestDist2 = d2;
+//					BestSourceOfRawMaterial = Ore;
+//				}
+//			}
+//		}
+//
+//		AOrionActorStorage* BestSourceOfRawMaterialFromStorage = nullptr;
+//		float BestDist2FromStorage = TNumericLimits<float>::Max();
+//
+//		if (!BestSourceOfRawMaterial)
+//		{
+//			for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
+//			{
+//				AOrionActorStorage* Storage = *It;
+//				if (!IsValid(Storage))
+//				{
+//					continue;
+//				}
+//				if (UOrionInventoryComponent* SourceInventory = Storage->InventoryComp)
+//				{
+//					int32 AvailableRawMaterialNumber = SourceInventory->GetItemQuantity(2);
+//					if (AvailableRawMaterialNumber < 2)
+//					{
+//						continue;
+//					}
+//					float d2 = FVector::DistSquared(
+//						Storage->GetActorLocation(),
+//						InTarget->GetActorLocation()
+//					);
+//					if (d2 < BestDist2FromStorage)
+//					{
+//						BestDist2FromStorage = d2;
+//						BestSourceOfRawMaterialFromStorage = Storage;
+//					}
+//				}
+//			}
+//		}
+//
+//
+//		if (!BestSourceOfRawMaterial && !BestSourceOfRawMaterialFromStorage)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] no source ore found, abort entire action"));
+//
+//			if (bIsInteractProd)
+//			{
+//				InteractWithActorStop();
+//				bIsInteractProd = false;
+//			}
+//
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] 444"));
+//			return true;
+//		}
+//
+//		// 2) 计算最大可放量
+//		int32 MaxCanTake = TNumericLimits<int32>::Max();
+//		if (ProdInv)
+//		{
+//			if (ProdInv->AvailableInventoryMap.Contains(2))
+//			{
+//				MaxCanTake = ProdInv->AvailableInventoryMap[2];
+//			}
+//			else
+//			{
+//				UE_LOG(LogTemp, Warning,
+//				       TEXT("[IP] ProdInv.AvailableInventoryMap has no entry for Item2, default MaxCanTake=%d"),
+//				       MaxCanTake);
+//			}
+//		}
+//		else
+//		{
+//			UE_LOG(LogTemp, Error, TEXT("[IP] ProdInv is null!"));
+//		}
+//
+//		// 3) 计算实际搬运量
+//		UOrionInventoryComponent* SrcInv = nullptr;
+//		if (BestSourceOfRawMaterial)
+//		{
+//			SrcInv = BestSourceOfRawMaterial->InventoryComp;
+//		}
+//		else if (BestSourceOfRawMaterialFromStorage)
+//		{
+//			SrcInv = BestSourceOfRawMaterialFromStorage->InventoryComp;
+//		}
+//
+//		int32 SrcHave = SrcInv ? SrcInv->GetItemQuantity(2) : 0;
+//		int32 ToTake = FMath::Min(MaxCanTake, SrcHave);
+//
+//		if (ToTake <= 1)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] ToTake<=0, abort entire action"));
+//
+//			if (bIsInteractProd)
+//			{
+//				InteractWithActorStop();
+//				bIsInteractProd = false;
+//			}
+//
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] 555"));
+//			return true;
+//		}
+//
+//		// 4) 构造搬运路线：BestSrc -> InTarget
+//		TMap<AActor*, TMap<int32, int32>> Route;
+//
+//		if (BestSourceOfRawMaterial)
+//		{
+//			Route.Add(BestSourceOfRawMaterial, {{2, ToTake}});
+//		}
+//		else if (BestSourceOfRawMaterialFromStorage)
+//		{
+//			Route.Add(BestSourceOfRawMaterialFromStorage, {{2, ToTake}});
+//		}
+//
+//
+//		Route.Add(InTarget, {});
+//
+//		// 5) 调用 TradingCargo
+//
+//		if (bIsInteractProd)
+//		{
+//			InteractWithActorStop();
+//		}
+//
+//		bool bTradeDone = TradingCargo(Route);
+//		UE_LOG(LogTemp, Warning,
+//		       TEXT("[IP] TradingCargo returned %s"),
+//		       bTradeDone ? TEXT("true") : TEXT("false"));
+//		if (!bTradeDone)
+//		{
+//			UE_LOG(LogTemp, Warning, TEXT("[IP] still trading, wait next tick"));
+//			return false;
+//		}
+//		UE_LOG(LogTemp, Warning, TEXT("[IP] trading complete, resume production interact"));
+//	}
+//
+//	// ④ “采矿式”互动：走到生产点范围内
+//	bIsInteractProd = true;
+//
+//	bool InteractWithActorResult = InteractWithActor(DeltaTime, InTarget);
+//
+//	UE_LOG(LogTemp, Warning, TEXT("[IP] 666"));
+//
+//	return InteractWithActorResult;
+//}
+
+bool AOrionChara::InteractWithProduction(float DeltaTime,
+                                         AOrionActorProduction* InTarget)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[IP] Tick -- InTarget=%p"), InTarget);
+	// === 配置：true = 先查 Storage，再查 Ore；false = 先查 Ore，再查 Storage ===
+	constexpr bool bPreferStorageFirst = true;
 
 	bPreparingInteractProd = true;
 
-	// ① 有效性检查
-	if (!IsValid(InTarget))
+	// ① 无效或不可交互时停止
+	if (!IsValid(InTarget) ||
+		InTarget->ActorStatus == EActorStatus::NotInteractable)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IP] target invalid"));
-		if (bPreparingInteractProd)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[IP] stopping because invalid"));
-			InteractWithProductionStop();
-		}
-
+		if (bPreparingInteractProd) { InteractWithProductionStop(); }
 		if (bIsInteractProd)
 		{
 			InteractWithActorStop();
 			bIsInteractProd = false;
 		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[IP] 111"));
-
 		return true;
 	}
 
-	// ② 检查生产点可交互状态
-	UE_LOG(LogTemp, Warning, TEXT("[IP] target ActorStatus=%d"), int32(InTarget->ActorStatus));
-	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[IP] target not interactable"));
-		if (bPreparingInteractProd)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[IP] stopping because not interactable"));
-			InteractWithProductionStop();
-		}
-
-		if (bIsInteractProd)
-		{
-			InteractWithActorStop();
-			bIsInteractProd = false;
-		}
-
-		UE_LOG(LogTemp, Warning, TEXT("[IP] 222"));
-		return true;
-	}
-
+	// ② 检查生产点原料
+	constexpr int32 RawItemId = 2;
 	constexpr int32 NeedPerCycle = 2;
 
-	// ③ 如果生产点库存中 2 号物品不够，就先触发搬运
 	UOrionInventoryComponent* ProdInv = InTarget->InventoryComp;
-	int32 HaveProd = ProdInv ? ProdInv->GetItemQuantity(2) : 0;
+	int32 HaveProd = ProdInv ? ProdInv->GetItemQuantity(RawItemId) : 0;
+
+	// ③ 原料不足时触发搬运
 	if (HaveProd < NeedPerCycle)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IP] need to trade in raw materials first"));
-
-		// ----------------- 新增：优先用自己身上的原料 -----------------
-		if (InventoryComp && InventoryComp->GetItemQuantity(2) >= NeedPerCycle)
+		// ③.1 优先用角色背包中的
+		if (InventoryComp &&
+			InventoryComp->GetItemQuantity(RawItemId) >= NeedPerCycle)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[IP] supplying from self-inventory"));
-			if (bIsInteractProd)
-			{
-				InteractWithActorStop();
-			}
+			if (bIsInteractProd) { InteractWithActorStop(); }
 
 			TMap<AActor*, TMap<int32, int32>> Route;
-			Route.Add(this, {{2, NeedPerCycle}});
+			Route.Add(this, {{RawItemId, NeedPerCycle}});
 			Route.Add(InTarget, {{}});
-			bool bDone = TradingCargo(Route);
-			UE_LOG(LogTemp, Warning,
-			       TEXT("[IP] TradingCargo(self->prod) returned %s"),
-			       bDone ? TEXT("true") : TEXT("false"));
-
-			// 如果搬运还没完成，就返回 false 继续本 Action
-			if (!bDone)
+			if (!TradingCargo(Route))
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[IP] self->prod transport ongoing -> return false"));
-				return false;
+				return false; // 运输未完成，继续本 Action
 			}
-			// 搬运完成，继续下面的生产逻辑
 		}
-		// --------------------------------------------------------------
 
+		// ③.2 现场容器搬运
+		AOrionActorOre* BestOre = nullptr;
+		float BestOreDist = TNumericLimits<float>::Max();
+		AOrionActorStorage* BestStore = nullptr;
+		float BestStoreDist = TNumericLimits<float>::Max();
 
-		// 1) 找到最近的 Ore 源
-		AOrionActorOre* BestSourceOfRawMaterial = nullptr;
-		float BestDist2 = TNumericLimits<float>::Max();
-
-		for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
+		// 如果优先 Storage
+		if (bPreferStorageFirst)
 		{
-			AOrionActorOre* Ore = *It;
-			if (!IsValid(Ore))
+			// 查 Storage
+			for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
 			{
-				continue;
-			}
-			if (UOrionInventoryComponent* SourceInventory = Ore->InventoryComp)
-			{
-				int32 AvailableRawMaterialNumber = SourceInventory->GetItemQuantity(2);
-				if (AvailableRawMaterialNumber < 2)
+				auto* S = *It;
+				if (!IsValid(S))
 				{
 					continue;
 				}
-				float d2 = FVector::DistSquared(
-					Ore->GetActorLocation(),
-					InTarget->GetActorLocation()
-				);
-				if (d2 < BestDist2)
+				auto* Inv = S->InventoryComp;
+				if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
 				{
-					BestDist2 = d2;
-					BestSourceOfRawMaterial = Ore;
+					continue;
+				}
+				float d2 = FVector::DistSquared(S->GetActorLocation(),
+				                                InTarget->GetActorLocation());
+				if (d2 < BestStoreDist)
+				{
+					BestStoreDist = d2;
+					BestStore = S;
+				}
+			}
+			// 若无 Storage，再查 Ore
+			if (!BestStore)
+			{
+				for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
+				{
+					auto* O = *It;
+					if (!IsValid(O))
+					{
+						continue;
+					}
+					auto* Inv = O->InventoryComp;
+					if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+					{
+						continue;
+					}
+					float d2 = FVector::DistSquared(O->GetActorLocation(),
+					                                InTarget->GetActorLocation());
+					if (d2 < BestOreDist)
+					{
+						BestOreDist = d2;
+						BestOre = O;
+					}
+				}
+			}
+		}
+		else // 优先 Ore
+		{
+			for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
+			{
+				auto* O = *It;
+				if (!IsValid(O))
+				{
+					continue;
+				}
+				auto* Inv = O->InventoryComp;
+				if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+				{
+					continue;
+				}
+				float d2 = FVector::DistSquared(O->GetActorLocation(),
+				                                InTarget->GetActorLocation());
+				if (d2 < BestOreDist)
+				{
+					BestOreDist = d2;
+					BestOre = O;
+				}
+			}
+			if (!BestOre)
+			{
+				for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
+				{
+					auto* S = *It;
+					if (!IsValid(S))
+					{
+						continue;
+					}
+					auto* Inv = S->InventoryComp;
+					if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+					{
+						continue;
+					}
+					float d2 = FVector::DistSquared(S->GetActorLocation(),
+					                                InTarget->GetActorLocation());
+					if (d2 < BestStoreDist)
+					{
+						BestStoreDist = d2;
+						BestStore = S;
+					}
 				}
 			}
 		}
 
-		if (!BestSourceOfRawMaterial)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[IP] no source ore found, abort entire action"));
+		// 都没有来源时退出
+		AActor* ChosenSource =
+			BestStore
+				? static_cast<AActor*>(BestStore)
+				: static_cast<AActor*>(BestOre);
 
-			if (bIsInteractProd)
-			{
-				InteractWithActorStop();
-				bIsInteractProd = false;
-			}
+		if (!ChosenSource) { return true; }
 
-			UE_LOG(LogTemp, Warning, TEXT("[IP] 444"));
-			return true;
-		}
-		UE_LOG(LogTemp, Warning, TEXT("[IP] chosen source ore: %s"), *BestSourceOfRawMaterial->GetName());
+		// 计算搬运量
+		auto* SrcInv = ChosenSource->FindComponentByClass<UOrionInventoryComponent>();
+		int32 SrcHave = SrcInv ? SrcInv->GetItemQuantity(RawItemId) : 0;
+		int32 MaxCanPut = ProdInv && ProdInv->AvailableInventoryMap.Contains(RawItemId)
+			                  ? ProdInv->AvailableInventoryMap[RawItemId]
+			                  : TNumericLimits<int32>::Max();
+		int32 ToMove = FMath::Min(SrcHave, MaxCanPut);
+		if (ToMove < NeedPerCycle) { return true; }
 
-		// 2) 计算最大可放量
-		int32 MaxCanTake = TNumericLimits<int32>::Max();
-		if (ProdInv)
-		{
-			if (ProdInv->AvailableInventoryMap.Contains(2))
-			{
-				MaxCanTake = ProdInv->AvailableInventoryMap[2];
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning,
-				       TEXT("[IP] ProdInv.AvailableInventoryMap has no entry for Item2, default MaxCanTake=%d"),
-				       MaxCanTake);
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("[IP] ProdInv is null!"));
-		}
+		if (bIsInteractProd) { InteractWithActorStop(); }
 
-		// 3) 计算实际搬运量
-		UOrionInventoryComponent* SrcInv = BestSourceOfRawMaterial->InventoryComp;
-		int32 SrcHave = SrcInv ? SrcInv->GetItemQuantity(2) : 0;
-		int32 ToTake = FMath::Min(MaxCanTake, SrcHave);
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[IP] SrcHave=%d, MaxCanTake=%d -> ToTake=%d"),
-		       SrcHave, MaxCanTake, ToTake);
-
-		if (ToTake <= 1)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[IP] ToTake<=0, abort entire action"));
-
-			if (bIsInteractProd)
-			{
-				InteractWithActorStop();
-				bIsInteractProd = false;
-			}
-
-			UE_LOG(LogTemp, Warning, TEXT("[IP] 555"));
-			return true;
-		}
-
-		// 4) 构造搬运路线：BestSrc -> InTarget
 		TMap<AActor*, TMap<int32, int32>> Route;
-		Route.Add(BestSourceOfRawMaterial, {{2, ToTake}});
-		Route.Add(InTarget, {});
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[IP] Route built: from %s take %d of Item2 to %s"),
-		       *BestSourceOfRawMaterial->GetName(), ToTake, *InTarget->GetName());
-
-		// 5) 调用 TradingCargo
-
-		if (bIsInteractProd)
+		Route.Add(ChosenSource, {{RawItemId, ToMove}});
+		Route.Add(InTarget, {{}});
+		if (!TradingCargo(Route))
 		{
-			InteractWithActorStop();
-		}
-
-		bool bTradeDone = TradingCargo(Route);
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[IP] TradingCargo returned %s"),
-		       bTradeDone ? TEXT("true") : TEXT("false"));
-		if (!bTradeDone)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[IP] still trading, wait next tick"));
 			return false;
 		}
-		UE_LOG(LogTemp, Warning, TEXT("[IP] trading complete, resume production interact"));
 	}
 
-	// ④ “采矿式”互动：走到生产点范围内
+	// ④ 原料准备完毕，开始生产交互
 	bIsInteractProd = true;
-
-	bool InteractWithActorResult = InteractWithActor(DeltaTime, InTarget);
-
-	UE_LOG(LogTemp, Warning, TEXT("[IP] 666"));
-
-	return InteractWithActorResult;
+	return InteractWithActor(DeltaTime, InTarget);
 }
 
 void AOrionChara::InteractWithProductionStop()
 {
 	// 如果已经进入“正式交互”阶段，需要减少生产点的工人数
+	UE_LOG(LogTemp, Warning, TEXT("[IP] 231331"));
 	if (IsInteractWithActor)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithProductionStop: bIsInteractProd = true"));
@@ -1690,4 +1943,42 @@ void AOrionChara::RemoveProceduralActionAt(int32 Index)
 	{
 		Q.erase(Q.begin() + Index);
 	}
+}
+
+bool AOrionChara::InteractWithInventory(AOrionActor* OrionActor)
+{
+	if (!IsValid(OrionActor))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithInventory: invalid actor"));
+
+		return true;
+	}
+
+	if (!bIsOrionAIControlled)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithInventory: not AI controlled"));
+
+		MoveToLocationStop();
+
+		return true;
+	}
+
+	USphereComponent* CollisionSphere = OrionActor->CollisionSphere;
+	const bool bOverlapping = CollisionSphere && CollisionSphere->IsOverlappingActor(this);
+
+	if (bOverlapping)
+	{
+		MoveToLocationStop();
+
+		bIsInteractWithInventory = true;
+
+		OnInteractWithInventory.ExecuteIfBound(OrionActor);
+
+		return true;
+	}
+
+
+	MoveToLocation(OrionActor->GetActorLocation());
+
+	return false;
 }

@@ -252,8 +252,20 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 		       *HitActor->GetName(),
 		       *HitActor->GetClass()->GetName());
 
+		if (AOrionActor* ClickedOrionActor = Cast<AOrionActor>(HitActor))
+		{
+			ClickedOnOrionActor = ClickedOrionActor;
+			OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
+		}
+
+
 		if (AOrionChara* Chara = Cast<AOrionChara>(HitActor))
 		{
+			if (!OrionPawnSelection.empty())
+			{
+				OrionPawnSelection.clear();
+			}
+
 			if (bIsShiftKeyPressed)
 			{
 				// 如果按住Shift键，检查是否已选中，未选中则添加
@@ -274,13 +286,15 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 			}
 			else
 			{
-				// 如果未按住Shift键，则清空之前的选择并选择新的角色
-				for (AOrionChara* SelectedChara : OrionCharaSelection)
+				if (!OrionCharaSelection.empty())
 				{
-					SelectedChara->bIsOrionAIControlled = false;
-				}
+					for (AOrionChara* SelectedChara : OrionCharaSelection)
+					{
+						SelectedChara->bIsOrionAIControlled = false;
+					}
 
-				OrionCharaSelection.clear();
+					OrionCharaSelection.clear();
+				}
 
 				OrionCharaSelection.push_back(Chara);
 				Chara->bIsOrionAIControlled = true;
@@ -291,6 +305,17 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 
 		if (AWheeledVehiclePawn* HitPawn = Cast<AWheeledVehiclePawn>(HitActor))
 		{
+			if (!OrionCharaSelection.empty())
+			{
+				for (AOrionChara* SelectedChara : OrionCharaSelection)
+				{
+					SelectedChara->bIsOrionAIControlled = false;
+				}
+
+				OrionCharaSelection.clear();
+			}
+
+
 			OrionPawnSelection.clear();
 			if (bIsShiftKeyPressed)
 			{
@@ -298,6 +323,15 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 					end())
 				{
 					OrionPawnSelection.push_back(HitPawn);
+					if (!OrionCharaSelection.empty())
+					{
+						for (AOrionChara* SelectedChara : OrionCharaSelection)
+						{
+							SelectedChara->bIsOrionAIControlled = false;
+						}
+
+						OrionCharaSelection.clear();
+					}
 					UE_LOG(LogTemp, Log, TEXT("Added APawn to selection: %s"), *HitPawn->GetName());
 				}
 				else
@@ -318,15 +352,34 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 	// 如果点到空白处或者点到了其他Actor，且未按Shift键，则清空选中
 	if (!bIsShiftKeyPressed)
 	{
-		OrionCharaSelection.clear();
+		if (!OrionCharaSelection.empty())
+		{
+			for (AOrionChara* SelectedChara : OrionCharaSelection)
+			{
+				SelectedChara->bIsOrionAIControlled = false;
+			}
+
+			OrionCharaSelection.clear();
+		}
+
 		OrionPawnSelection.clear();
+		ClickedOnOrionActor = nullptr;
+		OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
 		UE_LOG(LogTemp, Log, TEXT("No OrionChara or Vehicle selected. Selection cleared."));
 	}
 }
 
 void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, const FVector2D& EndPos)
 {
-	OrionCharaSelection.clear();
+	if (!OrionCharaSelection.empty())
+	{
+		for (AOrionChara* SelectedChara : OrionCharaSelection)
+		{
+			SelectedChara->bIsOrionAIControlled = false;
+		}
+
+		OrionCharaSelection.clear();
+	}
 
 	float MinX = FMath::Min(StartPos.X, EndPos.X);
 	float MaxX = FMath::Max(StartPos.X, EndPos.X);
@@ -374,6 +427,7 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 			if (AOrionChara* Chara = Cast<AOrionChara>(Actor))
 			{
 				OrionCharaSelection.push_back(Chara);
+				Chara->bIsOrionAIControlled = true;
 				UE_LOG(LogTemp, Log, TEXT("[BoxSelection] Actor %s is in selection box -> ADDED."), *Actor->GetName());
 			}
 		}
@@ -415,15 +469,14 @@ void AOrionPlayerController::OnRightMouseUp()
 		{
 			if (AOrionActorStorage* TempActorStorage = Cast<AOrionActorStorage>(CachedRightClickedOrionActor))
 			{
-				if (bIsShiftPressed)
+				if (!bIsShiftPressed)
 				{
-					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
-					                                        CommandType::Force);
+					UE_LOG(LogTemp, Log, TEXT("Immediate Command on Storage Currently Unavailable. "));
 				}
 				else
 				{
-					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
-					                                        CommandType::Append);
+					OrionGameMode->ApproveCollectingCargo(OrionCharaSelection, TempActorStorage,
+					                                      CommandType::Append);
 				}
 			}
 			else if (AOrionActorProduction* TempActorProduction = Cast<AOrionActorProduction>(
@@ -481,6 +534,8 @@ void AOrionPlayerController::OnRightMouseUp()
 		FString FStringAttackOnOrionActor = FString(UTF8_TO_TCHAR(StringAttackOnOrionActor.c_str()));
 		CachedRequestCaseNames.push_back(FStringAttackOnOrionActor);
 
+		CachedRequestCaseNames.push_back("ExchangeCargo");
+
 		// 4. Show the operation menu
 		AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
 		if (OrionHUD)
@@ -488,7 +543,7 @@ void AOrionPlayerController::OnRightMouseUp()
 			std::vector<std::string> ArrOptionNames;
 
 			ArrOptionNames.push_back(StringAttackOnOrionActor);
-			ArrOptionNames.push_back("Operation2");
+			ArrOptionNames.push_back("ExchangeCargo");
 			ArrOptionNames.push_back("Operation3");
 			OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, FHitResult(), ArrOptionNames);
 		}
@@ -543,15 +598,15 @@ void AOrionPlayerController::OnRightMouseDown()
 					// If no OrionChara or OrionPawn selected => show menu
 					if (OrionCharaSelection.empty() && OrionPawnSelection.empty())
 					{
-						AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
-						if (OrionHUD)
-						{
-							std::vector<std::string> ArrOptionNames;
-							ArrOptionNames.push_back("SpawnHostileOrionCharacterHere");
-							ArrOptionNames.push_back("Operation2");
-							ArrOptionNames.push_back("Operation3");
-							OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
-						}
+						//AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
+						//if (OrionHUD)
+						//{
+						//	std::vector<std::string> ArrOptionNames;
+						//	ArrOptionNames.push_back("SpawnHostileOrionCharacterHere");
+						//	ArrOptionNames.push_back("Operation2");
+						//	ArrOptionNames.push_back("Operation3");
+						//	OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
+						//}
 					}
 
 					// If OrionChara or OrionPawn selected => move them to the clicked location
@@ -633,7 +688,15 @@ void AOrionPlayerController::OnRightMouseDown()
 
 void AOrionPlayerController::SelectAll()
 {
-	OrionCharaSelection.clear();
+	if (!OrionCharaSelection.empty())
+	{
+		for (AOrionChara* SelectedChara : OrionCharaSelection)
+		{
+			SelectedChara->bIsOrionAIControlled = false;
+		}
+
+		OrionCharaSelection.clear();
+	}
 
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
@@ -648,6 +711,7 @@ void AOrionPlayerController::SelectAll()
 			if (AOrionChara* Chara = Cast<AOrionChara>(Actor))
 			{
 				OrionCharaSelection.push_back(Chara);
+				Chara->bIsOrionAIControlled = true;
 				UE_LOG(LogTemp, Log, TEXT("[BoxSelection] Actor %s is in selection box -> ADDED."), *Actor->GetName());
 			}
 		}
@@ -695,6 +759,29 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 	if (CallBackRequest == CachedRequestCaseNames.front())
 	{
 		RequestAttackOnOrionActor(FVector::ZeroVector, CommandType::Force);
+	}
+
+	else if (CallBackRequest == CachedRequestCaseNames[1])
+	{
+		if (!OrionCharaSelection.empty() && OrionCharaSelection.size() == 1)
+		{
+			FString ActionName = FString::Printf(TEXT("MoveToLocation%s"), *CachedActionObjects.front()->GetName());
+			OrionCharaSelection.front()->CharacterActionQueue.Actions.push_back(Action(
+				ActionName,
+				[charPtr = OrionCharaSelection.front(), targetActor = CachedActionObjects.front()](
+				float DeltaTime) -> bool
+				{
+					return charPtr->InteractWithInventory(targetActor);
+				}));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("ExchangeCargo request failed: Not 1 and Only 1 OrionChara selected."));
+		}
+	}
+	else if (CallBackRequest == CachedRequestCaseNames[2])
+	{
+		UE_LOG(LogTemp, Log, TEXT("Operation 3 executed."));
 	}
 
 	else

@@ -53,8 +53,8 @@ void AOrionAIController::Tick(float DeltaTime)
 	if (CachedAIState == EAIState::Defensive && ControlledPawn->CharaAIState != EAIState::Defensive)
 	{
 		UE_LOG(LogTemp, Log, TEXT("AOrionAIController::Tick: Leaving Defensive state"));
-		ControlledPawn->RemoveWeaponActor();
-		ControlledPawn->bIsCharaArmed = false;
+		//ControlledPawn->RemoveWeaponActor();
+		//ControlledPawn->bIsCharaArmed = false;
 	}
 
 	if (ControlledPawn->CharaAIState == EAIState::Defensive)
@@ -63,8 +63,8 @@ void AOrionAIController::Tick(float DeltaTime)
 		{
 			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::Tick: Entering Defensive state"));
 
-			ControlledPawn->SpawnWeaponActor();
-			ControlledPawn->bIsCharaArmed = true;
+			//ControlledPawn->SpawnWeaponActor();
+			//ControlledPawn->bIsCharaArmed = true;
 		}
 
 		// 1) if we have ammo, enqueue an attack action

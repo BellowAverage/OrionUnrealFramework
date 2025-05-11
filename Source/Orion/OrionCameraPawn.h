@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
+#include "Kismet/GameplayStatics.h"
 #include "OrionCameraPawn.generated.h"
 
 class USpringArmComponent;
@@ -20,10 +21,14 @@ public:
 
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 
+	FVector2D MoveInput;
+
 protected:
 	virtual void BeginPlay() override;
 
 private:
+	void UpdateTimeDilationCompensation();
+
 	/* ========= 组件（Component 指针不能互相赋值）========== */
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	USceneComponent* SceneRoot = nullptr;
@@ -42,8 +47,8 @@ private:
 	void MoveRight(float Value);
 	void Zoom(float AxisValue);
 
-	void StartRotate();       // 中键按下
-	void StopRotate();        // 中键松开
+	void StartRotate(); // 中键按下
+	void StopRotate(); // 中键松开
 	void CameraYaw(float Value);
 	void CameraPitch(float Value);
 

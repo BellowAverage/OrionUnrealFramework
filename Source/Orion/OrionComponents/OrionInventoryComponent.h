@@ -5,6 +5,8 @@
 #include "OrionInventoryComponent.generated.h"
 
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
+
 USTRUCT(BlueprintType)
 struct FOrionItemInfo
 {
@@ -36,13 +38,16 @@ struct FOrionItemInfo
 };
 
 
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class ORION_API UOrionInventoryComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
 public:
 	UOrionInventoryComponent();
+
+	UPROPERTY(BlueprintAssignable, Category = "Inventory")
+	FOnInventoryChanged OnInventoryChanged;
 
 	/* Full Status */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
@@ -89,10 +94,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void RefreshInventoryText();
 
-protected:
+
 	virtual void BeginPlay() override;
 
-private:
-	/** 静态全局物品信息表 */
 	static TArray<FOrionItemInfo> ItemInfoTable;
 };

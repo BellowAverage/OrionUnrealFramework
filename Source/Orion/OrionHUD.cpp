@@ -182,7 +182,7 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				CombinedText, // <- 传 FString 而不是 FStringView
+				FStringView(*CombinedText), // <- 传 FString 而不是 FStringView
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -233,7 +233,7 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			Line, // <- 这里直接传 FString
+			FStringView(*Line), // <- 这里直接传 FString
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,

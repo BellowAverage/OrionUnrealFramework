@@ -8,6 +8,9 @@
 #include "WheeledVehiclePawn.h"
 #include "OrionPlayerController.generated.h"
 
+
+DECLARE_DELEGATE_OneParam(FOnOrionActorSelectionChanged, AOrionActor*);
+
 UENUM(BlueprintType)
 enum class CommandType : uint8
 {
@@ -21,6 +24,9 @@ class ORION_API AOrionPlayerController : public APlayerController
 	GENERATED_BODY()
 
 public:
+	FOnOrionActorSelectionChanged OnOrionActorSelectionChanged;
+
+
 	AOrionPlayerController();
 
 	virtual void SetupInputComponent() override;
@@ -30,6 +36,11 @@ public:
 	/* Niagara Interaction Effect */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Niagara")
 	UNiagaraSystem* NiagaraHitResultEffect;
+
+
+	/* Clicked On OrionActor */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Clicked On OrionActor")
+	AOrionActor* ClickedOnOrionActor = nullptr;
 
 	/* OrionCharaSelection List */
 	TSubclassOf<AOrionChara> SubclassOfAOrionChara;

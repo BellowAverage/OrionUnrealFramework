@@ -2,14 +2,19 @@
 
 #include "OrionUserWidgetCharaInfo.h"
 #include "OrionUserWidgetProceduralAction.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/VerticalBox.h"
 #include "../OrionChara.h"
+#include "OrionUserWidgetCharaDetails.h"
 
 
 void UOrionUserWidgetCharaInfo::NativeConstruct()
 {
 	Super::NativeConstruct();
+
+	if (ImageTradeIcon)
+	{
+		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
+	}
 
 	if (CharaRef)
 	{
@@ -57,11 +62,124 @@ void UOrionUserWidgetCharaInfo::NativeConstruct()
 	{
 		ButtonDelete->OnClicked.AddDynamic(this, &UOrionUserWidgetCharaInfo::OnDeleteClicked);
 	}
+
+	if (ButtonBag)
+	{
+		ButtonBag->OnClicked.AddDynamic(this, &UOrionUserWidgetCharaInfo::OnBagClicked);
+	}
+}
+
+void UOrionUserWidgetCharaInfo::BindInventoryEvents(AOrionChara* NewChara)
+{
+	if (CharaRef && CharaRef->InventoryComp)
+	{
+		CharaRef->InventoryComp->OnInventoryChanged.RemoveDynamic(
+			this, &UOrionUserWidgetCharaInfo::BroadcastInventoryChanged);
+
+		CharaRef->OnCharaActionChange.RemoveDynamic(
+			this, &UOrionUserWidgetCharaInfo::BroadcastCharaActionChange);
+	}
+
+	CharaRef = NewChara;
+
+	if (CharaRef && CharaRef->InventoryComp)
+	{
+		CharaRef->InventoryComp->OnInventoryChanged.AddDynamic(
+			this, &UOrionUserWidgetCharaInfo::BroadcastInventoryChanged);
+
+
+		CharaRef->OnInteractWithInventory.BindUObject(
+			this, &UOrionUserWidgetCharaInfo::BroadcastOnInteractWithInventory);
+
+		CharaRef->OnCharaActionChange.AddDynamic(
+			this, &UOrionUserWidgetCharaInfo::BroadcastCharaActionChange);
+	}
+
+	if (!CharaRef || !CharaDetailsClass || !BorderCharaDetails)
+	{
+		return;
+	}
+
+	if (bCharaDetailShow)
+	{
+		BorderCharaDetails->ClearChildren();
+
+		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+		{
+			if (bActorDetailShow && InventoryInteractActorRef && InventoryInteractActorRef->InventoryComp)
+			{
+				W->InitCargoItemPanelParams(CharaRef->InventoryComp, InventoryInteractActorRef->InventoryComp);
+			}
+			else if (!InventoryInteractActorRef)
+			{
+				W->InitCargoItemPanelParams(CharaRef->InventoryComp, nullptr);
+			}
+			BorderCharaDetails->AddChild(W);
+			bCharaDetailShow = true;
+		}
+	}
+}
+
+void UOrionUserWidgetCharaInfo::BroadcastCharaActionChange(FString PrevActionName, FString CurrActionName)
+{
+	UE_LOG(LogTemp, Log, TEXT("bActorDetailShow: %s"), bActorDetailShow ? TEXT("true") : TEXT("false"));
+	if (CharaRef)
+	{
+		if (bActorDetailShow && PrevActionName.IsEmpty() && !CurrActionName.IsEmpty())
+		{
+			BorderActorDetails->ClearChildren();
+			ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
+			InventoryInteractActorRef = nullptr;
+			bActorDetailShow = false;
+		}
+	}
+}
+
+
+void UOrionUserWidgetCharaInfo::BroadcastInventoryChanged()
+{
+	if (CharaRef && bCharaDetailShow && CharaDetailsClass && BorderCharaDetails)
+	{
+		UE_LOG(LogTemp, Log, TEXT("CN1M"));
+		BorderCharaDetails->ClearChildren();
+
+		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+		{
+			if (bActorDetailShow && InventoryInteractActorRef && InventoryInteractActorRef->InventoryComp)
+			{
+				W->InitCargoItemPanelParams(CharaRef->InventoryComp, InventoryInteractActorRef->InventoryComp);
+			}
+			else if (!InventoryInteractActorRef)
+			{
+				W->InitCargoItemPanelParams(CharaRef->InventoryComp, nullptr);
+			}
+			BorderCharaDetails->AddChild(W);
+			bCharaDetailShow = true;
+		}
+	}
+
+	if (bActorDetailShow && BorderActorDetails)
+	{
+		UE_LOG(LogTemp, Log, TEXT("CNM"));
+
+		BorderActorDetails->ClearChildren();
+		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
+
+		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+		{
+			if (CharaRef && CharaRef->InventoryComp)
+			{
+				W->InitCargoItemPanelParams(InventoryInteractActorRef->InventoryComp, CharaRef->InventoryComp);
+			}
+			BorderActorDetails->AddChild(W);
+			ImageTradeIcon->SetVisibility(ESlateVisibility::Visible);
+		}
+	}
 }
 
 void UOrionUserWidgetCharaInfo::UpdateProcActionQueue(AOrionChara* InChara)
 {
-	if (!ProceduralActionBox || !InChara || !ProceduralActionItemClass)
+	if (!ProceduralActionBox || !InChara || !ProceduralActionItemClass || !CharaDetailsClass)
 	{
 		return;
 	}
@@ -154,6 +272,8 @@ void UOrionUserWidgetCharaInfo::InitCharaInfoPanelParams(AOrionChara* InChara)
 		return;
 	}
 
+	BindInventoryEvents(InChara); // ★ 改动：在这里做绑定
+
 	if (SliderSpeed)
 	{
 		SliderSpeed->SetValue(InChara->OrionCharaSpeed);
@@ -182,11 +302,22 @@ void UOrionUserWidgetCharaInfo::InitCharaInfoPanelParams(AOrionChara* InChara)
 	}
 }
 
+void UOrionUserWidgetCharaInfo::NativeDestruct()
+{
+	BindInventoryEvents(nullptr); // 自动解绑
+	Super::NativeDestruct();
+}
+
 void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 {
 	if (!InChara)
 	{
 		return;
+	}
+
+	if (InChara != CharaRef) // 角色切换时也要重新绑定
+	{
+		BindInventoryEvents(InChara);
 	}
 
 	CharaRef = InChara;
@@ -345,5 +476,102 @@ void UOrionUserWidgetCharaInfo::OnCheckbIsCharaProceduralChanged(bool bIsChecked
 	if (CharaRef)
 	{
 		CharaRef->bIsCharaProcedural = bIsChecked;
+	}
+}
+
+void UOrionUserWidgetCharaInfo::OnBagClicked()
+{
+	if (!CharaRef || !CharaDetailsClass || !BorderCharaDetails)
+	{
+		return;
+	}
+
+	if (!bCharaDetailShow)
+	{
+		// 打开：先清空，再新建
+		BorderCharaDetails->ClearChildren();
+
+		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+		{
+			if (bActorDetailShow && InventoryInteractActorRef && InventoryInteractActorRef->InventoryComp)
+			{
+				W->InitCargoItemPanelParams(CharaRef->InventoryComp, InventoryInteractActorRef->InventoryComp);
+			}
+			else if (!InventoryInteractActorRef)
+			{
+				W->InitCargoItemPanelParams(CharaRef->InventoryComp, nullptr);
+			}
+			BorderCharaDetails->AddChild(W);
+			bCharaDetailShow = true;
+		}
+	}
+	else
+	{
+		// 关闭
+		BorderCharaDetails->ClearChildren();
+		bCharaDetailShow = false;
+	}
+}
+
+void UOrionUserWidgetCharaInfo::BroadcastOnInteractWithInventory(AOrionActor* OrionActor)
+{
+	UE_LOG(LogTemp, Log, TEXT("WHATTHE FKJ Interact with inventory: %s"), *OrionActor->GetName());
+
+	if (!CharaRef || !CharaDetailsClass || !BorderActorDetails)
+	{
+		return;
+	}
+
+	if (OrionActor && OrionActor->InventoryComp)
+	{
+		InventoryInteractActorRef = OrionActor;
+
+		OrionActor->InventoryComp->OnInventoryChanged.RemoveDynamic(
+			this, &UOrionUserWidgetCharaInfo::BroadcastInventoryChanged);
+		OrionActor->InventoryComp->OnInventoryChanged.AddDynamic(
+			this, &UOrionUserWidgetCharaInfo::BroadcastInventoryChanged);
+	}
+
+	if (!bActorDetailShow)
+	{
+		BorderActorDetails->ClearChildren();
+		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
+		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+		{
+			if (CharaRef && CharaRef->InventoryComp)
+			{
+				W->InitCargoItemPanelParams(InventoryInteractActorRef->InventoryComp, CharaRef->InventoryComp);
+			}
+			BorderActorDetails->AddChild(W);
+			ImageTradeIcon->SetVisibility(ESlateVisibility::Visible);
+
+			if (!bCharaDetailShow)
+			{
+				BorderCharaDetails->ClearChildren();
+
+				if (auto* W2 = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+				{
+					if (bActorDetailShow && InventoryInteractActorRef && InventoryInteractActorRef->InventoryComp)
+					{
+						W2->InitCargoItemPanelParams(CharaRef->InventoryComp, InventoryInteractActorRef->InventoryComp);
+					}
+					else if (!InventoryInteractActorRef)
+					{
+						W2->InitCargoItemPanelParams(CharaRef->InventoryComp, nullptr);
+					}
+					BorderCharaDetails->AddChild(W2);
+					bCharaDetailShow = true;
+				}
+			}
+
+			bActorDetailShow = true;
+		}
+	}
+	else
+	{
+		// 关闭
+		BorderActorDetails->ClearChildren();
+		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
+		bActorDetailShow = false;
 	}
 }

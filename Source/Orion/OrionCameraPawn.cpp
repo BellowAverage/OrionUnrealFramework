@@ -28,6 +28,8 @@ AOrionCameraPawn::AOrionCameraPawn()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
+	PrimaryActorTick.bTickEvenWhenPaused = true;
+
 	// 1) 根组件
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	RootComponent = SceneRoot;
@@ -80,6 +82,8 @@ void AOrionCameraPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	UpdateTimeDilationCompensation();
+
 	// 平滑插值到目标长度
 	const float Current = SpringArm->TargetArmLength;
 	const float NewLength = FMath::FInterpTo(Current, TargetArmLength, DeltaSeconds, ZoomInterpSpeed);
@@ -100,6 +104,20 @@ void AOrionCameraPawn::Tick(float DeltaSeconds)
 			                 Desired,
 			                 DeltaSeconds,
 			                 FollowInterpSpeed));
+	}
+}
+
+void AOrionCameraPawn::UpdateTimeDilationCompensation()
+{
+	if (UWorld* World = GetWorld())
+	{
+		const float GlobalDil = World->GetWorldSettings()->GetEffectiveTimeDilation();
+		const float Wanted = (GlobalDil > KINDA_SMALL_NUMBER) ? 1.f / GlobalDil : 1.f;
+
+		if (!FMath::IsNearlyEqual(CustomTimeDilation, Wanted))
+		{
+			CustomTimeDilation = Wanted; // 抵消全局 Time Dilation
+		}
 	}
 }
 

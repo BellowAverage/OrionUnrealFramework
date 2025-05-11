@@ -17,6 +17,9 @@
 #include "OrionActor/OrionActorProduction.h"
 #include "OrionChara.generated.h"
 
+DECLARE_DELEGATE_OneParam(FOnInteractWithInventory, AOrionActor*);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharaActionChange, FString, PrevActionName, FString, CurrActionName);
+
 UENUM(BlueprintType)
 enum class ECharaState : uint8
 {
@@ -114,9 +117,19 @@ protected:
 
 public:
 	virtual void Tick(float DeltaTime) override;
+
+	bool bIsInteractWithInventory = false;
+
+
+	FOnInteractWithInventory OnInteractWithInventory;
+
+	FOnCharaActionChange OnCharaActionChange;
+
+
 	AAIController* AIController;
 
-	/* Call Back Handle */
+	UFUNCTION(BlueprintCallable, Category = "Basics")
+	bool InteractWithInventory(AOrionActor* OrionActor);
 
 
 	/* Armed */

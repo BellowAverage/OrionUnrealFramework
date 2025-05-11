@@ -91,6 +91,11 @@ bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AActor* InTarget, FVec
 	{
 		IsAttackOnCharaLongRange = true;
 
+		if (!GetVelocity().IsNearlyZero())
+		{
+			MoveToLocationStop();
+		}
+
 		AIController->StopMovement();
 
 		FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
@@ -180,11 +185,18 @@ bool AOrionChara::AttackOnCharaLongRange(float DeltaTime, AActor* InTarget, FVec
 		UE_LOG(LogTemp, Log, TEXT("AttackOnCharaLongRange: line of sight blocked. Moving to a better position."));
 	}
 
-	if (AIController)
-	{
-		EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
-			InTarget->GetActorLocation(), 5.0f, true, true, true, false, nullptr, true);
-	}
+	//if (AIController)
+	//{
+	//	EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
+	//		InTarget->GetActorLocation(), 5.0f, true, true, true, false, nullptr, true);
+	//}
+
+	MoveToLocation(InTarget->GetActorLocation());
+
+	//if (IsAttackOnCharaLongRange && !GetVelocity().IsNearlyZero())
+	//{
+	//	MoveToLocationStop();
+	//}
 
 	IsAttackOnCharaLongRange = false;
 	return false;

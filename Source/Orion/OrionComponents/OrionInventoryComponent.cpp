@@ -235,4 +235,6 @@ void UOrionInventoryComponent::OnInventoryChange()
 	}
 
 	RefreshInventoryText();
+
+	OnInventoryChanged.Broadcast();
 }

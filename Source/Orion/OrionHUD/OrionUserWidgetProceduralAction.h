@@ -43,6 +43,10 @@ public:
 	virtual void NativeConstruct() override
 	{
 		Super::NativeConstruct();
+
+		TextActionName->SetAutoWrapText(true);
+		TextActionName->SetWrapTextAt(210.0f);
+
 		if (ButtonSelect)
 		{
 			ButtonSelect->OnClicked.AddDynamic(this, &UOrionUserWidgetProceduralAction::HandleClick);
