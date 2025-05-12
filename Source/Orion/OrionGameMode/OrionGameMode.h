@@ -2,13 +2,13 @@
 
 #pragma once
 
-#include "OrionChara.h"
+#include "Orion/OrionChara/OrionChara.h"
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "OrionPlayerController.h"
+#include "Orion/OrionPlayerController/OrionPlayerController.h"
 #include "WheeledVehiclePawn.h"
-#include "OrionActor/OrionActorStorage.h"
-#include "OrionActor/OrionActorProduction.h"
+#include "Orion/OrionActor/OrionActorStorage.h"
+#include "Orion/OrionActor/OrionActorProduction.h"
 #include "OrionGameMode.generated.h"
 
 

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "../OrionActor.h"
+#include "OrionActor.h"
 #include "OrionActorProduction.generated.h"
 
 /**

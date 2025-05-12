@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "../OrionChara.h"
-#include "Orion/OrionComponents/OrionInventoryComponent.h"
+#include "Orion/OrionChara/OrionChara.h"
+//#include "Orion/OrionComponents/OrionInventoryComponent.h"
 #include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
 //#include "Components/ProgressBar.h"

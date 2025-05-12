@@ -1,4 +1,4 @@
-﻿#include "../OrionChara.h"
+﻿#include "OrionChara.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -66,7 +66,8 @@ void AOrionChara::ForceDetectionOnVelocityChange()
 
 	if (const float VelocityChange = (CurrentVelocity - PreviousVelocity).Size() > VelocityChangeThreshold)
 	{
-		OnForceExceeded(CurrentVelocity - PreviousVelocity);
+		//OnForceExceeded(CurrentVelocity - PreviousVelocity);
+		BlueprintNativeVelocityExceeded();
 	}
 
 	PreviousVelocity = CurrentVelocity;

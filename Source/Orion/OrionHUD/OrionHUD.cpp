@@ -1,7 +1,7 @@
 ﻿#include "OrionHUD.h"
 #include "Engine/Canvas.h"
 #include "Kismet/GameplayStatics.h"
-#include "OrionChara.h"
+#include "Orion/OrionChara/OrionChara.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include <vector>
@@ -182,7 +182,7 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				FStringView(*CombinedText), // <- 传 FString 而不是 FStringView
+				CombinedText, // <- 传 FString 而不是 FStringView
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -233,7 +233,7 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			FStringView(*Line), // <- 这里直接传 FString
+			*Line, // <- 这里直接传 FString
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,

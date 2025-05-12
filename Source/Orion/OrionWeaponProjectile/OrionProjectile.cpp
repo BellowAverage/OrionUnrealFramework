@@ -5,7 +5,7 @@
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "OrionChara.h"
+#include "Orion/OrionChara/OrionChara.h"
 
 // Sets default values
 AOrionProjectile::AOrionProjectile()

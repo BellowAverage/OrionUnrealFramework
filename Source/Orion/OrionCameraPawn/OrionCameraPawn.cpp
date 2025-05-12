@@ -4,7 +4,7 @@
 #include "GameFramework/FloatingPawnMovement.h"
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
-#include "OrionPlayerController.h"
+#include "Orion/OrionPlayerController/OrionPlayerController.h"
 
 void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {

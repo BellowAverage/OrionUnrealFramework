@@ -1,13 +1,14 @@
 ﻿#include "OrionGameMode.h"
-#include "OrionChara.h"
-#include "OrionAIController.h"
+#include "Orion/OrionChara/OrionChara.h"
+#include "Orion/OrionAIController/OrionAIController.h"
 #include "Engine/World.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
-#include "Engine/DamageEvents.h" // For Testing Purpose
-#include "OrionActor/OrionActorOre.h"
+#include "Engine/DamageEvents.h"
+#include "Orion/OrionActor/OrionActorOre.h"
+#include "EngineUtils.h"
 #include "PhysicsEngine/RadialForceComponent.h"
 
 #define ORION_CHARA_HALF_HEIGHT 88.f
@@ -167,51 +168,56 @@ void AOrionGameMode::OnTestKey2Pressed()
 	if (bHit && HitResult.bBlockingHit)
 	{
 		FVector ImpactPoint = HitResult.ImpactPoint;
-
 		float Radius = 500.f; // 范围
 		float Strength = 2000.f; // 强度
 		bool bVelChange = true;
 
-		// 1) 创建一个 RadialForceComponent
+		// —— 调试：在世界中绘制一个红色球体来显示影响范围 —— 
+		DrawDebugSphere(
+			GetWorld(),
+			ImpactPoint,
+			Radius,
+			32, // 分段数
+			FColor::Red,
+			false, // 不持续
+			5.f // 存续 5 秒
+		);
+
+		// —— 新增：先对所有在范围内的 OrionChara 调用 BlueprintNativeVelocityExceeded —— 
+		for (TActorIterator<AOrionChara> It(GetWorld()); It; ++It)
+		{
+			AOrionChara* Chara = *It;
+			if (!Chara)
+			{
+				continue;
+			}
+
+			// 距离判断
+			float Dist2 = FVector::DistSquared(Chara->GetActorLocation(), ImpactPoint);
+			if (Dist2 <= Radius * Radius)
+			{
+				// 调用角色自己的 BlueprintNative 事件
+				Chara->BlueprintNativeVelocityExceeded();
+				UE_LOG(LogTemp, Log,
+				       TEXT("Called VelocityExceeded on %s (Dist=%.1f)"),
+				       *Chara->GetName(), FMath::Sqrt(Dist2));
+			}
+		}
+
+		// —— 原有：创建并发射径向力 —— 
 		URadialForceComponent* RadialForceComponent = NewObject<URadialForceComponent>(this);
-
-		// 2) 注册到游戏世界，使其生效
 		RadialForceComponent->RegisterComponent();
-
-		// 3) 设置它的世界位置为点击点
 		RadialForceComponent->SetWorldLocation(ImpactPoint);
-
-		// 4) 配置半径、强度、是否忽略质量等
 		RadialForceComponent->Radius = Radius;
 		RadialForceComponent->ImpulseStrength = Strength;
 		RadialForceComponent->bImpulseVelChange = bVelChange;
 		RadialForceComponent->Falloff = RIF_Linear;
-
-		// 5) 发射脉冲
 		RadialForceComponent->FireImpulse();
-
-		// 6) 应用范围伤害 ===========================
-
-		//float DamageAmount = 0.0f; // 根据需要设置伤害值
-		//float DamageRadius = Radius; // 范围
-
-		//UGameplayStatics::ApplyRadialDamage(
-		//    GetWorld(),
-		//    DamageAmount,
-		//    ImpactPoint,
-		//    DamageRadius,
-		//    UDamageType::StaticClass(),
-		//    TArray<AActor*>(), // 忽略的 Actors，可留空
-		//    this, // Damage Causer
-		//    nullptr, // Instigator
-		//    true // 全伤害，不随距离衰减
-		//);
-
-		// ===========================================
 
 		UE_LOG(LogTemp, Log, TEXT("Fired radial impulse at %s"), *ImpactPoint.ToString());
 	}
 
+	// 原有爆炸效果生成逻辑保持不变
 	if (ExplosionClass)
 	{
 		UWorld* World = GetWorld();
@@ -219,11 +225,14 @@ void AOrionGameMode::OnTestKey2Pressed()
 		{
 			FActorSpawnParameters SpawnParams;
 			SpawnParams.Owner = this;
-			SpawnParams.Instigator = nullptr; // GameMode 通常没有 Instigator
 			SpawnParams.SpawnCollisionHandlingOverride =
 				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-			AActor* DeathEffect = World->SpawnActor<AActor>(ExplosionClass, TempLocation, FRotator::ZeroRotator,
-			                                                SpawnParams);
+			World->SpawnActor<AActor>(
+				ExplosionClass,
+				bHit ? HitResult.Location : FVector::ZeroVector,
+				FRotator::ZeroRotator,
+				SpawnParams
+			);
 		}
 	}
 }

@@ -3,13 +3,25 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "NiagaraFunctionLibrary.h"
-#include "NiagaraSystem.h"
-#include "OrionChara.h"
+//#include "NiagaraSystem.h"
+#include "Orion/OrionStructure/OrionStructure.h"
+#include "Orion/OrionChara/OrionChara.h"
 #include "WheeledVehiclePawn.h"
+#include "Orion/OrionStructure/OrionStructureFoundation.h"
 #include "OrionPlayerController.generated.h"
 
 
 DECLARE_DELEGATE_OneParam(FOnOrionActorSelectionChanged, AOrionActor*);
+DECLARE_DELEGATE_OneParam(FOnToggleBuildingMode, bool);
+
+UENUM(BlueprintType)
+enum class EOrionInputMode : uint8
+{
+	Default UMETA(DisplayName = "Default"),
+	Building UMETA(DisplayName = "Building"),
+	CharacterCustomization UMETA(DisplayName = "CharacterCustomization"),
+};
+
 
 UENUM(BlueprintType)
 enum class CommandType : uint8
@@ -25,7 +37,39 @@ class ORION_API AOrionPlayerController : public APlayerController
 
 public:
 	FOnOrionActorSelectionChanged OnOrionActorSelectionChanged;
+	FOnToggleBuildingMode OnToggleBuildingMode;
 
+	void OnKey4Pressed();
+
+	UPROPERTY(EditDefaultsOnly, Category = "Build")
+	float SnapInDist = 120.f; // cm，进入吸附
+	UPROPERTY(EditDefaultsOnly, Category = "Build")
+	float SnapOutDist = 160.f; // cm，离开吸附
+
+	bool bSnapped = false;
+	int32 SnappedSocketIdx = INDEX_NONE;
+	AOrionStructureFoundation* SnappedTarget = nullptr;
+
+
+	// 放到 public / protected 任意合适位置
+	UPROPERTY(EditDefaultsOnly, Category = "Build")
+	TSubclassOf<AOrionStructureFoundation> FoundationBP; // 指向地基蓝图
+
+	// 运行时状态
+	bool bPlacingFoundation = false;
+	AOrionStructureFoundation* PreviewFoundation = nullptr;
+
+	void OnConfirmPlace();
+
+	void OnKey5Pressed();
+	//void OnKey6Pressed();
+	//void OnKey7Pressed();
+
+
+	EOrionInputMode CurrentInputMode = EOrionInputMode::Default;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	AOrionStructure* StructureSelected = nullptr;
 
 	AOrionPlayerController();
 
@@ -91,4 +135,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Server Action Request")
 	void CallBackRequestDistributor(FName CallBackRequest);
+
+	UFUNCTION(BlueprintCallable, Category = "Basics")
+	void OnBPressed();
 };

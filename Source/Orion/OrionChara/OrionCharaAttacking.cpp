@@ -1,5 +1,5 @@
-#include "../OrionChara.h"
-#include "../OrionProjectile.h"
+#include "OrionChara.h"
+#include "Orion/OrionWeaponProjectile/OrionProjectile.h"
 
 #include "AIController.h"
 #include "Kismet/KismetMathLibrary.h"

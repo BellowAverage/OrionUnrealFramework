@@ -3,7 +3,7 @@
 #include "OrionUserWidgetCharaInfo.h"
 #include "OrionUserWidgetProceduralAction.h"
 #include "Components/VerticalBox.h"
-#include "../OrionChara.h"
+#include "Orion/OrionChara/OrionChara.h"
 #include "OrionUserWidgetCharaDetails.h"
 
 

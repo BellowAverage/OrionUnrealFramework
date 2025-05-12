@@ -11,6 +11,8 @@ AOrionActorStorage::AOrionActorStorage()
 void AOrionActorStorage::BeginPlay()
 {
 	Super::BeginPlay();
+
+	InventoryComp->ModifyItemQuantity(3, 100);
 }
 
 void AOrionActorStorage::Tick(float DeltaTime)

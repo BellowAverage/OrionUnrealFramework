@@ -25,6 +25,10 @@ public:
 
 	TMap<int32, TSoftObjectPtr<UTexture2D>> ItemIDToTextureMap = {
 		{
+			1,
+			TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTLogIcon.GPTLogIcon")))
+		},
+		{
 			2,
 			TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTStoneOreIcon.GPTStoneOreIcon")))
 		},
@@ -46,10 +50,20 @@ public:
 
 		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 		{
-			OnCargoItemClicked.ExecuteIfBound();
 			return FReply::Handled();
 		}
 		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+	}
+
+	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override
+	{
+		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+		{
+			// 弹起时再执行原来的业务：触发委托，最终由 CharaDetails 做 Clear/Update
+			OnCargoItemClicked.ExecuteIfBound();
+			return FReply::Handled();
+		}
+		return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
 	}
 
 	UFUNCTION()

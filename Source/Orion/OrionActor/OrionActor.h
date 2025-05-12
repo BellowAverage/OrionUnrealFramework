@@ -4,9 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Components/SphereComponent.h"
-#include "Components/TextRenderComponent.h"
 #include "GameFramework/Actor.h"
-#include "OrionComponents/OrionInventoryComponent.h"
+#include "Orion/OrionComponents/OrionInventoryComponent.h"
 #include "OrionActor.generated.h"
 
 

@@ -18,6 +18,9 @@ class ORION_API UOrionUserWidgetCharaDetails : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	UPROPERTY(EditAnywhere, Category = "Basics")
+	int32 CargoSwapMultiplier = 1;
+
 	UFUNCTION()
 	void InitCargoItemPanelParams(UOrionInventoryComponent* InventoryComponent,
 	                              UOrionInventoryComponent* TargetInventoryComponent)
@@ -56,7 +59,13 @@ public:
 							       "Cargo item clicked, ItemId = %d, InventoryComponent Owner = %s, TargetInventoryComponent Owner = %s"
 						       ), ItemId, *InventoryComponent->GetOwner()->GetName(),
 						       *TargetInventoryComponent->GetOwner()->GetName());
-						/* 这里可以触发选中高亮、弹出详情等自定义逻辑 */
+
+
+						if (InventoryComponent && TargetInventoryComponent)
+						{
+							InventoryComponent->ModifyItemQuantity(ItemId, -CargoSwapMultiplier);
+							TargetInventoryComponent->ModifyItemQuantity(ItemId, CargoSwapMultiplier);
+						}
 					});
 
 				CargoItemWidget->InitCargoItemPanelParams(InventoryComponent, ItemId, Name, Quantity);

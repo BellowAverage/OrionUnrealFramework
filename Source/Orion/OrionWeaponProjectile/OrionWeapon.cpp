@@ -4,7 +4,8 @@
 #include "OrionProjectile.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include <Kismet/GameplayStatics.h>
-#include "Kismet/KismetMathLibrary.h"
+#include "Sound/SoundCue.h"
+//#include "Kismet/KismetMathLibrary.h"
 
 AOrionWeapon::AOrionWeapon()
 {

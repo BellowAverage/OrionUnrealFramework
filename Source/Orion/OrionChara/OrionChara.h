@@ -9,12 +9,12 @@
 #include <Perception/AIPerceptionStimuliSourceComponent.h>
 #include <vector>
 #include <functional>
-#include "OrionWeapon.h"
-#include "OrionActor.h"
-#include "OrionActor/OrionActorStorage.h"
+#include "Orion/OrionWeaponProjectile/OrionWeapon.h"
+#include "Orion/OrionActor/OrionActor.h"
+#include "Orion/OrionActor/OrionActorStorage.h"
 #include "deque"
-#include "OrionActor/OrionActorOre.h"
-#include "OrionActor/OrionActorProduction.h"
+#include "Orion/OrionActor/OrionActorOre.h"
+#include "Orion/OrionActor/OrionActorProduction.h"
 #include "OrionChara.generated.h"
 
 DECLARE_DELEGATE_OneParam(FOnInteractWithInventory, AOrionActor*);
@@ -170,6 +170,8 @@ public:
 	/* Character Movement */
 	void InitOrionCharaMovement();
 
+
+	UFUNCTION(BlueprintCallable, Category = "Basics")
 	void SynchronizeCapsuleCompLocation() const;
 
 	void OnForceExceeded(const FVector& VelocityChange);
@@ -181,6 +183,9 @@ public:
 	float VelocityChangeThreshold = 1000.0f;
 
 	void ForceDetectionOnVelocityChange();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Basics")
+	void BlueprintNativeVelocityExceeded();
 
 	void RegisterCharaRagdoll(float DeltaTime);
 
@@ -280,6 +285,9 @@ public:
 	/* Collecting Cargo */
 
 	bool bSelfDeliveryDone = false;
+
+	AOrionActorStorage* LastStorageActor = nullptr;
+
 
 	UFUNCTION(BlueprintCallable, Category = "Basics")
 	bool CollectingCargo(AOrionActorStorage* OrionStorageActor);

@@ -3,8 +3,8 @@
 
 #include "OrionAIController.h"
 #include "GameFramework/Actor.h"
-#include "Perception/AIPerceptionStimuliSourceComponent.h"
-#include "Perception/AISense_Sight.h"
+//#include "Perception/AIPerceptionStimuliSourceComponent.h"
+//#include "Perception/AISense_Sight.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 

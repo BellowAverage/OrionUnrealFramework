@@ -4,20 +4,18 @@
 #include "Components/InputComponent.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "OrionCameraPawn.h"
 #include "DrawDebugHelpers.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
-#include "Blueprint/UserWidget.h"
 #include <Kismet/GameplayStatics.h>
-#include "OrionBPFunctionLibrary.h"
-#include "OrionAIController.h"
-#include "OrionHUD.h"
+#include "Orion/OrionAIController/OrionAIController.h"
+#include "Orion/OrionHUD/OrionHUD.h"
 #include <algorithm>
-#include "OrionActor.h"
-#include "OrionGameMode.h"
-#include "OrionActor/OrionActorOre.h"
+#include "Orion/OrionActor/OrionActor.h"
+#include "Orion/OrionGameMode/OrionGameMode.h"
+#include "Orion/OrionStructure/OrionStructureFoundation.h"
+#include "EngineUtils.h"
+#include "Orion/OrionActor/OrionActorOre.h"
 
 
 AOrionPlayerController::AOrionPlayerController()
@@ -38,6 +36,13 @@ void AOrionPlayerController::SetupInputComponent()
 		InputComponent->BindAction("LeftMouseClick", IE_Released, this, &AOrionPlayerController::OnLeftMouseUp);
 		InputComponent->BindAction("RightMouseClick", IE_Pressed, this, &AOrionPlayerController::OnRightMouseDown);
 		InputComponent->BindAction("CtrlA", IE_Pressed, this, &AOrionPlayerController::SelectAll);
+
+		InputComponent->BindAction("BPressed", IE_Pressed, this, &AOrionPlayerController::OnBPressed);
+
+		InputComponent->BindAction("Key4Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey4Pressed);
+		InputComponent->BindAction("Key5Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey5Pressed);
+		//InputComponent->BindAction("Key6Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey6Pressed);
+		//InputComponent->BindAction("Key7Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey7Pressed);
 
 		InputComponent->BindAction("RightMouseClick", IE_Released, this, &AOrionPlayerController::OnRightMouseUp);
 		InputComponent->BindAction("ShiftPress", IE_Pressed, this, &AOrionPlayerController::OnShiftPressed);
@@ -204,6 +209,173 @@ void AOrionPlayerController::Tick(float DeltaTime)
 			CharaHUD->InfoChara = nullptr;
 		}
 	}
+
+	if (!bPlacingFoundation || !PreviewFoundation)
+	{
+		return;
+	}
+
+	// ① 鼠标指向地面位置
+	FVector WorldOrigin, WorldDir;
+	if (!DeprojectMousePositionToWorld(WorldOrigin, WorldDir))
+	{
+		return;
+	}
+	FHitResult GroundHit;
+	if (!GetWorld()->LineTraceSingleByChannel(
+		GroundHit, WorldOrigin, WorldOrigin + WorldDir * 100000.f, ECC_WorldStatic))
+	{
+		return;
+	}
+
+	FVector DesiredLoc = GroundHit.ImpactPoint;
+
+	// ② 找最近未占用 Socket
+	float BestDistSqr = SnapInDist * SnapInDist;
+	AOrionStructureFoundation* BestFoundation = nullptr;
+	int32 BestIdx = INDEX_NONE;
+	FVector BestSocketLoc;
+
+	for (TActorIterator<AOrionStructureFoundation> It(GetWorld()); It; ++It)
+	{
+		AOrionStructureFoundation* F = *It;
+		for (int32 i = 0; i < F->FoundationSockets.Num(); ++i)
+		{
+			const auto& S = F->FoundationSockets[i];
+			if (S.bIsOccupied)
+			{
+				continue;
+			}
+			const float DistSqr = FVector::DistSquared(DesiredLoc, S.SocketLocation);
+			if (DistSqr < BestDistSqr)
+			{
+				BestDistSqr = DistSqr;
+				BestFoundation = F;
+				BestIdx = i;
+				BestSocketLoc = S.SocketLocation;
+			}
+		}
+	}
+
+	// ③ 进入吸附
+	if (BestFoundation)
+	{
+		bSnapped = true;
+		SnappedTarget = BestFoundation;
+		SnappedSocketIdx = BestIdx;
+
+		PreviewFoundation->SetActorLocation(BestSocketLoc);
+		PreviewFoundation->SetActorRotation(
+			BestFoundation->FoundationSockets[BestIdx].SocketRotation);
+	}
+	else
+	{
+		// ④ 检查是否需要脱离
+		if (bSnapped)
+		{
+			const float DistOut = FVector::Dist(DesiredLoc,
+			                                    SnappedTarget->FoundationSockets[SnappedSocketIdx].SocketLocation);
+			if (DistOut > SnapOutDist)
+			{
+				// 彻底脱离
+				bSnapped = false;
+				SnappedTarget = nullptr;
+				SnappedSocketIdx = INDEX_NONE;
+			}
+		}
+		// 若没吸附或已脱离，正常跟随鼠标
+		if (!bSnapped)
+		{
+			PreviewFoundation->SetActorLocation(DesiredLoc);
+		}
+	}
+}
+
+void AOrionPlayerController::OnKey4Pressed()
+{
+	UE_LOG(LogTemp, Log, TEXT("Key 4 Pressed"));
+
+	if (CurrentInputMode != EOrionInputMode::Building || !FoundationBP)
+	{
+		return;
+	}
+
+	if (!bPlacingFoundation) // 开始放置
+	{
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		PreviewFoundation = GetWorld()->SpawnActor<AOrionStructureFoundation>(
+			FoundationBP, FVector::ZeroVector, FRotator::ZeroRotator, P);
+
+		if (PreviewFoundation)
+		{
+			PreviewFoundation->SetActorEnableCollision(false); // 预览阶段无碰撞
+			bPlacingFoundation = true;
+		}
+	}
+	else // 取消放置
+	{
+		if (PreviewFoundation)
+		{
+			PreviewFoundation->Destroy();
+		}
+		PreviewFoundation = nullptr;
+		bPlacingFoundation = false;
+	}
+}
+
+void AOrionPlayerController::OnKey5Pressed()
+{
+	OnConfirmPlace();
+}
+
+
+void AOrionPlayerController::OnConfirmPlace()
+{
+	if (!bPlacingFoundation || !PreviewFoundation)
+	{
+		return;
+	}
+
+	if (bSnapped && SnappedTarget)
+	{
+		// 通过目标地基的接口正式生成并占用 Socket
+		FRotator ZeroOffset;
+		SnappedTarget->PlaceFoundationStructure(SnappedSocketIdx, ZeroOffset);
+		PreviewFoundation->Destroy(); // 预览对象不再需要
+	}
+	else
+	{
+		// 无吸附时可选择禁止放置或直接生成孤立地基
+		UE_LOG(LogTemp, Warning, TEXT("必须吸附到可用 Socket 才能放置"));
+		return;
+	}
+
+	// 复位状态
+	bPlacingFoundation = bSnapped = false;
+	SnappedTarget = nullptr;
+	PreviewFoundation = nullptr;
+}
+
+
+void AOrionPlayerController::OnBPressed()
+{
+	UE_LOG(LogTemp, Log, TEXT("B Pressed"));
+
+	if (CurrentInputMode != EOrionInputMode::Building)
+	{
+		CurrentInputMode = EOrionInputMode::Building;
+		OnToggleBuildingMode.ExecuteIfBound(true);
+		if (StructureSelected)
+		{
+			StructureSelected = nullptr;
+		}
+	}
+	else
+	{
+		CurrentInputMode = EOrionInputMode::Default;
+		OnToggleBuildingMode.ExecuteIfBound(false);
+	}
 }
 
 void AOrionPlayerController::OnLeftMouseDown()
@@ -223,14 +395,27 @@ void AOrionPlayerController::OnLeftMouseUp()
 
 	bIsSelecting = false;
 
-	// No dragged discovered: single selection.
-	if (!bHasDragged)
+	if (CurrentInputMode == EOrionInputMode::Default)
 	{
-		SingleSelectionUnderCursor();
+		if (!bHasDragged)
+		{
+			SingleSelectionUnderCursor();
+		}
+		else
+		{
+			BoxSelectionUnderCursor(InitialClickPos, CurrentMousePos);
+		}
 	}
-	else
+	else if (CurrentInputMode == EOrionInputMode::Building)
 	{
-		BoxSelectionUnderCursor(InitialClickPos, CurrentMousePos);
+		if (!bHasDragged)
+		{
+			SingleSelectionUnderCursor();
+		}
+		else
+		{
+			BoxSelectionUnderCursor(InitialClickPos, CurrentMousePos);
+		}
 	}
 }
 
@@ -256,6 +441,13 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 		{
 			ClickedOnOrionActor = ClickedOrionActor;
 			OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
+		}
+
+		if (AOrionStructure* Structure = Cast<AOrionStructure>(HitActor))
+		{
+			StructureSelected = Structure;
+
+			return;
 		}
 
 
@@ -765,7 +957,8 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 	{
 		if (!OrionCharaSelection.empty() && OrionCharaSelection.size() == 1)
 		{
-			FString ActionName = FString::Printf(TEXT("MoveToLocation%s"), *CachedActionObjects.front()->GetName());
+			FString ActionName = FString::Printf(
+				TEXT("InteractWithInventory%s"), *CachedActionObjects.front()->GetName());
 			OrionCharaSelection.front()->CharacterActionQueue.Actions.push_back(Action(
 				ActionName,
 				[charPtr = OrionCharaSelection.front(), targetActor = CachedActionObjects.front()](

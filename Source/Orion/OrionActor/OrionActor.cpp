@@ -2,7 +2,7 @@
 
 
 #include "OrionActor.h"
-#include "OrionComponents/OrionInventoryComponent.h"
+#include "Orion/OrionComponents/OrionInventoryComponent.h"
 
 AOrionActor::AOrionActor()
 {

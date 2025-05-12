@@ -1,7 +1,7 @@
 ﻿// OrionChara.cpp
 
 #include "OrionChara.h"
-#include "OrionAIController.h"
+#include "Orion/OrionAIController/OrionAIController.h"
 #include "AIController.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "NavigationSystem.h"
@@ -14,7 +14,7 @@
 #include "Perception/AISense_Sight.h"
 
 #include "DrawDebugHelpers.h"
-#include "OrionHUD/OrionUserWidgetCharaInfo.h"
+#include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -26,8 +26,8 @@
 //#include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include <Components/SphereComponent.h>
-#include "Kismet/GameplayStatics.h"
-#include "OrionActor/OrionActorOre.h"
+//#include "Kismet/GameplayStatics.h"
+#include "Orion/OrionActor/OrionActorOre.h"
 
 /*
 #include "EngineUtils.h"
@@ -66,52 +66,6 @@ void AOrionChara::BeginPlay()
 
 	AIController = Cast<AOrionAIController>(GetController());
 
-	/*
-	if (AIController)
-	{
-		UE_LOG(LogTemp, Log, TEXT("OrionChara is now controlled by OrionAIController"));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("OrionChara is not controlled by OrionAIController"));
-
-		if (AIControllerClass)
-		{
-			UE_LOG(LogTemp, Log, TEXT("AIControllerClass is set to: %s"), *AIControllerClass->GetName());
-
-			if (UWorld* World = GetWorld())
-			{
-				FActorSpawnParameters SpawnParams;
-				SpawnParams.Instigator = GetInstigator();
-				SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-				UE_LOG(LogTemp, Log, TEXT("Attempting to spawn AIController of class: %s"),
-				       *AIControllerClass->GetName());
-
-				AIController = World->SpawnActor<AOrionAIController>(AIControllerClass, SpawnParams);
-				if (AIController)
-				{
-					AIController->Possess(this);
-					UE_LOG(LogTemp, Log, TEXT("OrionAIController has been spawned and possessed the OrionChara."));
-				}
-				else
-				{
-					UE_LOG(LogTemp, Error, TEXT("Failed to spawn OrionAIController. Skipping related logic."));
-				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("World context is invalid. Skipping related logic."));
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error,
-			       TEXT("AIControllerClass is not set. Please assign it in the constructor or editor."));
-		}
-	}
-	*/
-
 	InitOrionCharaMovement();
 
 	CurrHealth = MaxHealth;
@@ -130,9 +84,9 @@ void AOrionChara::Tick(float DeltaTime)
 	}
 
 	/* Physics Handle - See Movement Module */
-	RegisterCharaRagdoll(DeltaTime);
+	// RegisterCharaRagdoll(DeltaTime);
 
-	ForceDetectionOnVelocityChange();
+	// ForceDetectionOnVelocityChange();
 
 	/* AI Controlling */
 
@@ -246,8 +200,6 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 
 	OnCharaActionChange.Broadcast(Prev, Curr);
 
-	UE_LOG(LogTemp, Log, TEXT("000000000"));
-
 	if (Prev.Contains(TEXT("InteractWithActor")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
 		if (IsInteractWithActor)
@@ -300,13 +252,18 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 
 	else if (Prev.Contains(TEXT("CollectingCargo")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
-		MoveToLocationStop();
+		CollectingCargoStop();
 	}
 	else if (Prev.Contains(TEXT("CollectingCargo")) && Curr.IsEmpty())
 	{
-		MoveToLocationStop();
+		CollectingCargoStop();
 	}
 	else if (Prev.Contains(TEXT("CollectingCargo")))
+	{
+		CollectingCargoStop();
+	}
+
+	else if (Prev.Contains(TEXT("InteractWithInventory")))
 	{
 		MoveToLocationStop();
 	}
@@ -411,8 +368,7 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 		return true;
 	}
 
-	// 2) 先把自身已有的石料送一趟（只做一次）
-	if (!bSelfDeliveryDone)
+	if (this->InventoryComp->GetItemQuantity(StoneItemId) > 0)
 	{
 		int32 Have = InventoryComp
 			             ? InventoryComp->GetItemQuantity(StoneItemId)
@@ -477,32 +433,34 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 
 void AOrionChara::CollectingCargoStop()
 {
-	if (bIsTrading)
+	// 1) 停止任何挂起的拾取/放下动画回调
+	if (GetWorld())
 	{
-		// 停止任何挂起的拾取/放下动画回调
 		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Pickup);
 		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Dropoff);
-		// 重置TradingCargo状态机
-		bIsTrading = false;
-		bPickupAnimPlaying = false;
-		bDropoffAnimPlaying = false;
-		TradeSegments.Empty();
-		CurrentSegIndex = 0;
-		TradeStep = ETradeStep::ToSource;
 	}
 
-	// 2) 停止导航
-	MoveToLocationStop();
+	// 2) 重置 TradingCargo 状态机
+	bIsTrading = false;
+	bPickupAnimPlaying = false;
+	bDropoffAnimPlaying = false;
+	TradeSegments.Empty();
+	CurrentSegIndex = 0;
+	TradeStep = ETradeStep::ToSource;
 
-	// 3) 清理 CollectingCargo 自身状态
-	bSelfDeliveryDone = false;
+	// 3) 重置“先送自身库存”标记
+	//bSelfDeliveryDone = false;
+
+	// 4) 停止导航并清空路径
+	MoveToLocationStop(); // 内部会清空 NavPathPoints 和 CurrentNavPointIndex
+
+	// 5) 清理 CollectingCargo 自身状态
 	bIsCollectingCargo = false;
 	AvailableCargoSources.Empty();
 	CurrentCargoIndex = 0;
 	CollectStep = ECollectStep::ToSource;
 	CollectSource.Reset();
 }
-
 
 /* Deprecated MoveToLocation */
 //bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
@@ -1480,9 +1438,180 @@ void AOrionChara::InteractWithActorStop()
 	InteractType = EInteractCategory::Unavailable;
 }
 
+//bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
+//{
+//	// 1) 初始化
+//	if (!bIsTrading)
+//	{
+//		TradeSegments.Empty();
+//		CurrentSegIndex = 0;
+//		TradeStep = ETradeStep::ToSource;
+//		bIsTrading = true;
+//		bPickupAnimPlaying = false;
+//		bDropoffAnimPlaying = false;
+//
+//		// 拆环：直接取所有 keys
+//		TArray<AActor*> Nodes;
+//		TradeRoute.GetKeys(Nodes);
+//		if (Nodes.Num() < 2)
+//		{
+//			bIsTrading = false;
+//			return true;
+//		}
+//
+//		for (int32 i = 0; i < Nodes.Num(); ++i)
+//		{
+//			AActor* Source = Nodes[i];
+//			AActor* Destination = Nodes[(i + 1) % Nodes.Num()];
+//			for (auto& CargoMap : TradeRoute[Source])
+//			{
+//				FTradeSeg TradeSegment;
+//				TradeSegment.Source = Source;
+//				TradeSegment.Destination = Destination;
+//				TradeSegment.ItemId = CargoMap.Key;
+//				TradeSegment.Quantity = CargoMap.Value;
+//				TradeSegment.Moved = 0;
+//				TradeSegments.Add(TradeSegment);
+//			}
+//		}
+//	}
+//
+//	// 2) 全部段跑完?
+//	if (CurrentSegIndex >= TradeSegments.Num())
+//	{
+//		bIsTrading = false;
+//		return true;
+//	}
+//
+//	FTradeSeg& TradeSegment = TradeSegments[CurrentSegIndex];
+//	if (!IsValid(TradeSegment.Source) || !IsValid(TradeSegment.Destination))
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("TradingCargo: invalid actor, abort"));
+//		bIsTrading = false;
+//		return true;
+//	}
+//
+//	// 3) 判定是否到达当前节点
+//	USphereComponent* Sphere = (TradeStep == ETradeStep::ToDest)
+//		                           ? TradeSegment.Destination->FindComponentByClass<USphereComponent>()
+//		                           : TradeSegment.Source->FindComponentByClass<USphereComponent>();
+//
+//	bool bAtNode = Sphere && Sphere->IsOverlappingActor(this);
+//
+//
+//	switch (TradeStep)
+//	{
+//	case ETradeStep::ToSource:
+//		if (bAtNode)
+//		{
+//			MoveToLocationStop();
+//
+//			TradeStep = ETradeStep::Pickup;
+//			if (AIController)
+//			{
+//				AIController->StopMovement();
+//			}
+//		}
+//		else
+//		{
+//			MoveToLocation(TradeSegment.Source->GetActorLocation());
+//		}
+//		return false;
+//
+//	case ETradeStep::Pickup:
+//		{
+//			if (!bPickupAnimPlaying)
+//			{
+//				bPickupAnimPlaying = true;
+//
+//				// —— 把物品从 Source 拿到角色自己的 InventoryComp —— 
+//				if (auto* SourceInventory = TradeSegment.Source->FindComponentByClass<UOrionInventoryComponent>())
+//				{
+//					int32 Available = SourceInventory->GetItemQuantity(TradeSegment.ItemId);
+//					int32 ToTake = FMath::Min(Available, TradeSegment.Quantity);
+//
+//					if (ToTake > 0 && InventoryComp)
+//					{
+//						SourceInventory->ModifyItemQuantity(TradeSegment.ItemId, -ToTake);
+//						InventoryComp->ModifyItemQuantity(TradeSegment.ItemId, +ToTake);
+//						TradeSegment.Moved = ToTake;
+//					}
+//					else
+//					{
+//						UE_LOG(LogTemp, Warning, TEXT("TradingCargo: nothing to pickup"));
+//						bIsTrading = false;
+//						return true;
+//					}
+//				}
+//
+//				// 播放拾取蒙太奇
+//				if (PickupMontage)
+//				{
+//					float Rate = PickupMontage->GetPlayLength() / PickupDuration;
+//					GetMesh()->GetAnimInstance()->Montage_Play(PickupMontage, Rate);
+//				}
+//				GetWorld()->GetTimerManager().SetTimer(
+//					TimerHandle_Pickup,
+//					this, &AOrionChara::OnPickupAnimFinished,
+//					PickupDuration, false
+//				);
+//			}
+//			return false;
+//		}
+//
+//	case ETradeStep::ToDest:
+//		if (bAtNode)
+//		{
+//			MoveToLocationStop();
+//
+//			TradeStep = ETradeStep::Dropoff;
+//			if (AIController)
+//			{
+//				AIController->StopMovement();
+//			}
+//		}
+//		else
+//		{
+//			MoveToLocation(TradeSegment.Destination->GetActorLocation());
+//		}
+//		return false;
+//
+//	case ETradeStep::Dropoff:
+//		{
+//			if (!bDropoffAnimPlaying)
+//			{
+//				bDropoffAnimPlaying = true;
+//
+//				// —— 把物品从角色背包放到 Destination —— 
+//				if (auto* InvDst = TradeSegment.Destination->FindComponentByClass<UOrionInventoryComponent>())
+//				{
+//					InvDst->ModifyItemQuantity(TradeSegment.ItemId, TradeSegment.Moved);
+//				}
+//
+//				// 播放放下蒙太奇
+//				if (DropoffMontage)
+//				{
+//					float Rate = DropoffMontage->GetPlayLength() / DropoffDuration;
+//					GetMesh()->GetAnimInstance()->Montage_Play(DropoffMontage, Rate);
+//				}
+//				GetWorld()->GetTimerManager().SetTimer(
+//					TimerHandle_Dropoff,
+//					this, &AOrionChara::OnDropoffAnimFinished,
+//					DropoffDuration, false
+//				);
+//			}
+//			return false;
+//		}
+//	}
+//
+//	return true;
+//}
+
 bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
 {
-	// 1) 初始化
+	/*--------------------------------------------------------------------
+	 * 0) 进入状态机时的“一次性”初始化
+	 *------------------------------------------------------------------*/
 	if (!bIsTrading)
 	{
 		TradeSegments.Empty();
@@ -1492,7 +1621,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		bPickupAnimPlaying = false;
 		bDropoffAnimPlaying = false;
 
-		// 拆环：直接取所有 keys
+		// 生成 TradeSegments
 		TArray<AActor*> Nodes;
 		TradeRoute.GetKeys(Nodes);
 		if (Nodes.Num() < 2)
@@ -1505,50 +1634,70 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		{
 			AActor* Source = Nodes[i];
 			AActor* Destination = Nodes[(i + 1) % Nodes.Num()];
+
 			for (auto& CargoMap : TradeRoute[Source])
 			{
-				FTradeSeg TradeSegment;
-				TradeSegment.Source = Source;
-				TradeSegment.Destination = Destination;
-				TradeSegment.ItemId = CargoMap.Key;
-				TradeSegment.Quantity = CargoMap.Value;
-				TradeSegment.Moved = 0;
-				TradeSegments.Add(TradeSegment);
+				FTradeSeg Seg;
+				Seg.Source = Source;
+				Seg.Destination = Destination;
+				Seg.ItemId = CargoMap.Key;
+				Seg.Quantity = CargoMap.Value;
+				Seg.Moved = 0;
+				TradeSegments.Add(Seg);
 			}
 		}
 	}
 
-	// 2) 全部段跑完?
+	/*--------------------------------------------------------------------
+	 * 1) 所有段都已完成？
+	 *------------------------------------------------------------------*/
 	if (CurrentSegIndex >= TradeSegments.Num())
 	{
 		bIsTrading = false;
 		return true;
 	}
 
-	FTradeSeg& TradeSegment = TradeSegments[CurrentSegIndex];
-	if (!IsValid(TradeSegment.Source) || !IsValid(TradeSegment.Destination))
+	FTradeSeg& Seg = TradeSegments[CurrentSegIndex];
+	if (!IsValid(Seg.Source) || !IsValid(Seg.Destination))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TradingCargo: invalid actor, abort"));
 		bIsTrading = false;
 		return true;
 	}
 
-	// 3) 判定是否到达当前节点
-	USphereComponent* Sphere = (TradeStep == ETradeStep::ToDest)
-		                           ? TradeSegment.Destination->FindComponentByClass<USphereComponent>()
-		                           : TradeSegment.Source->FindComponentByClass<USphereComponent>();
+	/*--------------------------------------------------------------------
+	 * 2) 判断“是否抵达”当前节点
+	 *    —— 角色本身作为 Source/Dest 时，天然视作“已抵达” ——
+	 *------------------------------------------------------------------*/
+	bool bSourceIsSelf = (Seg.Source == this);
+	bool bDestIsSelf = (Seg.Destination == this);
 
-	bool bAtNode = Sphere && Sphere->IsOverlappingActor(this);
+	USphereComponent* Sphere = nullptr;
+	if (TradeStep == ETradeStep::ToDest && !bDestIsSelf)
+	{
+		Sphere = Seg.Destination->FindComponentByClass<USphereComponent>();
+	}
+	else if (TradeStep == ETradeStep::ToSource && !bSourceIsSelf)
+	{
+		Sphere = Seg.Source->FindComponentByClass<USphereComponent>();
+	}
 
-	// UE_LOG(LogTemp, Log, TEXT("Current TradeStep: %s"), *UEnum::GetValueAsString(TradeStep));
+	bool bAtNode = (Sphere && Sphere->IsOverlappingActor(this))
+		|| (TradeStep == ETradeStep::ToSource && bSourceIsSelf)
+		|| (TradeStep == ETradeStep::ToDest && bDestIsSelf);
 
+	/*--------------------------------------------------------------------
+	 * 3) 状态机
+	 *------------------------------------------------------------------*/
 	switch (TradeStep)
 	{
+	/*==============================================================
+	 * → Source
+	 *============================================================*/
 	case ETradeStep::ToSource:
 		if (bAtNode)
 		{
-			MoveToLocationStop();
-
+			MoveToLocationStop(); // 已到达（或本就是自己），停止寻路
 			TradeStep = ETradeStep::Pickup;
 			if (AIController)
 			{
@@ -1557,27 +1706,50 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		}
 		else
 		{
-			MoveToLocation(TradeSegment.Source->GetActorLocation());
+			MoveToLocation(Seg.Source->GetActorLocation());
 		}
 		return false;
 
+	/*==============================================================
+	 *  Pick‑up
+	 *============================================================*/
 	case ETradeStep::Pickup:
 		{
+			/* 如果 Source 就是自己：直接记数量，不放动画，马上进入 ToDest */
+			if (bSourceIsSelf)
+			{
+				// 已经在自己背包里，只需记下实际要搬运的数量
+				if (InventoryComp)
+				{
+					int32 Have = InventoryComp->GetItemQuantity(Seg.ItemId);
+					int32 ToMove = FMath::Min(Have, Seg.Quantity);
+					Seg.Moved = ToMove;
+				}
+
+				// 跳过动画，直接下一步
+				TradeStep = ETradeStep::ToDest;
+				bPickupAnimPlaying = false;
+				return false;
+			}
+
+			// ---------- OLD 旧逻辑 ----------
+			// if (!bPickupAnimPlaying) { … 播放动画并取货 … }
+			// --------------------------------
+
 			if (!bPickupAnimPlaying)
 			{
 				bPickupAnimPlaying = true;
 
-				// —— 把物品从 Source 拿到角色自己的 InventoryComp —— 
-				if (auto* SourceInventory = TradeSegment.Source->FindComponentByClass<UOrionInventoryComponent>())
+				if (auto* SrcInv = Seg.Source->FindComponentByClass<UOrionInventoryComponent>())
 				{
-					int32 Available = SourceInventory->GetItemQuantity(TradeSegment.ItemId);
-					int32 ToTake = FMath::Min(Available, TradeSegment.Quantity);
+					int32 Available = SrcInv->GetItemQuantity(Seg.ItemId);
+					int32 ToTake = FMath::Min(Available, Seg.Quantity);
 
 					if (ToTake > 0 && InventoryComp)
 					{
-						SourceInventory->ModifyItemQuantity(TradeSegment.ItemId, -ToTake);
-						InventoryComp->ModifyItemQuantity(TradeSegment.ItemId, +ToTake);
-						TradeSegment.Moved = ToTake;
+						SrcInv->ModifyItemQuantity(Seg.ItemId, -ToTake);
+						InventoryComp->ModifyItemQuantity(Seg.ItemId, ToTake);
+						Seg.Moved = ToTake;
 					}
 					else
 					{
@@ -1587,7 +1759,6 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 					}
 				}
 
-				// 播放拾取蒙太奇
 				if (PickupMontage)
 				{
 					float Rate = PickupMontage->GetPlayLength() / PickupDuration;
@@ -1596,17 +1767,19 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 				GetWorld()->GetTimerManager().SetTimer(
 					TimerHandle_Pickup,
 					this, &AOrionChara::OnPickupAnimFinished,
-					PickupDuration, false
-				);
+					PickupDuration, false);
 			}
 			return false;
 		}
 
+
+	/*==============================================================
+	 * → Destination
+	 *============================================================*/
 	case ETradeStep::ToDest:
 		if (bAtNode)
 		{
 			MoveToLocationStop();
-
 			TradeStep = ETradeStep::Dropoff;
 			if (AIController)
 			{
@@ -1615,24 +1788,43 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("TradeSegment Destination: %s"), *TradeSegment.Destination->GetName());
-			MoveToLocation(TradeSegment.Destination->GetActorLocation());
+			MoveToLocation(Seg.Destination->GetActorLocation());
 		}
 		return false;
 
+	/*==============================================================
+	 *  Drop‑off
+	 *============================================================*/
 	case ETradeStep::Dropoff:
 		{
+			/* 如果 Destination 是自己：直接扣背包，不放动画，马上下一段 */
+			if (bDestIsSelf)
+			{
+				if (InventoryComp)
+				{
+					InventoryComp->ModifyItemQuantity(Seg.ItemId, -Seg.Moved);
+				}
+
+				CurrentSegIndex++;
+				TradeStep = ETradeStep::ToSource;
+				bDropoffAnimPlaying = false;
+				return false;
+			}
+
 			if (!bDropoffAnimPlaying)
 			{
 				bDropoffAnimPlaying = true;
 
-				// —— 把物品从角色背包放到 Destination —— 
-				if (auto* InvDst = TradeSegment.Destination->FindComponentByClass<UOrionInventoryComponent>())
+				if (auto* DstInv = Seg.Destination->FindComponentByClass<UOrionInventoryComponent>())
 				{
-					InvDst->ModifyItemQuantity(TradeSegment.ItemId, TradeSegment.Moved);
+					DstInv->ModifyItemQuantity(Seg.ItemId, Seg.Moved);
 				}
 
-				// 播放放下蒙太奇
+				if (InventoryComp)
+				{
+					InventoryComp->ModifyItemQuantity(Seg.ItemId, -Seg.Moved);
+				}
+
 				if (DropoffMontage)
 				{
 					float Rate = DropoffMontage->GetPlayLength() / DropoffDuration;
@@ -1641,14 +1833,13 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 				GetWorld()->GetTimerManager().SetTimer(
 					TimerHandle_Dropoff,
 					this, &AOrionChara::OnDropoffAnimFinished,
-					DropoffDuration, false
-				);
+					DropoffDuration, false);
 			}
 			return false;
 		}
 	}
 
-	return true;
+	return true; // 不会走到这里
 }
 
 void AOrionChara::OnPickupAnimFinished()
@@ -1956,7 +2147,7 @@ bool AOrionChara::InteractWithInventory(AOrionActor* OrionActor)
 
 	if (!bIsOrionAIControlled)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithInventory: not AI controlled"));
+		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithInventory: not controlled"));
 
 		MoveToLocationStop();
 
@@ -1976,8 +2167,6 @@ bool AOrionChara::InteractWithInventory(AOrionActor* OrionActor)
 
 		return true;
 	}
-
-
 	MoveToLocation(OrionActor->GetActorLocation());
 
 	return false;
