@@ -64,8 +64,6 @@ void AOrionCameraPawn::BeginPlay()
 		PC->bEnableClickEvents = true;
 		PC->bEnableMouseOverEvents = true;
 
-
-		// --- 新增：设置 InputMode 为 GameAndUI，同时不锁定鼠标到视口 ---
 		FInputModeGameAndUI InputMode;
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		PC->SetInputMode(InputMode);
@@ -203,7 +201,7 @@ void AOrionCameraPawn::ToggleFollow()
 	// 尚未锁定：检查当前是否只有 1 个选中的角色
 	if (AOrionPlayerController* PC = Cast<AOrionPlayerController>(GetController()))
 	{
-		if (PC->OrionCharaSelection.size() == 1)
+		if (PC->OrionCharaSelection.Num() == 1)
 		{
 			FollowTarget = PC->OrionCharaSelection[0];
 			if (IsValid(FollowTarget))
@@ -211,7 +209,7 @@ void AOrionCameraPawn::ToggleFollow()
 				bIsFollowing = true;
 			}
 		}
-		else if (PC->OrionPawnSelection.size() == 1)
+		else if (PC->OrionPawnSelection.Num() == 1)
 		{
 			FollowTarget = PC->OrionPawnSelection[0];
 			if (IsValid(FollowTarget))

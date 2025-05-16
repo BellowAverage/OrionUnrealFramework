@@ -39,7 +39,7 @@ public:
 		float MouseX,
 		float MouseY,
 		const FHitResult& HitResult = FHitResult(),
-		const std::vector<std::string>& ArrOptionNames = {}
+		const TArray<FString>& ArrOptionNames = TArray<FString>()
 	);
 
 	/* Chara Info Dashboard */

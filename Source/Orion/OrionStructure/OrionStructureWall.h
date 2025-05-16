@@ -3,35 +3,30 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "OrionStructure.h"
-#include "OrionStructureFoundation.generated.h"
+#include "Orion/OrionStructure/OrionStructure.h"
+#include "OrionStructureWall.generated.h"
 
 /**
  * 
  */
-
-
-UCLASS()
-class ORION_API AOrionStructureFoundation : public AOrionStructure
+UCLASS(Blueprintable)
+class ORION_API AOrionStructureWall : public AOrionStructure
 {
 	GENERATED_BODY()
 
 public:
-	AOrionStructureFoundation();
-
 	virtual void BeginPlay() override;
 
 	/* Sockets */
-	TArray<FFoundationSocket> FoundationSockets;
 
 	TArray<FWallSocket> WallSockets;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	TSubclassOf<AOrionStructureFoundation> BlueprintFoundationInstance;
+	TSubclassOf<AOrionStructureWall> BlueprintWallInstance;
 
 	UFUNCTION(BlueprintCallable, Category = "Basics")
 	EOrionStructure GetOrionStructureCategory()
 	{
-		return EOrionStructure::Foundation;
+		return EOrionStructure::Wall;
 	}
 };

@@ -309,14 +309,14 @@ void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 	}
 }
 
-void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCharasRequested, AActor* TargetActor,
+void AOrionGameMode::ApproveCharaAttackOnActor(TArray<AOrionChara*> OrionCharasRequested, AActor* TargetActor,
                                                FVector HitOffset, CommandType inCommandType)
 {
 	if (TargetActor)
 	{
 		if (inCommandType == CommandType::Force)
 		{
-			if (!OrionCharasRequested.empty())
+			if (!OrionCharasRequested.IsEmpty())
 			{
 				for (auto& each : OrionCharasRequested)
 				{
@@ -372,7 +372,7 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
 		}
 		else if (inCommandType == CommandType::Append)
 		{
-			if (!OrionCharasRequested.empty())
+			if (!OrionCharasRequested.IsEmpty())
 			{
 				for (auto& each : OrionCharasRequested)
 				{
@@ -392,12 +392,12 @@ void AOrionGameMode::ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCh
 	}
 }
 
-bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionCharasRequested, FVector TargetLocation,
+bool AOrionGameMode::ApproveCharaMoveToLocation(TArray<AOrionChara*> OrionCharasRequested, FVector TargetLocation,
                                                 CommandType inCommandType)
 {
 	if (inCommandType == CommandType::Force)
 	{
-		if (!OrionCharasRequested.empty())
+		if (!OrionCharasRequested.IsEmpty())
 		{
 			for (auto& each : OrionCharasRequested)
 			{
@@ -439,7 +439,7 @@ bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionC
 	}
 	if (inCommandType == CommandType::Append)
 	{
-		if (!OrionCharasRequested.empty())
+		if (!OrionCharasRequested.IsEmpty())
 		{
 			for (auto& each : OrionCharasRequested)
 			{
@@ -458,12 +458,12 @@ bool AOrionGameMode::ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionC
 	return false;
 }
 
-bool AOrionGameMode::ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*> OrionPawnsRequested,
+bool AOrionGameMode::ApprovePawnMoveToLocation(TArray<AWheeledVehiclePawn*> OrionPawnsRequested,
                                                FVector TargetLocation, CommandType inCommandType)
 {
 	if (inCommandType == CommandType::Force)
 	{
-		if (!OrionPawnsRequested.empty())
+		if (!OrionPawnsRequested.IsEmpty())
 		{
 			for (auto& each : OrionPawnsRequested)
 			{
@@ -476,7 +476,7 @@ bool AOrionGameMode::ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*>
 	}
 	if (inCommandType == CommandType::Append)
 	{
-		if (!OrionPawnsRequested.empty())
+		if (!OrionPawnsRequested.IsEmpty())
 		{
 			for (auto& each : OrionPawnsRequested)
 			{
@@ -488,7 +488,7 @@ bool AOrionGameMode::ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*>
 	return false;
 }
 
-void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor,
+void AOrionGameMode::ApproveInteractWithActor(TArray<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor,
                                               CommandType inCommandType)
 {
 	if (inCommandType == CommandType::Force)
@@ -539,7 +539,7 @@ void AOrionGameMode::ApproveInteractWithActor(std::vector<AOrionChara*> OrionCha
 	}
 }
 
-void AOrionGameMode::ApproveCollectingCargo(std::vector<AOrionChara*> OrionCharasRequested,
+void AOrionGameMode::ApproveCollectingCargo(TArray<AOrionChara*> OrionCharasRequested,
                                             AOrionActorStorage* TargetActor, CommandType inCommandType)
 {
 	if (inCommandType == CommandType::Append)
@@ -564,7 +564,7 @@ void AOrionGameMode::ApproveCollectingCargo(std::vector<AOrionChara*> OrionChara
 	}
 }
 
-void AOrionGameMode::ApproveInteractWithProduction(std::vector<AOrionChara*> OrionCharasRequested,
+void AOrionGameMode::ApproveInteractWithProduction(TArray<AOrionChara*> OrionCharasRequested,
                                                    AOrionActorProduction* TargetActor, CommandType inCommandType)
 {
 	if (inCommandType == CommandType::Append)

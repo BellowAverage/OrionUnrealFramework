@@ -2,6 +2,9 @@
 
 
 #include "OrionStructureFoundation.h"
+#include "OrionStructureWall.h"
+//#include "EngineUtils.h"
+//#include "Kismet/KismetSystemLibrary.h"
 
 AOrionStructureFoundation::AOrionStructureFoundation()
 {
@@ -32,60 +35,48 @@ void AOrionStructureFoundation::BeginPlay()
 	{
 		const FVector SocketLocation = StructureMesh->GetComponentLocation() + Offsets[i];
 		const FRotator SocketRotation = StructureMesh->GetComponentRotation();
-		FoundationSockets.Add(FFoundationSocket(this, false, SocketLocation, SocketRotation));
+		FoundationSockets.Add(FFoundationSocket(false, SocketLocation, SocketRotation));
 	}
-}
 
-void AOrionStructureFoundation::PlaceFoundationStructure(int32 InSocketIndex,
-                                                         FRotator& InRotationOffset)
-{
-	if (!StructureMesh)
+
+	static const TArray<FVector> WallOffsetsLocation = {
+		FVector(StructureSizeX, 0.0f, StructureSizeZ + 150.f),
+		FVector(0, StructureSizeY, StructureSizeZ + 150.f),
+		FVector(-StructureSizeX, 0.0f, StructureSizeZ + 150.f),
+
+		FVector(0, -StructureSizeY, StructureSizeZ + 150.f),
+	};
+
+	static const TArray<FRotator> WallOffsetsRotation = {
+		FRotator(0.f, 0.f, 0.f),
+		FRotator(0.f, 90.f, 0.f),
+		FRotator(0.f, 180.f, 0.f),
+		FRotator(0.f, 270.f, 0.f),
+	};
+
+	for (int32 i = 0; i < WallOffsetsLocation.Num(); ++i)
 	{
-		UE_LOG(LogTemp, Error, TEXT("StructureMesh component not found!"));
-		return;
+		const FVector SocketLocation = StructureMesh->GetComponentLocation() + WallOffsetsLocation[i];
+		const FRotator SocketRotation = StructureMesh->GetComponentRotation() + WallOffsetsRotation[i];
+		WallSockets.Add(FWallSocket(false, SocketLocation, SocketRotation));
 	}
 
-	if (InSocketIndex < 0 || InSocketIndex >= FoundationSockets.Num())
+	/* ① 自身 socket —— 视为“占用” */
+	RegisterSocket(StructureMesh->GetComponentLocation(),
+	               StructureMesh->GetComponentRotation(),
+	               EOrionStructure::Foundation, /*bOccupied=*/true, GetWorld(), this);
+
+	/* ② 地基‑对‑地基接口 —— 视为“空闲” */
+	for (const auto& S : FoundationSockets)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Invalid socket index or mesh!"));
-		return;
+		RegisterSocket(S.SocketLocation, S.SocketRotation,
+		               EOrionStructure::Foundation, /*bOccupied=*/false, GetWorld(), this);
 	}
 
-	if (!BlueprintFoundationInstance)
+	/* ③ 地基‑对‑墙接口 —— 视为“空闲”（⚠️ 新增） */
+	for (const auto& S : WallSockets)
 	{
-		UE_LOG(LogTemp, Error, TEXT("BlueprintFoundationInstance is null!"));
-		return;
+		RegisterSocket(S.SocketLocation, S.SocketRotation,
+		               EOrionStructure::Wall, /*bOccupied=*/false, GetWorld(), this);
 	}
-
-	FFoundationSocket& ModifyingSocket = FoundationSockets[InSocketIndex];
-	if (ModifyingSocket.bIsOccupied)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Socket already occupied"));
-		return;
-	}
-
-	const FVector SpawnLocation = ModifyingSocket.SocketLocation;
-	const FRotator SpawnRotation = ModifyingSocket.SocketRotation + InRotationOffset;
-
-	FActorSpawnParameters Params;
-	Params.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-
-	AOrionStructureFoundation* NewFoundation =
-		GetWorld()->SpawnActor<AOrionStructureFoundation>(
-			BlueprintFoundationInstance, SpawnLocation, SpawnRotation, Params);
-
-	if (!NewFoundation)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to spawn new foundation"));
-		return;
-	}
-
-	const int32 OppositeIdx = (InSocketIndex + 2) % 4;
-
-	ModifyingSocket.bIsOccupied = true;
-	ModifyingSocket.SocketStructurePtr = NewFoundation;
-
-	NewFoundation->FoundationSockets[OppositeIdx].bIsOccupied = true;
-	NewFoundation->FoundationSockets[OppositeIdx].SocketStructurePtr = this;
 }

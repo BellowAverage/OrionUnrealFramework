@@ -28,25 +28,25 @@ public:
 
 	/* Gameplay Requests Handle */
 	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	void ApproveCharaAttackOnActor(std::vector<AOrionChara*> OrionCharasRequested, AActor* TargetActor,
+	void ApproveCharaAttackOnActor(TArray<AOrionChara*> OrionCharasRequested, AActor* TargetActor,
 	                               FVector HitOffset, CommandType inCommandType);
 
 	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	bool ApproveCharaMoveToLocation(std::vector<AOrionChara*> OrionCharasRequested, FVector TargetLocation,
+	bool ApproveCharaMoveToLocation(TArray<AOrionChara*> OrionCharasRequested, FVector TargetLocation,
 	                                CommandType inCommandType);
 
 	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	bool ApprovePawnMoveToLocation(std::vector<AWheeledVehiclePawn*> OrionPawnsRequested, FVector TargetLocation,
+	bool ApprovePawnMoveToLocation(TArray<AWheeledVehiclePawn*> OrionPawnsRequested, FVector TargetLocation,
 	                               CommandType inCommandType);
 
 	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	void ApproveInteractWithActor(std::vector<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor,
+	void ApproveInteractWithActor(TArray<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor,
 	                              CommandType inCommandType);
 
-	void ApproveCollectingCargo(std::vector<AOrionChara*> OrionCharasRequested, AOrionActorStorage* TargetActor,
+	void ApproveCollectingCargo(TArray<AOrionChara*> OrionCharasRequested, AOrionActorStorage* TargetActor,
 	                            CommandType inCommandType);
 
-	void ApproveInteractWithProduction(std::vector<AOrionChara*> OrionCharasRequested,
+	void ApproveInteractWithProduction(TArray<AOrionChara*> OrionCharasRequested,
 	                                   AOrionActorProduction* TargetActor,
 	                                   CommandType inCommandType);
 

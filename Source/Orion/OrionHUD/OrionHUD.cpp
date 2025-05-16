@@ -57,7 +57,7 @@ void AOrionHUD::Tick(float DeltaTime)
 }
 
 void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult,
-                                        const std::vector<std::string>& ArrOptionNames)
+                                        const TArray<FString>& ArrOptionNames)
 {
 	if (ArrOperationAvailable.Num() > 0)
 	{
@@ -68,7 +68,7 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitRe
 
 	for (auto& each : ArrOptionNames)
 	{
-		FString OptionName = FString(UTF8_TO_TCHAR(each.c_str()));
+		FString OptionName = each;
 		ArrOperationAvailable.Add(FName(*OptionName));
 	}
 
@@ -77,26 +77,6 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitRe
 		UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu);
 		if (PlayerOperationMenu)
 		{
-			/*
-			UFunction* SetFunction = PlayerOperationMenu->FindFunction(FName(TEXT("SetArrOperationAvailable")));
-			if (SetFunction)
-			{
-			    struct
-			    {
-			        TArray<FName> ArrOperationAvailable;
-			        FHitResult InHitResult;
-					AOrionChara* InTarget;
-					AOrionActor* InTargetActor;
-
-			    } Params;
-			    Params.ArrOperationAvailable = NamesToPass;
-			    Params.InHitResult = HitResult;
-				Params.InTarget = InTarget;
-				Params.InTargetActor = InTargetActor;
-			    PlayerOperationMenu->ProcessEvent(SetFunction, &Params);
-			}
-			*/
-
 			PlayerOperationSpawnReference = HitResult;
 
 			PlayerOperationMenu->AddToViewport();
@@ -182,7 +162,7 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				CombinedText, // <- 传 FString 而不是 FStringView
+				FStringView(*CombinedText), // <- 传 FString 而不是 FStringView
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -233,7 +213,7 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			*Line, // <- 这里直接传 FString
+			FStringView(*Line), // <- 这里直接传 FString
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,
