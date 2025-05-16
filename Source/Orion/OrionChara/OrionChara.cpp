@@ -8,8 +8,8 @@
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Animation/AnimInstance.h"
-#include "Navigation/PathFollowingComponent.h"
-#include "GameFramework/CharacterMovementComponent.h"
+//#include "Navigation/PathFollowingComponent.h"
+//#include "GameFramework/CharacterMovementComponent.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
 

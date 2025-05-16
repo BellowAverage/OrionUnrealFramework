@@ -15,6 +15,7 @@
 #include "deque"
 #include "Orion/OrionActor/OrionActorOre.h"
 #include "Orion/OrionActor/OrionActorProduction.h"
+#include "Orion/OrionInterface/OrionInterfaceSelectable.h"
 #include "OrionChara.generated.h"
 
 DECLARE_DELEGATE_OneParam(FOnInteractWithInventory, AOrionActor*);
@@ -105,18 +106,36 @@ enum class ETradeStep : uint8
 };
 
 UCLASS()
-class ORION_API AOrionChara : public ACharacter
+class ORION_API AOrionChara : public ACharacter, public IOrionInterfaceSelectable
 {
 	GENERATED_BODY()
 
 public:
 	AOrionChara();
 
-protected:
 	virtual void BeginPlay() override;
 
-public:
 	virtual void Tick(float DeltaTime) override;
+
+	/* Interface Override */
+
+	virtual ESelectable GetSelectableType() const override
+	{
+		return ESelectable::OrionChara;
+	}
+
+	virtual void OnSelected(APlayerController* PlayerController) override
+	{
+		bIsOrionAIControlled = true;
+	}
+
+	virtual void OnRemoveFromSelection(APlayerController* PlayerController) override
+	{
+		bIsOrionAIControlled = false;
+	}
+
+	/* Other */
+
 
 	bool bIsInteractWithInventory = false;
 

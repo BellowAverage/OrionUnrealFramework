@@ -8,10 +8,14 @@
 #include "WheeledVehiclePawn.h"
 #include "Orion/OrionStructure/OrionStructureFoundation.h"
 #include "Orion/OrionStructure/OrionStructureWall.h"
+
+#include "Orion/OrionCppFunctionLibrary/OrionCppFunctionLibrary.h"
+
 #include "OrionPlayerController.generated.h"
 
 
-DECLARE_DELEGATE_OneParam(FOnOrionActorSelectionChanged, AOrionActor*);
+class AOrionHUD;
+//DECLARE_DELEGATE_OneParam(FOnOrionActorSelectionChanged, AOrionActor*);
 DECLARE_DELEGATE_OneParam(FOnToggleBuildingMode, bool);
 
 UENUM(BlueprintType)
@@ -30,20 +34,6 @@ enum class CommandType : uint8
 	Append UMETA(DisplayName = "Push Action into ActionQueue"),
 };
 
-struct FSnapCandidate
-{
-	AOrionStructureFoundation* Foundation;
-	int32 SocketIdx;
-};
-
-USTRUCT()
-struct FWallSnapCandidate
-{
-	GENERATED_BODY()
-	AActor* Target = nullptr; // 既可能是 Foundation 也可能是 Wall
-	int32 SocketIdx = INDEX_NONE;
-};
-
 UCLASS()
 class ORION_API AOrionPlayerController : public APlayerController
 {
@@ -55,10 +45,16 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
+
 	/* Delegation */
 
-	FOnOrionActorSelectionChanged OnOrionActorSelectionChanged;
+	//FOnOrionActorSelectionChanged OnOrionActorSelectionChanged;
 	FOnToggleBuildingMode OnToggleBuildingMode;
+
+	/* Cached Cast Pointers */
+
+	UPROPERTY()
+	AOrionHUD* OrionHUD = nullptr;
 
 	/* Basic Player Controller Params & Acquisition */
 
@@ -77,8 +73,9 @@ public:
 	AOrionStructure* StructureSelected = nullptr;
 
 	/* 1. Orion Chara Selection List */
-	TSubclassOf<AOrionChara> SubclassOfAOrionChara;
-	TArray<AOrionChara*> OrionCharaSelection;
+	TObservableArray<AOrionChara*> OrionCharaSelection;
+	void OnOrionCharaSelectionChanged(FName OperationName);
+	void EmptyOrionCharaSelection(TObservableArray<AOrionChara*>& OrionCharaSelection);
 
 	UFUNCTION(BlueprintCallable, Category = "OrionChara Selection")
 	TArray<AOrionChara*> GetOrionCharaSelection() const
@@ -89,6 +86,7 @@ public:
 	void SelectAll();
 
 	/* 2. Orion Vehicle Selection List */
+	UPROPERTY()
 	TArray<AWheeledVehiclePawn*> OrionPawnSelection;
 
 
@@ -103,6 +101,7 @@ public:
 	void DetectDraggingControl();
 
 	FTimerHandle DragDetectTimerHandle;
+
 	/* Building */
 
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
@@ -132,8 +131,10 @@ public:
 	bool bStructureSnapped = false;
 
 	template <typename TOrionStructure>
-	void UpdatePlacingStructure(TSubclassOf<TOrionStructure> BPOrionStructure, TOrionStructure*& PreviewStructurePtr);
+	void UpdatePlacingStructure(TSubclassOf<TOrionStructure> BPOrionStructure, TOrionStructure*& PreviewStructure);
 
+	template <typename TOrionStructure>
+	void ConfirmPlaceStructure(TSubclassOf<TOrionStructure> BPOrionStructure, TOrionStructure*& PreviewStructurePtr);
 
 	/* 0. Demolishing Mode */
 
@@ -151,10 +152,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
 	TSubclassOf<AOrionStructureFoundation> FoundationBP;
 
-	void PlacingStructureFoundation();
-
-	void OnFoundationConfirmPlace();
-
 	/* 2. Place Wall Structure */
 	void OnTogglePlacingWall();
 
@@ -163,14 +160,6 @@ public:
 
 	UPROPERTY()
 	AOrionStructureWall* PreviewWall = nullptr;
-
-	void PlacingStructureWall();
-
-	FVector WallSnapLoc;
-	FRotator WallSnapRot;
-	FVector WallSnapScale;
-
-	void OnWallConfirmPlace();
 
 	/* Developer & Debug */
 

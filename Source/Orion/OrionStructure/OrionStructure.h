@@ -113,8 +113,12 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	/* Basics */
 
-	/* ❶ 全局注册函数 —— 所有子类在 BeginPlay 末尾调用 */
+	bool bForceSnapOnGrid = false;
+
+
+	/* 全局注册函数 —— 所有子类在 BeginPlay 末尾调用 */
 	static void RegisterSocket(const FVector& Loc,
 	                           const FRotator& Rot,
 	                           EOrionStructure Kind,
@@ -142,5 +146,5 @@ public:
 	/* ② 查询某个位置是否仍为“未占用” */
 	static bool IsSocketFree(const FVector& Loc, EOrionStructure Kind);
 
-	static inline int32 AliveCount = 0; // 当前关卡内存活的 Structure 数
+	static inline int32 AliveCount = 0;
 };

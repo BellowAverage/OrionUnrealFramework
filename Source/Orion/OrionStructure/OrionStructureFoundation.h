@@ -21,6 +21,10 @@ public:
 
 	virtual void BeginPlay() override;
 
+	/* Basics */
+
+	bool bForceSnapOnGrid = false;
+
 	/* Sockets */
 	TArray<FFoundationSocket> FoundationSockets;
 

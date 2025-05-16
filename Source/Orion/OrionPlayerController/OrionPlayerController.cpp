@@ -16,6 +16,7 @@
 #include "Orion/OrionStructure/OrionStructureFoundation.h"
 #include "EngineUtils.h"
 #include "Orion/OrionActor/OrionActorOre.h"
+#include "Orion/OrionInterface/OrionInterfaceSelectable.h"
 
 
 AOrionPlayerController::AOrionPlayerController()
@@ -50,20 +51,40 @@ void AOrionPlayerController::SetupInputComponent()
 	}
 }
 
-void AOrionPlayerController::OnKey5Pressed()
+void AOrionPlayerController::BeginPlay()
 {
-	UE_LOG(LogTemp, Log, TEXT("Key 5 Pressed"));
-	//OnTogglePlacingWall();
-	TogglePlacingStructure<AOrionStructureWall>(WallBP, PreviewWall);
-}
+	Super::BeginPlay();
 
+	/* Setup Input Mode */
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	SetInputMode(InputMode);
+
+	/* Bind Custom Events */
+
+	OrionCharaSelection.OnArrayChanged.AddUObject(this, &AOrionPlayerController::OnOrionCharaSelectionChanged);
+
+	/* Init Variables */
+
+	OrionHUD = Cast<AOrionHUD>(GetHUD());
+
+	if (OrionHUD == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Cast to OrionHUD failed!"));
+	}
+}
 
 void AOrionPlayerController::OnKey4Pressed()
 {
 	UE_LOG(LogTemp, Log, TEXT("Key 4 Pressed"));
-
-	//OnTogglePlacingFoundation();
 	TogglePlacingStructure<AOrionStructureFoundation>(FoundationBP, PreviewFoundation);
+}
+
+void AOrionPlayerController::OnKey5Pressed()
+{
+	UE_LOG(LogTemp, Log, TEXT("Key 5 Pressed"));
+	TogglePlacingStructure<AOrionStructureWall>(WallBP, PreviewWall);
 }
 
 void AOrionPlayerController::OnKey6Pressed()
@@ -75,14 +96,24 @@ void AOrionPlayerController::OnKey6Pressed()
 	}
 }
 
-void AOrionPlayerController::BeginPlay()
+void AOrionPlayerController::OnBPressed()
 {
-	Super::BeginPlay();
+	UE_LOG(LogTemp, Log, TEXT("B Pressed"));
 
-	FInputModeGameAndUI InputMode;
-	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::LockAlways);
-	InputMode.SetHideCursorDuringCapture(false);
-	SetInputMode(InputMode);
+	if (CurrentInputMode != EOrionInputMode::Building)
+	{
+		CurrentInputMode = EOrionInputMode::Building;
+		OnToggleBuildingMode.ExecuteIfBound(true);
+		if (StructureSelected)
+		{
+			StructureSelected = nullptr;
+		}
+	}
+	else
+	{
+		CurrentInputMode = EOrionInputMode::Default;
+		OnToggleBuildingMode.ExecuteIfBound(false);
+	}
 }
 
 void AOrionPlayerController::Tick(float DeltaTime)
@@ -93,21 +124,23 @@ void AOrionPlayerController::Tick(float DeltaTime)
 
 	DrawOrionActorStatus();
 
-	if (AOrionHUD* CharaHUD = Cast<AOrionHUD>(GetHUD()))
-	{
-		if (OrionCharaSelection.Num() == 1)
-		{
-			CharaHUD->bShowCharaInfoPanel = true;
-			CharaHUD->InfoChara = OrionCharaSelection[0];
-		}
-		else
-		{
-			CharaHUD->bShowCharaInfoPanel = false;
-			CharaHUD->InfoChara = nullptr;
-		}
-	}
-
 	UpdateBuildingControl();
+}
+
+void AOrionPlayerController::OnOrionCharaSelectionChanged(FName OperationName)
+{
+	UE_LOG(LogTemp, Log, TEXT("Orion Chara Selection Changed: %s"), *OperationName.ToString());
+
+	if (OrionCharaSelection.Num() == 1)
+	{
+		OrionHUD->bShowCharaInfoPanel = true;
+		OrionHUD->InfoChara = OrionCharaSelection[0];
+	}
+	else
+	{
+		OrionHUD->bShowCharaInfoPanel = false;
+		OrionHUD->InfoChara = nullptr;
+	}
 }
 
 void AOrionPlayerController::UpdateBasicPlayerControllerParams()
@@ -152,29 +185,27 @@ void AOrionPlayerController::UpdateBuildingControl()
 {
 	if (bPlacingStructure && PreviewFoundation)
 	{
-		//UE_LOG(LogTemp, Log, TEXT("111"));
 		UpdatePlacingStructure<AOrionStructureFoundation>(FoundationBP, PreviewFoundation);
 	}
 
 	if (bPlacingStructure && PreviewWall)
 	{
-		//UE_LOG(LogTemp, Log, TEXT("222"));
 		UpdatePlacingStructure<AOrionStructureWall>(WallBP, PreviewWall);
 	}
 }
 
 template <typename TOrionStructure>
 void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<TOrionStructure> BPOrionStructure,
-                                                    TOrionStructure*& PreviewStructurePtr)
+                                                    TOrionStructure*& PreviewStructure)
 {
-	if (!BPOrionStructure || !PreviewStructurePtr)
+	if (!BPOrionStructure || !PreviewStructure)
 	{
 		return;
 	}
 
 	FVector DesiredLocation = GroundHit.ImpactPoint;
 
-	EOrionStructure OrionStructureCategory = PreviewStructurePtr->GetOrionStructureCategory();
+	EOrionStructure OrionStructureCategory = PreviewStructure->GetOrionStructureCategory();
 
 	if (OrionStructureCategory == EOrionStructure::Wall)
 	{
@@ -217,7 +248,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<TOrionStructure>
 				SnappedSocketLoc = BestSocket.Location;
 			}
 
-			PreviewStructurePtr->SetActorScale3D(SnappedSocketScale);
+			PreviewStructure->SetActorScale3D(SnappedSocketScale);
 		}
 
 
@@ -225,8 +256,8 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<TOrionStructure>
 		SnappedSocketLoc = BestSocket.Location;
 		SnappedSocketRot = BestSocket.Rotation;
 
-		PreviewStructurePtr->SetActorLocation(SnappedSocketLoc);
-		PreviewStructurePtr->SetActorRotation(SnappedSocketRot);
+		PreviewStructure->SetActorLocation(SnappedSocketLoc);
+		PreviewStructure->SetActorRotation(SnappedSocketRot);
 	}
 	else
 	{
@@ -237,7 +268,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<TOrionStructure>
 		}
 		if (!bStructureSnapped)
 		{
-			PreviewStructurePtr->SetActorLocation(DesiredLocation);
+			PreviewStructure->SetActorLocation(DesiredLocation);
 		}
 	}
 }
@@ -304,84 +335,44 @@ void AOrionPlayerController::OnToggleDemolishingMode()
 }
 
 
-void AOrionPlayerController::OnFoundationConfirmPlace()
+template <typename TOrionStructure>
+void AOrionPlayerController::ConfirmPlaceStructure(TSubclassOf<TOrionStructure> BPOrionStructure,
+                                                   TOrionStructure*& PreviewStructurePtr)
 {
-	if (!bPlacingStructure || !PreviewFoundation)
+	if (!bPlacingStructure || !PreviewStructurePtr)
 	{
 		return;
 	}
 
-	/* 若吸附成功，按规则占用 socket；否则自由放置 */
+	if (PreviewStructurePtr->bForceSnapOnGrid && !bStructureSnapped)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Structure must snap to an unoccupied socket!"));
+		return;
+	}
+
+	FActorSpawnParameters StructureSpawnParameter;
+	StructureSpawnParameter.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
 	if (bStructureSnapped)
 	{
-		// 1) 生成真正的 Foundation
-		FActorSpawnParameters P;
-		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		AOrionStructureFoundation* NewF = GetWorld()->SpawnActor<AOrionStructureFoundation>(
-			FoundationBP, SnappedSocketLoc, SnappedSocketRot, P);
+		FTransform SpawnTransform(
+			SnappedSocketRot,
+			SnappedSocketLoc,
+			SnappedSocketScale
+		);
+
+		TOrionStructure* StructurePlaced = GetWorld()->SpawnActor<TOrionStructure>(
+			BPOrionStructure, SpawnTransform, StructureSpawnParameter);
 	}
-	else // 无吸附：直接在鼠标点落地
+	else if (!bStructureSnapped && PreviewStructurePtr && !PreviewStructurePtr->bForceSnapOnGrid)
 	{
-		FActorSpawnParameters P;
-		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		GetWorld()->SpawnActor<AOrionStructureFoundation>(
-			FoundationBP, PreviewFoundation->GetActorLocation(),
-			PreviewFoundation->GetActorRotation(), P);
+		TOrionStructure* StructurePlaced = GetWorld()->SpawnActor<TOrionStructure>(
+			BPOrionStructure, PreviewStructurePtr->GetActorLocation(),
+			PreviewStructurePtr->GetActorRotation(), StructureSpawnParameter);
 	}
-
-	// 复位状态
-	bStructureSnapped = false;
-}
-
-void AOrionPlayerController::OnWallConfirmPlace()
-{
-	if (!bPlacingStructure || !PreviewWall)
-	{
-		return;
-	}
-	if (!bStructureSnapped)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Wall 必须吸附到未占用的 Wall‑socket！"));
-		return;
-	}
-
-	FActorSpawnParameters P;
-	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	FTransform SpawnTransform(
-		SnappedSocketRot, // FRotator
-		SnappedSocketLoc, // FVector
-		SnappedSocketScale // 缩放 FVector
-	);
-
-	AOrionStructureWall* NewWall = GetWorld()->SpawnActor<AOrionStructureWall>(
-		WallBP,
-		SpawnTransform,
-		P // FActorSpawnParameters
-	);
-
-	NewWall->SetActorScale3D(SnappedSocketScale);
 
 	bStructureSnapped = false;
-}
-
-void AOrionPlayerController::OnBPressed()
-{
-	UE_LOG(LogTemp, Log, TEXT("B Pressed"));
-
-	if (CurrentInputMode != EOrionInputMode::Building)
-	{
-		CurrentInputMode = EOrionInputMode::Building;
-		OnToggleBuildingMode.ExecuteIfBound(true);
-		if (StructureSelected)
-		{
-			StructureSelected = nullptr;
-		}
-	}
-	else
-	{
-		CurrentInputMode = EOrionInputMode::Default;
-		OnToggleBuildingMode.ExecuteIfBound(false);
-	}
 }
 
 void AOrionPlayerController::OnLeftMouseDown()
@@ -427,11 +418,11 @@ void AOrionPlayerController::OnLeftMouseUp()
 		{
 			if (PreviewFoundation)
 			{
-				OnFoundationConfirmPlace();
+				ConfirmPlaceStructure(FoundationBP, PreviewFoundation);
 			}
 			else if (PreviewWall)
 			{
-				OnWallConfirmPlace();
+				ConfirmPlaceStructure(WallBP, PreviewWall);
 			}
 			else if (bDemolishingMode)
 			{
@@ -475,6 +466,21 @@ void AOrionPlayerController::DemolishStructureUnderCursor()
 }
 
 
+void AOrionPlayerController::EmptyOrionCharaSelection(TObservableArray<AOrionChara*>& OrionCharaSelectionRef)
+{
+	if (!OrionCharaSelectionRef.IsEmpty())
+	{
+		for (AOrionChara* SelectedChara : OrionCharaSelectionRef)
+		{
+			IOrionInterfaceSelectable* SelectedCharaSelectable = Cast<IOrionInterfaceSelectable>(
+				SelectedChara);
+			SelectedCharaSelectable->OnRemoveFromSelection(this);
+		}
+
+		OrionCharaSelectionRef.Empty();
+	}
+}
+
 void AOrionPlayerController::SingleSelectionUnderCursor()
 {
 	FHitResult HitResult;
@@ -484,140 +490,155 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 		HitResult
 	);
 
-	bool bIsShiftKeyPressed = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
+	//bool bIsShiftKeyPressed = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
 
-	AActor* HitActor = HitResult.GetActor();
-	if (HitActor)
+	if (!HitResult.bBlockingHit)
+	{
+		// Pass Custom Channel directly if that overload exists: ECC_GameTraceChannel1 is mapped as "Landscape" in Editor. See DefaultEngine.ini.
+		// Try to trace landscape using landscape channel
+
+		GetHitResultUnderCursorByChannel(
+			UEngineTypes::ConvertToTraceType(ECC_GameTraceChannel1),
+			false,
+			HitResult
+		);
+
+		if (HitResult.bBlockingHit)
+		{
+			UE_LOG(LogTemp, Log, TEXT("Hit On Ground. "));
+
+			/* Clicked On Ground or Others */
+			if (!bIsShiftPressed)
+			{
+				EmptyOrionCharaSelection(OrionCharaSelection);
+
+				OrionPawnSelection.Empty();
+				ClickedOnOrionActor = nullptr;
+				UE_LOG(LogTemp, Log, TEXT("No OrionChara or Vehicle selected. Selection cleared."));
+			}
+
+			return;
+		}
+	}
+
+
+	if (AActor* HitActor = HitResult.GetActor())
 	{
 		UE_LOG(LogTemp, Log, TEXT("Left Clicked Actor Name: %s | Class: %s"),
 		       *HitActor->GetName(),
 		       *HitActor->GetClass()->GetName());
 
-		if (AOrionActor* ClickedOrionActor = Cast<AOrionActor>(HitActor))
+		if (!HitActor->GetClass()->ImplementsInterface(UOrionInterfaceSelectable::StaticClass()))
 		{
-			ClickedOnOrionActor = ClickedOrionActor;
-			OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
-		}
+			UE_LOG(LogTemp, Log, TEXT("Hit Actor does not implement IOrionInterfaceSelectable."));
 
-		if (AOrionStructure* Structure = Cast<AOrionStructure>(HitActor))
-		{
-			StructureSelected = Structure;
-
-			return;
-		}
-
-
-		if (AOrionChara* Chara = Cast<AOrionChara>(HitActor))
-		{
-			if (!OrionPawnSelection.IsEmpty())
+			if (!bIsShiftPressed)
 			{
-				OrionPawnSelection.Empty();
-			}
-
-			if (bIsShiftKeyPressed)
-			{
-				if (!OrionCharaSelection.Contains(Chara))
-
-				{
-					OrionCharaSelection.Add(Chara);
-					Chara->bIsOrionAIControlled = true;
-					UE_LOG(LogTemp, Log, TEXT("Added OrionChara to selection: %s"), *Chara->GetName());
-				}
-				else
-				{
-					// 如果已选中则取消选择
-					OrionCharaSelection.Remove(Chara);
-					Chara->bIsOrionAIControlled = false;
-					UE_LOG(LogTemp, Log, TEXT("Removed OrionChara from selection: %s"), *Chara->GetName());
-				}
-			}
-			else
-			{
-				if (!OrionCharaSelection.IsEmpty())
-				{
-					for (AOrionChara* SelectedChara : OrionCharaSelection)
-					{
-						SelectedChara->bIsOrionAIControlled = false;
-					}
-
-					OrionCharaSelection.Empty();
-				}
-
-				OrionCharaSelection.Add(Chara);
-				Chara->bIsOrionAIControlled = true;
-				UE_LOG(LogTemp, Log, TEXT("Selected OrionChara: %s"), *Chara->GetName());
-			}
-			return;
-		}
-
-		if (AWheeledVehiclePawn* HitPawn = Cast<AWheeledVehiclePawn>(HitActor))
-		{
-			if (!OrionCharaSelection.IsEmpty())
-			{
-				for (AOrionChara* SelectedChara : OrionCharaSelection)
-				{
-					SelectedChara->bIsOrionAIControlled = false;
-				}
-
 				OrionCharaSelection.Empty();
-			}
-
-
-			OrionPawnSelection.Empty();
-			if (bIsShiftKeyPressed)
-			{
-				if (!OrionPawnSelection.Contains(HitPawn))
-				{
-					OrionPawnSelection.Add(HitPawn);
-					if (!OrionCharaSelection.IsEmpty())
-					{
-						for (AOrionChara* SelectedChara : OrionCharaSelection)
-						{
-							SelectedChara->bIsOrionAIControlled = false;
-						}
-
-						OrionCharaSelection.Empty();
-					}
-					UE_LOG(LogTemp, Log, TEXT("Added APawn to selection: %s"), *HitPawn->GetName());
-				}
-				else
-				{
-					OrionPawnSelection.Remove(HitPawn);
-					UE_LOG(LogTemp, Log, TEXT("Removed APawn from selection: %s"), *HitPawn->GetName());
-				}
-			}
-			else
-			{
 				OrionPawnSelection.Empty();
-				OrionPawnSelection.Add(HitPawn);
 			}
+
 			return;
 		}
-	}
 
-	// 如果点到空白处或者点到了其他Actor，且未按Shift键，则清空选中
-	if (!bIsShiftKeyPressed)
-	{
-		if (!OrionCharaSelection.IsEmpty())
+		IOrionInterfaceSelectable* ISelectable = Cast<IOrionInterfaceSelectable>(HitActor);
+
+		switch (const ESelectable SelectableType = ISelectable->GetSelectableType())
 		{
-			for (AOrionChara* SelectedChara : OrionCharaSelection)
+		case ESelectable::OrionChara:
 			{
-				SelectedChara->bIsOrionAIControlled = false;
+				if (AOrionChara* Chara = Cast<AOrionChara>(HitActor))
+				{
+					if (bIsShiftPressed)
+					{
+						if (!OrionCharaSelection.Contains(Chara))
+
+						{
+							OrionCharaSelection.Add(Chara);
+							ISelectable->OnSelected(this);
+						}
+						else
+						{
+							OrionCharaSelection.Remove(Chara);
+							ISelectable->OnRemoveFromSelection(this);
+						}
+					}
+					else /* bIsShiftPressed == false */
+					{
+						EmptyOrionCharaSelection(OrionCharaSelection);
+
+						OrionCharaSelection.Add(Chara);
+						ISelectable->OnSelected(this);
+					}
+				}
+
+				if (!OrionPawnSelection.IsEmpty())
+				{
+					OrionPawnSelection.Empty();
+				}
+
+				break;
 			}
+		case ESelectable::OrionActor:
+			{
+				if (AOrionActor* ClickedOrionActor = Cast<AOrionActor>(HitActor))
+				{
+					ClickedOnOrionActor = ClickedOrionActor;
+					//OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
+				}
+				break;
+			}
+		case ESelectable::OrionStructure:
+			{
+				if (AOrionStructure* Structure = Cast<AOrionStructure>(HitActor))
+				{
+					StructureSelected = Structure;
+				}
+				break;
+			}
+		case ESelectable::VehiclePawn:
+			{
+				if (AWheeledVehiclePawn* HitPawn = Cast<AWheeledVehiclePawn>(HitActor))
+				{
+					EmptyOrionCharaSelection(OrionCharaSelection);
 
-			OrionCharaSelection.Empty();
+
+					OrionPawnSelection.Empty();
+					if (bIsShiftPressed)
+					{
+						if (!OrionPawnSelection.Contains(HitPawn))
+						{
+							OrionPawnSelection.Add(HitPawn);
+							EmptyOrionCharaSelection(OrionCharaSelection);
+							UE_LOG(LogTemp, Log, TEXT("Added APawn to selection: %s"), *HitPawn->GetName());
+						}
+						else
+						{
+							OrionPawnSelection.Remove(HitPawn);
+							UE_LOG(LogTemp, Log, TEXT("Removed APawn from selection: %s"), *HitPawn->GetName());
+						}
+					}
+					else
+					{
+						OrionPawnSelection.Empty();
+						OrionPawnSelection.Add(HitPawn);
+					}
+				}
+				break;
+			}
+		default:
+			{
+				UE_LOG(LogTemp, Warning, TEXT("Unknown Selectable Type: %s"), *UEnum::GetValueAsString(SelectableType));
+
+				break;
+			}
 		}
-
-		OrionPawnSelection.Empty();
-		ClickedOnOrionActor = nullptr;
-		OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
-		UE_LOG(LogTemp, Log, TEXT("No OrionChara or Vehicle selected. Selection cleared."));
 	}
 }
 
 void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, const FVector2D& EndPos)
 {
-	if (!OrionCharaSelection.IsEmpty())
+	/*if (!OrionCharaSelection.IsEmpty())
 	{
 		for (AOrionChara* SelectedChara : OrionCharaSelection)
 		{
@@ -694,7 +715,9 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 		{
 			UE_LOG(LogTemp, Log, TEXT(" - %s"), *Chara->GetName());
 		}
-	}
+	}*/
+
+	UE_LOG(LogTemp, Log, TEXT("BoxSelectionUnderCursor is temporarily disabled yet."));
 }
 
 void AOrionPlayerController::OnRightMouseUp()
@@ -782,7 +805,7 @@ void AOrionPlayerController::OnRightMouseUp()
 		CachedRequestCaseNames.Add("ExchangeCargo");
 
 		// 4. Show the operation menu
-		AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
+
 		if (OrionHUD)
 		{
 			TArray<FString> ArrOptionNames;
@@ -843,7 +866,6 @@ void AOrionPlayerController::OnRightMouseDown()
 					// If no OrionChara or OrionPawn selected => show menu
 					if (OrionCharaSelection.IsEmpty() && OrionPawnSelection.IsEmpty())
 					{
-						//AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
 						//if (OrionHUD)
 						//{
 						//	std::vector<std::string> ArrOptionNames;
@@ -935,7 +957,6 @@ void AOrionPlayerController::OnRightMouseDown()
 					// If no OrionChara or OrionPawn selected => show menu
 					if (OrionCharaSelection.IsEmpty() && OrionPawnSelection.IsEmpty())
 					{
-						//AOrionHUD* OrionHUD = Cast<AOrionHUD>(GetHUD());
 						//if (OrionHUD)
 						//{
 						//	std::vector<std::string> ArrOptionNames;
@@ -1090,113 +1111,110 @@ void AOrionPlayerController::DrawOrionActorStatus()
 	AActor* HoveringActor = HoveringOver.GetActor();
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
-		if (AOrionHUD* ActorInfoHUD = Cast<AOrionHUD>(PC->GetHUD()))
+		if (HoveringActor)
 		{
-			if (HoveringActor)
+			if (AOrionActor* OrionActor = Cast<AOrionActor>(HoveringActor))
 			{
-				if (AOrionActor* OrionActor = Cast<AOrionActor>(HoveringActor))
+				OrionHUD->bShowActorInfo = true;
+				TArray<FString> Lines;
+
+
+				float Progress;
+				if (AOrionActorOre* OrionOreActor = Cast<AOrionActorOre>(OrionActor))
 				{
-					ActorInfoHUD->bShowActorInfo = true;
-					TArray<FString> Lines;
-
-
-					float Progress;
-					if (AOrionActorOre* OrionOreActor = Cast<AOrionActorOre>(OrionActor))
-					{
-						Progress = OrionOreActor->ProductionProgress;
-					}
-
-					else if (AOrionActorProduction* OrionProductionActor = Cast<AOrionActorProduction>(OrionActor))
-					{
-						Progress = OrionProductionActor->ProductionProgress;
-					}
-
-					else
-					{
-						Progress = 0.0f;
-					}
-
-					int32 TotalBars = 20; // Segements number
-					int32 FilledBars = FMath::RoundToInt((Progress / 100.0f) * TotalBars);
-
-					FString Bar;
-					for (int32 i = 0; i < TotalBars; ++i)
-					{
-						Bar += (i < FilledBars) ? TEXT("#") : TEXT("-");
-					}
-
-					Lines.Add(FString::Printf(TEXT("Name: %s"), *OrionActor->GetName()));
-					Lines.Add(FString::Printf(TEXT("CurrNumOfWorkers: %d"), OrionActor->CurrWorkers));
-					Lines.Add(FString::Printf(TEXT("ProductionProgress: [%s] %.1f%%"), *Bar, Progress));
-
-					if (AOrionActorOre* OrionOreActor = Cast<AOrionActorOre>(OrionActor))
-					{
-						if (UOrionInventoryComponent* InvComp = OrionOreActor->FindComponentByClass<
-							UOrionInventoryComponent>())
-						{
-							// 2) 拿到所有已持有的 (ItemId, Quantity)
-							TArray<FIntPoint> Items = InvComp->GetAllItems();
-							for (const FIntPoint& Pair : Items)
-							{
-								int32 ItemId = Pair.X;
-								int32 Quantity = Pair.Y;
-
-								// 3) 拿静态信息（DisplayName/ChineseDisplayName）
-								FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
-
-								// 4) 格式化成 "<Name>: <数量>"
-								Lines.Add(FString::Printf(
-									TEXT("%s: %d"),
-									*Info.DisplayName.ToString(),
-									Quantity
-								));
-							}
-						}
-						else
-						{
-							Lines.Add(TEXT("No Inventory Component"));
-						}
-					}
-
-					else if (AOrionActorProduction* OrionProductionActor = Cast<AOrionActorProduction>(OrionActor))
-					{
-						if (UOrionInventoryComponent* InvComp = OrionProductionActor->FindComponentByClass<
-							UOrionInventoryComponent>())
-						{
-							TArray<FIntPoint> Items = InvComp->GetAllItems();
-							for (const FIntPoint& Pair : Items)
-							{
-								int32 ItemId = Pair.X;
-								int32 Quantity = Pair.Y;
-
-								FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
-
-								Lines.Add(FString::Printf(
-									TEXT("%s: %d"),
-									*Info.DisplayName.ToString(),
-									Quantity
-								));
-							}
-						}
-						else
-						{
-							Lines.Add(TEXT("No Inventory Component"));
-						}
-					}
-
-					else
-					{
-						Lines.Add(TEXT("No Available Subclass of OrionActor. "));
-					}
-
-					Lines.Add(FString::Printf(TEXT("CurrHealth: %d"), OrionActor->CurrHealth));
-					ActorInfoHUD->ShowInfoAtMouse(Lines);
+					Progress = OrionOreActor->ProductionProgress;
 				}
+
+				else if (AOrionActorProduction* OrionProductionActor = Cast<AOrionActorProduction>(OrionActor))
+				{
+					Progress = OrionProductionActor->ProductionProgress;
+				}
+
+				else
+				{
+					Progress = 0.0f;
+				}
+
+				int32 TotalBars = 20; // Segements number
+				int32 FilledBars = FMath::RoundToInt((Progress / 100.0f) * TotalBars);
+
+				FString Bar;
+				for (int32 i = 0; i < TotalBars; ++i)
+				{
+					Bar += (i < FilledBars) ? TEXT("#") : TEXT("-");
+				}
+
+				Lines.Add(FString::Printf(TEXT("Name: %s"), *OrionActor->GetName()));
+				Lines.Add(FString::Printf(TEXT("CurrNumOfWorkers: %d"), OrionActor->CurrWorkers));
+				Lines.Add(FString::Printf(TEXT("ProductionProgress: [%s] %.1f%%"), *Bar, Progress));
+
+				if (AOrionActorOre* OrionOreActor = Cast<AOrionActorOre>(OrionActor))
+				{
+					if (UOrionInventoryComponent* InvComp = OrionOreActor->FindComponentByClass<
+						UOrionInventoryComponent>())
+					{
+						// 2) 拿到所有已持有的 (ItemId, Quantity)
+						TArray<FIntPoint> Items = InvComp->GetAllItems();
+						for (const FIntPoint& Pair : Items)
+						{
+							int32 ItemId = Pair.X;
+							int32 Quantity = Pair.Y;
+
+							// 3) 拿静态信息（DisplayName/ChineseDisplayName）
+							FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
+
+							// 4) 格式化成 "<Name>: <数量>"
+							Lines.Add(FString::Printf(
+								TEXT("%s: %d"),
+								*Info.DisplayName.ToString(),
+								Quantity
+							));
+						}
+					}
+					else
+					{
+						Lines.Add(TEXT("No Inventory Component"));
+					}
+				}
+
+				else if (AOrionActorProduction* OrionProductionActor = Cast<AOrionActorProduction>(OrionActor))
+				{
+					if (UOrionInventoryComponent* InvComp = OrionProductionActor->FindComponentByClass<
+						UOrionInventoryComponent>())
+					{
+						TArray<FIntPoint> Items = InvComp->GetAllItems();
+						for (const FIntPoint& Pair : Items)
+						{
+							int32 ItemId = Pair.X;
+							int32 Quantity = Pair.Y;
+
+							FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
+
+							Lines.Add(FString::Printf(
+								TEXT("%s: %d"),
+								*Info.DisplayName.ToString(),
+								Quantity
+							));
+						}
+					}
+					else
+					{
+						Lines.Add(TEXT("No Inventory Component"));
+					}
+				}
+
+				else
+				{
+					Lines.Add(TEXT("No Available Subclass of OrionActor. "));
+				}
+
+				Lines.Add(FString::Printf(TEXT("CurrHealth: %d"), OrionActor->CurrHealth));
+				OrionHUD->ShowInfoAtMouse(Lines);
 			}
-			else
-			{
-				ActorInfoHUD->bShowActorInfo = false;
-			}
+		}
+		else
+		{
+			OrionHUD->bShowActorInfo = false;
 		}
 	}
 }

@@ -17,6 +17,10 @@ class ORION_API AOrionStructureWall : public AOrionStructure
 public:
 	virtual void BeginPlay() override;
 
+	/* Basics */
+
+	bool bForceSnapOnGrid = true;
+
 	/* Sockets */
 
 	TArray<FWallSocket> WallSockets;
