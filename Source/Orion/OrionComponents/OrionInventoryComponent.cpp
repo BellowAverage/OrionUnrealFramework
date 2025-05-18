@@ -1,7 +1,7 @@
 #include "OrionInventoryComponent.h"
 #include "Components/TextRenderComponent.h"
 
-TArray<FOrionItemInfo> UOrionInventoryComponent::ItemInfoTable = {
+TArray<FOrionDataItem> UOrionInventoryComponent::ItemInfoTable = {
 	{1, FName("Log"), FText::FromString("Log"), FText::FromString(TEXT("原木")), 1.f, 30.f},
 	{2, FName("StoneOre"), FText::FromString("Stone Ore"), FText::FromString(TEXT("石矿")), 2.f, 30.f},
 	{3, FName("Bullet"), FText::FromString("Bullet"), FText::FromString(TEXT("子弹")), 2.f, 30.f},
@@ -107,7 +107,7 @@ bool UOrionInventoryComponent::ModifyItemQuantity(int32 ItemId, int32 Quantity)
 		InventoryMap.Remove(ItemId);
 	}
 
-	FOrionItemInfo Info = GetItemInfo(ItemId);
+	FOrionDataItem Info = GetItemInfo(ItemId);
 	FString Name = Info.DisplayName.ToString();
 	FString Prefix = (Quantity > 0 ? TEXT("+") : TEXT("-"));
 	FString Text = FString::Printf(TEXT("%s%d %s"), *Prefix, FMath::Abs(Quantity), *Name);
@@ -202,7 +202,7 @@ TArray<FIntPoint> UOrionInventoryComponent::GetAllItems() const
 	return Out;
 }
 
-FOrionItemInfo UOrionInventoryComponent::GetItemInfo(int32 ItemId) const
+FOrionDataItem UOrionInventoryComponent::GetItemInfo(int32 ItemId) const
 {
 	for (const auto& Info : ItemInfoTable)
 	{
@@ -212,10 +212,10 @@ FOrionItemInfo UOrionInventoryComponent::GetItemInfo(int32 ItemId) const
 		}
 	}
 
-	return FOrionItemInfo{};
+	return FOrionDataItem{};
 }
 
-const TArray<FOrionItemInfo>& UOrionInventoryComponent::GetAllItemInfos() const
+const TArray<FOrionDataItem>& UOrionInventoryComponent::GetAllItemInfos() const
 {
 	return ItemInfoTable;
 }

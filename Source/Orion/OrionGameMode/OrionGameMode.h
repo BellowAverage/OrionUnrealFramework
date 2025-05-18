@@ -5,10 +5,7 @@
 #include "Orion/OrionChara/OrionChara.h"
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
-#include "Orion/OrionPlayerController/OrionPlayerController.h"
 #include "WheeledVehiclePawn.h"
-#include "Orion/OrionActor/OrionActorStorage.h"
-#include "Orion/OrionActor/OrionActorProduction.h"
 #include "OrionGameMode.generated.h"
 
 
@@ -27,28 +24,6 @@ public:
 	/* Gameplay Stats */
 
 	/* Gameplay Requests Handle */
-	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	void ApproveCharaAttackOnActor(TArray<AOrionChara*> OrionCharasRequested, AActor* TargetActor,
-	                               FVector HitOffset, CommandType inCommandType);
-
-	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	bool ApproveCharaMoveToLocation(TArray<AOrionChara*> OrionCharasRequested, FVector TargetLocation,
-	                                CommandType inCommandType);
-
-	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	bool ApprovePawnMoveToLocation(TArray<AWheeledVehiclePawn*> OrionPawnsRequested, FVector TargetLocation,
-	                               CommandType inCommandType);
-
-	//UFUNCTION(BlueprintCallable, Category = "Gameplay Requests")
-	void ApproveInteractWithActor(TArray<AOrionChara*> OrionCharasRequested, AOrionActor* TargetActor,
-	                              CommandType inCommandType);
-
-	void ApproveCollectingCargo(TArray<AOrionChara*> OrionCharasRequested, AOrionActorStorage* TargetActor,
-	                            CommandType inCommandType);
-
-	void ApproveInteractWithProduction(TArray<AOrionChara*> OrionCharasRequested,
-	                                   AOrionActorProduction* TargetActor,
-	                                   CommandType inCommandType);
 
 	UFUNCTION(BlueprintImplementableEvent)
 	void OrionVehicleMoveToLocation(AWheeledVehiclePawn* WheeledVehiclePawn, FVector TargetLocation);

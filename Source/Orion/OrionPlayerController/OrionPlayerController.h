@@ -2,19 +2,21 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "NiagaraFunctionLibrary.h"
-#include "Orion/OrionStructure/OrionStructure.h"
-#include "Orion/OrionChara/OrionChara.h"
-#include "WheeledVehiclePawn.h"
-#include "Orion/OrionStructure/OrionStructureFoundation.h"
-#include "Orion/OrionStructure/OrionStructureWall.h"
-
+//#include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionCppFunctionLibrary/OrionCppFunctionLibrary.h"
-
+#include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "OrionPlayerController.generated.h"
 
 
+class UNiagaraSystem;
+class AOrionActor;
+class AOrionChara;
+class AWheeledVehiclePawn;
 class AOrionHUD;
+class AOrionStructureFoundation;
+class AOrionStructureWall;
+class AOrionStructure;
+
 //DECLARE_DELEGATE_OneParam(FOnOrionActorSelectionChanged, AOrionActor*);
 DECLARE_DELEGATE_OneParam(FOnToggleBuildingMode, bool);
 
@@ -121,6 +123,9 @@ public:
 
 	/* Place Structure */
 
+	UPROPERTY()
+	UOrionBuildingManager* BuildingManager = nullptr;
+
 	bool bIsSpawnPreviewStructure = false;
 
 	template <typename TOrionStructure>
@@ -140,11 +145,10 @@ public:
 
 	void OnToggleDemolishingMode();
 	bool bDemolishingMode = false;
-	void DemolishStructureUnderCursor();
+	void DemolishStructureUnderCursor() const;
 
 	/* 1. Place Foundation Structure */
 
-	void OnTogglePlacingFoundation();
 
 	UPROPERTY()
 	AOrionStructureFoundation* PreviewFoundation = nullptr;
@@ -153,7 +157,7 @@ public:
 	TSubclassOf<AOrionStructureFoundation> FoundationBP;
 
 	/* 2. Place Wall Structure */
-	void OnTogglePlacingWall();
+
 
 	UPROPERTY(EditAnywhere, Category = "Build")
 	TSubclassOf<AOrionStructureWall> WallBP;
@@ -194,6 +198,7 @@ public:
 	UPROPERTY(EditAnywhere, Category="Input")
 	float RightClickHoldThreshold = 0.2f;
 
+	UPROPERTY()
 	AOrionActor* CachedRightClickedOrionActor = nullptr;
 	void OnRightMouseUp();
 	void OnShiftPressed();
@@ -202,8 +207,12 @@ public:
 
 	/* Server Request */
 
+	UPROPERTY()
 	TArray<AOrionChara*> CachedActionSubjects;
+
+	UPROPERTY()
 	AOrionActor* CachedActionObjects;
+
 	TArray<FString> CachedRequestCaseNames;
 
 	UFUNCTION(BlueprintCallable, Category = "Server Action Request")

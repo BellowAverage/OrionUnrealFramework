@@ -62,21 +62,21 @@ void AOrionStructureFoundation::BeginPlay()
 	}
 
 	/* ① 自身 socket —— 视为“占用” */
-	RegisterSocket(StructureMesh->GetComponentLocation(),
-	               StructureMesh->GetComponentRotation(),
-	               EOrionStructure::Foundation, /*bOccupied=*/true, GetWorld(), this);
+	BuildingManager->RegisterSocket(StructureMesh->GetComponentLocation(),
+	                                StructureMesh->GetComponentRotation(),
+	                                EOrionStructure::Foundation, /*bOccupied=*/true, GetWorld(), this);
 
 	/* ② 地基‑对‑地基接口 —— 视为“空闲” */
 	for (const auto& S : FoundationSockets)
 	{
-		RegisterSocket(S.SocketLocation, S.SocketRotation,
-		               EOrionStructure::Foundation, /*bOccupied=*/false, GetWorld(), this);
+		BuildingManager->RegisterSocket(S.SocketLocation, S.SocketRotation,
+		                                EOrionStructure::Foundation, /*bOccupied=*/false, GetWorld(), this);
 	}
 
 	/* ③ 地基‑对‑墙接口 —— 视为“空闲”（⚠️ 新增） */
 	for (const auto& S : WallSockets)
 	{
-		RegisterSocket(S.SocketLocation, S.SocketRotation,
-		               EOrionStructure::Wall, /*bOccupied=*/false, GetWorld(), this);
+		BuildingManager->RegisterSocket(S.SocketLocation, S.SocketRotation,
+		                                EOrionStructure::Wall, /*bOccupied=*/false, GetWorld(), this);
 	}
 }

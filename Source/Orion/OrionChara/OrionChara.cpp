@@ -8,11 +8,8 @@
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Animation/AnimInstance.h"
-//#include "Navigation/PathFollowingComponent.h"
-//#include "GameFramework/CharacterMovementComponent.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
-
 #include "DrawDebugHelpers.h"
 #include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -23,10 +20,8 @@
 #include "TimerManager.h"
 #include "EngineUtils.h"
 #include "NavigationPath.h"
-//#include "Components/PrimitiveComponent.h"
 #include "Components/CapsuleComponent.h"
 #include <Components/SphereComponent.h>
-//#include "Kismet/GameplayStatics.h"
 #include "Orion/OrionActor/OrionActorOre.h"
 
 /*
@@ -37,6 +32,10 @@
 #include "Animation/SkeletalMeshActor.h"
 #include "OrionBPFunctionLibrary.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Navigation/PathFollowingComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 */
 
@@ -160,9 +159,13 @@ void AOrionChara::DistributeRealTimeAction(float DeltaTime)
 		PreviousAction = CurrentAction;
 	}
 
-	if (CurrentAction == nullptr && !CharacterActionQueue.IsEmpty())
+	if (!CharacterActionQueue.Actions.IsEmpty())
 	{
 		CurrentAction = CharacterActionQueue.GetFrontAction();
+	}
+	else
+	{
+		CurrentAction = nullptr;
 	}
 
 	if (CurrentAction && CurrentAction->ExecuteFunction(DeltaTime))
@@ -462,96 +465,6 @@ void AOrionChara::CollectingCargoStop()
 	CollectSource.Reset();
 }
 
-/* Deprecated MoveToLocation */
-//bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
-//{
-//	constexpr float AcceptanceRadius = 50.f;
-//	const FVector SearchExtent(500.f, 500.f, 500.f);
-//
-//	// 0) 检查 AIController
-//	if (!AIController)
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No AIController - treating as arrived"));
-//		return true;
-//	}
-//
-//	// 1) 拿导航系统
-//	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
-//	if (!NavSys)
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No NavigationSystem - treating as arrived"));
-//		return true;
-//	}
-//
-//	// 2) 投影目标到 NavMesh
-//	FNavLocation ProjectedNav;
-//	FVector DestLocation = InTargetLocation;
-//	if (NavSys->ProjectPointToNavigation(InTargetLocation, ProjectedNav, SearchExtent))
-//	{
-//		DestLocation = ProjectedNav.Location;
-//		UE_LOG(LogTemp, Log,
-//		       TEXT("[MoveToLocation] Projected to NavMesh: %s"),
-//		       *DestLocation.ToString());
-//	}
-//	else
-//	{
-//		UE_LOG(LogTemp, Warning,
-//		       TEXT("[MoveToLocation] ProjectPointToNavigation failed at %s, using raw target"),
-//		       *InTargetLocation.ToString());
-//	}
-//
-//	// 3) 水平距离检查
-//	float Dist2D = FVector::Dist2D(GetActorLocation(), DestLocation);
-//	UE_LOG(LogTemp, Log,
-//	       TEXT("[MoveToLocation] Curr=%s, Dest=%s, Dist2D=%.1f, Radius=%.1f"),
-//	       *GetActorLocation().ToString(),
-//	       *DestLocation.ToString(),
-//	       Dist2D,
-//	       AcceptanceRadius);
-//
-//	if (Dist2D <= AcceptanceRadius)
-//	{
-//		UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Within acceptance radius → Arrived"));
-//		AIController->StopMovement();
-//		return true;
-//	}
-//
-//	// 4) 发起寻路请求
-//	UE_LOG(LogTemp, Log,
-//	       TEXT("[MoveToLocation] Moving to %s (radius=%.1f)"),
-//	       *DestLocation.ToString(),
-//	       AcceptanceRadius);
-//
-//	EPathFollowingRequestResult::Type RequestResult = AIController->MoveToLocation(
-//		DestLocation,
-//		AcceptanceRadius,
-//		/*StopOnOverlap=*/ true,
-//		/*UsePathfinding=*/ true,
-//		/*ProjectDestinationToNavigation=*/ false,
-//		/*bCanStrafe=*/ true,
-//		/*FilterClass=*/ nullptr,
-//		/*bAllowPartialPath=*/ true
-//	);
-//
-//	if (RequestResult == EPathFollowingRequestResult::AlreadyAtGoal)
-//	{
-//		UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] AlreadyAtGoal"));
-//		return true;
-//	}
-//	if (RequestResult == EPathFollowingRequestResult::Failed)
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] MoveToLocation request FAILED → treat as arrived"));
-//		return true;
-//	}
-//	// RequestSuccessful
-//	UE_LOG(LogTemp, Verbose, TEXT("[MoveToLocation] MoveToLocation request accepted"));
-//
-//	// 正在移动
-//	return false;
-//}
-
-// In AOrionChara.cpp, replace MoveToLocation 实现为：
-
 bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 {
 	// 记录目标以备“重新规划”时使用
@@ -650,19 +563,6 @@ bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 	return false; // 仍在移动
 }
 
-//void AOrionChara::MoveToLocationStop()
-//{
-//	AOrionAIController* OrionAC = Cast<AOrionAIController>(GetController());
-//	if (OrionAC)
-//	{
-//		OrionAC->StopMovement();
-//	}
-//	else
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("MoveToLocationStop: OrionAC is nullptr or not of type AOrionAIController."));
-//	}
-//}
-
 void AOrionChara::MoveToLocationStop()
 {
 	if (AIController)
@@ -719,7 +619,7 @@ void AOrionChara::ReRouteMoveToLocation()
 	UE_LOG(LogTemp, Log, TEXT("[RefreshMoveToLocation] Re-routed to %s"), *Dest.ToString());
 }
 
-bool AOrionChara::CollectBullets(float DeltaTime)
+bool AOrionChara::CollectBullets()
 {
 	constexpr int32 BulletItemId = 3;
 	constexpr int32 MaxCarry = 300;
@@ -840,260 +740,6 @@ void AOrionChara::OnBulletPickupFinished()
 	// done!
 	bIsCollectingBullets = false;
 }
-
-//bool AOrionChara::InteractWithProduction(float DeltaTime, AOrionActorProduction* InTarget)
-//{
-//	UE_LOG(LogTemp, Warning, TEXT("[IP] Tick -- InTarget=%p"), InTarget);
-//
-//	bPreparingInteractProd = true;
-//
-//	// ① 有效性检查
-//	if (!IsValid(InTarget))
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("[IP] target invalid"));
-//		if (bPreparingInteractProd)
-//		{
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] stopping because invalid"));
-//			InteractWithProductionStop();
-//		}
-//
-//		if (bIsInteractProd)
-//		{
-//			InteractWithActorStop();
-//			bIsInteractProd = false;
-//		}
-//
-//		UE_LOG(LogTemp, Warning, TEXT("[IP] 111"));
-//
-//		return true;
-//	}
-//
-//	// ② 检查生产点可交互状态
-//	UE_LOG(LogTemp, Warning, TEXT("[IP] target ActorStatus=%d"), int32(InTarget->ActorStatus));
-//	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("[IP] target not interactable"));
-//		if (bPreparingInteractProd)
-//		{
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] stopping because not interactable"));
-//			InteractWithProductionStop();
-//		}
-//
-//		if (bIsInteractProd)
-//		{
-//			InteractWithActorStop();
-//			bIsInteractProd = false;
-//		}
-//
-//		UE_LOG(LogTemp, Warning, TEXT("[IP] 222"));
-//		return true;
-//	}
-//
-//	constexpr int32 NeedPerCycle = 2;
-//
-//	// ③ 如果生产点库存中 2 号物品不够，就先触发搬运
-//	UOrionInventoryComponent* ProdInv = InTarget->InventoryComp;
-//	int32 HaveProd = ProdInv ? ProdInv->GetItemQuantity(2) : 0;
-//	if (HaveProd < NeedPerCycle)
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("[IP] need to trade in raw materials first"));
-//
-//		// ----------------- 新增：优先用自己身上的原料 -----------------
-//		if (InventoryComp && InventoryComp->GetItemQuantity(2) >= NeedPerCycle)
-//		{
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] supplying from self-inventory"));
-//			if (bIsInteractProd)
-//			{
-//				InteractWithActorStop();
-//			}
-//
-//			TMap<AActor*, TMap<int32, int32>> Route;
-//			Route.Add(this, {{2, NeedPerCycle}});
-//			Route.Add(InTarget, {{}});
-//			bool bDone = TradingCargo(Route);
-//			UE_LOG(LogTemp, Warning,
-//			       TEXT("[IP] TradingCargo(self->prod) returned %s"),
-//			       bDone ? TEXT("true") : TEXT("false"));
-//
-//			// 如果搬运还没完成，就返回 false 继续本 Action
-//			if (!bDone)
-//			{
-//				UE_LOG(LogTemp, Warning, TEXT("[IP] self->prod transport ongoing -> return false"));
-//				return false;
-//			}
-//			// 搬运完成，继续下面的生产逻辑
-//		}
-//		// --------------------------------------------------------------
-//
-//
-//		// 1) 找到最近的 Ore 源
-//		AOrionActorOre* BestSourceOfRawMaterial = nullptr;
-//		float BestDist2 = TNumericLimits<float>::Max();
-//
-//		for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
-//		{
-//			AOrionActorOre* Ore = *It;
-//			if (!IsValid(Ore))
-//			{
-//				continue;
-//			}
-//			if (UOrionInventoryComponent* SourceInventory = Ore->InventoryComp)
-//			{
-//				int32 AvailableRawMaterialNumber = SourceInventory->GetItemQuantity(2);
-//				if (AvailableRawMaterialNumber < 2)
-//				{
-//					continue;
-//				}
-//				float d2 = FVector::DistSquared(
-//					Ore->GetActorLocation(),
-//					InTarget->GetActorLocation()
-//				);
-//				if (d2 < BestDist2)
-//				{
-//					BestDist2 = d2;
-//					BestSourceOfRawMaterial = Ore;
-//				}
-//			}
-//		}
-//
-//		AOrionActorStorage* BestSourceOfRawMaterialFromStorage = nullptr;
-//		float BestDist2FromStorage = TNumericLimits<float>::Max();
-//
-//		if (!BestSourceOfRawMaterial)
-//		{
-//			for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
-//			{
-//				AOrionActorStorage* Storage = *It;
-//				if (!IsValid(Storage))
-//				{
-//					continue;
-//				}
-//				if (UOrionInventoryComponent* SourceInventory = Storage->InventoryComp)
-//				{
-//					int32 AvailableRawMaterialNumber = SourceInventory->GetItemQuantity(2);
-//					if (AvailableRawMaterialNumber < 2)
-//					{
-//						continue;
-//					}
-//					float d2 = FVector::DistSquared(
-//						Storage->GetActorLocation(),
-//						InTarget->GetActorLocation()
-//					);
-//					if (d2 < BestDist2FromStorage)
-//					{
-//						BestDist2FromStorage = d2;
-//						BestSourceOfRawMaterialFromStorage = Storage;
-//					}
-//				}
-//			}
-//		}
-//
-//
-//		if (!BestSourceOfRawMaterial && !BestSourceOfRawMaterialFromStorage)
-//		{
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] no source ore found, abort entire action"));
-//
-//			if (bIsInteractProd)
-//			{
-//				InteractWithActorStop();
-//				bIsInteractProd = false;
-//			}
-//
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] 444"));
-//			return true;
-//		}
-//
-//		// 2) 计算最大可放量
-//		int32 MaxCanTake = TNumericLimits<int32>::Max();
-//		if (ProdInv)
-//		{
-//			if (ProdInv->AvailableInventoryMap.Contains(2))
-//			{
-//				MaxCanTake = ProdInv->AvailableInventoryMap[2];
-//			}
-//			else
-//			{
-//				UE_LOG(LogTemp, Warning,
-//				       TEXT("[IP] ProdInv.AvailableInventoryMap has no entry for Item2, default MaxCanTake=%d"),
-//				       MaxCanTake);
-//			}
-//		}
-//		else
-//		{
-//			UE_LOG(LogTemp, Error, TEXT("[IP] ProdInv is null!"));
-//		}
-//
-//		// 3) 计算实际搬运量
-//		UOrionInventoryComponent* SrcInv = nullptr;
-//		if (BestSourceOfRawMaterial)
-//		{
-//			SrcInv = BestSourceOfRawMaterial->InventoryComp;
-//		}
-//		else if (BestSourceOfRawMaterialFromStorage)
-//		{
-//			SrcInv = BestSourceOfRawMaterialFromStorage->InventoryComp;
-//		}
-//
-//		int32 SrcHave = SrcInv ? SrcInv->GetItemQuantity(2) : 0;
-//		int32 ToTake = FMath::Min(MaxCanTake, SrcHave);
-//
-//		if (ToTake <= 1)
-//		{
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] ToTake<=0, abort entire action"));
-//
-//			if (bIsInteractProd)
-//			{
-//				InteractWithActorStop();
-//				bIsInteractProd = false;
-//			}
-//
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] 555"));
-//			return true;
-//		}
-//
-//		// 4) 构造搬运路线：BestSrc -> InTarget
-//		TMap<AActor*, TMap<int32, int32>> Route;
-//
-//		if (BestSourceOfRawMaterial)
-//		{
-//			Route.Add(BestSourceOfRawMaterial, {{2, ToTake}});
-//		}
-//		else if (BestSourceOfRawMaterialFromStorage)
-//		{
-//			Route.Add(BestSourceOfRawMaterialFromStorage, {{2, ToTake}});
-//		}
-//
-//
-//		Route.Add(InTarget, {});
-//
-//		// 5) 调用 TradingCargo
-//
-//		if (bIsInteractProd)
-//		{
-//			InteractWithActorStop();
-//		}
-//
-//		bool bTradeDone = TradingCargo(Route);
-//		UE_LOG(LogTemp, Warning,
-//		       TEXT("[IP] TradingCargo returned %s"),
-//		       bTradeDone ? TEXT("true") : TEXT("false"));
-//		if (!bTradeDone)
-//		{
-//			UE_LOG(LogTemp, Warning, TEXT("[IP] still trading, wait next tick"));
-//			return false;
-//		}
-//		UE_LOG(LogTemp, Warning, TEXT("[IP] trading complete, resume production interact"));
-//	}
-//
-//	// ④ “采矿式”互动：走到生产点范围内
-//	bIsInteractProd = true;
-//
-//	bool InteractWithActorResult = InteractWithActor(DeltaTime, InTarget);
-//
-//	UE_LOG(LogTemp, Warning, TEXT("[IP] 666"));
-//
-//	return InteractWithActorResult;
-//}
 
 bool AOrionChara::InteractWithProduction(float DeltaTime,
                                          AOrionActorProduction* InTarget)
@@ -1433,179 +1079,10 @@ void AOrionChara::InteractWithActorStop()
 	IsInteractWithActor = false;
 	DoOnceInteractWithActor = false;
 	CurrentInteractActor->CurrWorkers -= 1;
-	//CurrentInteractActor->ArrInteractingCharas.Remove(this);
 	CurrentInteractActor = nullptr;
 	InteractType = EInteractCategory::Unavailable;
 }
 
-//bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
-//{
-//	// 1) 初始化
-//	if (!bIsTrading)
-//	{
-//		TradeSegments.Empty();
-//		CurrentSegIndex = 0;
-//		TradeStep = ETradeStep::ToSource;
-//		bIsTrading = true;
-//		bPickupAnimPlaying = false;
-//		bDropoffAnimPlaying = false;
-//
-//		// 拆环：直接取所有 keys
-//		TArray<AActor*> Nodes;
-//		TradeRoute.GetKeys(Nodes);
-//		if (Nodes.Num() < 2)
-//		{
-//			bIsTrading = false;
-//			return true;
-//		}
-//
-//		for (int32 i = 0; i < Nodes.Num(); ++i)
-//		{
-//			AActor* Source = Nodes[i];
-//			AActor* Destination = Nodes[(i + 1) % Nodes.Num()];
-//			for (auto& CargoMap : TradeRoute[Source])
-//			{
-//				FTradeSeg TradeSegment;
-//				TradeSegment.Source = Source;
-//				TradeSegment.Destination = Destination;
-//				TradeSegment.ItemId = CargoMap.Key;
-//				TradeSegment.Quantity = CargoMap.Value;
-//				TradeSegment.Moved = 0;
-//				TradeSegments.Add(TradeSegment);
-//			}
-//		}
-//	}
-//
-//	// 2) 全部段跑完?
-//	if (CurrentSegIndex >= TradeSegments.Num())
-//	{
-//		bIsTrading = false;
-//		return true;
-//	}
-//
-//	FTradeSeg& TradeSegment = TradeSegments[CurrentSegIndex];
-//	if (!IsValid(TradeSegment.Source) || !IsValid(TradeSegment.Destination))
-//	{
-//		UE_LOG(LogTemp, Warning, TEXT("TradingCargo: invalid actor, abort"));
-//		bIsTrading = false;
-//		return true;
-//	}
-//
-//	// 3) 判定是否到达当前节点
-//	USphereComponent* Sphere = (TradeStep == ETradeStep::ToDest)
-//		                           ? TradeSegment.Destination->FindComponentByClass<USphereComponent>()
-//		                           : TradeSegment.Source->FindComponentByClass<USphereComponent>();
-//
-//	bool bAtNode = Sphere && Sphere->IsOverlappingActor(this);
-//
-//
-//	switch (TradeStep)
-//	{
-//	case ETradeStep::ToSource:
-//		if (bAtNode)
-//		{
-//			MoveToLocationStop();
-//
-//			TradeStep = ETradeStep::Pickup;
-//			if (AIController)
-//			{
-//				AIController->StopMovement();
-//			}
-//		}
-//		else
-//		{
-//			MoveToLocation(TradeSegment.Source->GetActorLocation());
-//		}
-//		return false;
-//
-//	case ETradeStep::Pickup:
-//		{
-//			if (!bPickupAnimPlaying)
-//			{
-//				bPickupAnimPlaying = true;
-//
-//				// —— 把物品从 Source 拿到角色自己的 InventoryComp —— 
-//				if (auto* SourceInventory = TradeSegment.Source->FindComponentByClass<UOrionInventoryComponent>())
-//				{
-//					int32 Available = SourceInventory->GetItemQuantity(TradeSegment.ItemId);
-//					int32 ToTake = FMath::Min(Available, TradeSegment.Quantity);
-//
-//					if (ToTake > 0 && InventoryComp)
-//					{
-//						SourceInventory->ModifyItemQuantity(TradeSegment.ItemId, -ToTake);
-//						InventoryComp->ModifyItemQuantity(TradeSegment.ItemId, +ToTake);
-//						TradeSegment.Moved = ToTake;
-//					}
-//					else
-//					{
-//						UE_LOG(LogTemp, Warning, TEXT("TradingCargo: nothing to pickup"));
-//						bIsTrading = false;
-//						return true;
-//					}
-//				}
-//
-//				// 播放拾取蒙太奇
-//				if (PickupMontage)
-//				{
-//					float Rate = PickupMontage->GetPlayLength() / PickupDuration;
-//					GetMesh()->GetAnimInstance()->Montage_Play(PickupMontage, Rate);
-//				}
-//				GetWorld()->GetTimerManager().SetTimer(
-//					TimerHandle_Pickup,
-//					this, &AOrionChara::OnPickupAnimFinished,
-//					PickupDuration, false
-//				);
-//			}
-//			return false;
-//		}
-//
-//	case ETradeStep::ToDest:
-//		if (bAtNode)
-//		{
-//			MoveToLocationStop();
-//
-//			TradeStep = ETradeStep::Dropoff;
-//			if (AIController)
-//			{
-//				AIController->StopMovement();
-//			}
-//		}
-//		else
-//		{
-//			MoveToLocation(TradeSegment.Destination->GetActorLocation());
-//		}
-//		return false;
-//
-//	case ETradeStep::Dropoff:
-//		{
-//			if (!bDropoffAnimPlaying)
-//			{
-//				bDropoffAnimPlaying = true;
-//
-//				// —— 把物品从角色背包放到 Destination —— 
-//				if (auto* InvDst = TradeSegment.Destination->FindComponentByClass<UOrionInventoryComponent>())
-//				{
-//					InvDst->ModifyItemQuantity(TradeSegment.ItemId, TradeSegment.Moved);
-//				}
-//
-//				// 播放放下蒙太奇
-//				if (DropoffMontage)
-//				{
-//					float Rate = DropoffMontage->GetPlayLength() / DropoffDuration;
-//					GetMesh()->GetAnimInstance()->Montage_Play(DropoffMontage, Rate);
-//				}
-//				GetWorld()->GetTimerManager().SetTimer(
-//					TimerHandle_Dropoff,
-//					this, &AOrionChara::OnDropoffAnimFinished,
-//					DropoffDuration, false
-//				);
-//			}
-//			return false;
-//		}
-//	}
-//
-//	return true;
-//}
 
 bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
 {
@@ -1780,7 +1257,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		if (bAtNode)
 		{
 			MoveToLocationStop();
-			TradeStep = ETradeStep::Dropoff;
+			TradeStep = ETradeStep::DropOff;
 			if (AIController)
 			{
 				AIController->StopMovement();
@@ -1795,7 +1272,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	/*==============================================================
 	 *  Drop‑off
 	 *============================================================*/
-	case ETradeStep::Dropoff:
+	case ETradeStep::DropOff:
 		{
 			/* 如果 Destination 是自己：直接扣背包，不放动画，马上下一段 */
 			if (bDestIsSelf)
@@ -1875,8 +1352,6 @@ void AOrionChara::RemoveAllActions(const FString& Except)
 			}
 			else
 			{
-				// 不停止，而是重新规划当前移动目标
-				//ReRouteMoveToLocation();
 				MoveToLocationStop();
 			}
 		}
@@ -1903,7 +1378,7 @@ void AOrionChara::RemoveAllActions(const FString& Except)
 		CurrentAction = nullptr;
 	}
 
-	CharacterActionQueue.Actions.clear();
+	CharacterActionQueue.Actions.Empty();
 }
 
 void AOrionChara::Die()
@@ -2014,17 +1489,6 @@ void AOrionChara::Incapacitate()
 	}
 }
 
-void AOrionChara::AddItemToInventory(int ItemID, int Quantity)
-{
-	if (CharaInventoryMap.contains(ItemID))
-	{
-		CharaInventoryMap[ItemID] += Quantity;
-	}
-	else
-	{
-		CharaInventoryMap[ItemID] = Quantity;
-	}
-}
 
 std::vector<AOrionChara*> AOrionChara::GetOtherCharasByProximity() const
 {
@@ -2105,16 +1569,16 @@ bool AOrionChara::bIsLineOfSightBlocked(AActor* InTargetActor) const
 
 void AOrionChara::ReorderProceduralAction(int32 DraggedIndex, int32 DropIndex)
 {
-	auto& Q = CharacterProcActionQueue.Actions;
+	auto& CharaProcQueueActionsRef = CharacterProcActionQueue.Actions;
 
-	int32 Count = static_cast<int32>(Q.size());
+	int32 Count = CharaProcQueueActionsRef.Num();
 	if (DraggedIndex < 0 || DraggedIndex >= Count)
 	{
 		return;
 	}
 
-	Action Temp = MoveTemp(Q[DraggedIndex]);
-	Q.erase(Q.begin() + DraggedIndex);
+	OrionAction ActionRef = MoveTemp(CharaProcQueueActionsRef[DraggedIndex]);
+	CharaProcQueueActionsRef.RemoveAt(DraggedIndex);
 
 	int32 NewIndex = DropIndex;
 	if (DropIndex > DraggedIndex)
@@ -2122,17 +1586,17 @@ void AOrionChara::ReorderProceduralAction(int32 DraggedIndex, int32 DropIndex)
 		NewIndex = DropIndex - 1;
 	}
 
-	NewIndex = FMath::Clamp(NewIndex, 0, static_cast<int32>(Q.size()));
+	NewIndex = FMath::Clamp(NewIndex, 0, CharaProcQueueActionsRef.Num());
 
-	Q.insert(Q.begin() + NewIndex, MoveTemp(Temp));
+	CharaProcQueueActionsRef.Insert(MoveTemp(ActionRef), NewIndex);
 }
 
 void AOrionChara::RemoveProceduralActionAt(int32 Index)
 {
-	auto& Q = CharacterProcActionQueue.Actions;
-	if (Index >= 0 && Index < Q.size())
+	auto& CharaProcQueueActionsRef = CharacterProcActionQueue.Actions;
+	if (Index >= 0 && Index < CharaProcQueueActionsRef.Num())
 	{
-		Q.erase(Q.begin() + Index);
+		CharaProcQueueActionsRef.RemoveAt(Index);
 	}
 }
 

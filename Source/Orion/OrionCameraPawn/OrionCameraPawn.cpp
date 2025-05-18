@@ -5,6 +5,7 @@
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
+#include "Orion/OrionChara/OrionChara.h"
 
 void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
@@ -203,20 +204,20 @@ void AOrionCameraPawn::ToggleFollow()
 	{
 		if (PC->OrionCharaSelection.Num() == 1)
 		{
-			FollowTarget = PC->OrionCharaSelection[0];
+			FollowTarget = Cast<AActor>(PC->OrionCharaSelection[0]);
 			if (IsValid(FollowTarget))
 			{
 				bIsFollowing = true;
 			}
 		}
-		else if (PC->OrionPawnSelection.Num() == 1)
+		/*else if (PC->OrionPawnSelection.Num() == 1)
 		{
 			FollowTarget = PC->OrionPawnSelection[0];
 			if (IsValid(FollowTarget))
 			{
 				bIsFollowing = true;
 			}
-		}
+		}*/
 	}
 }
 

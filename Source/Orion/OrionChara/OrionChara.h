@@ -3,18 +3,16 @@
 // OrionChara.h
 
 #include "AIController.h"
-#include <unordered_map>
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include <Perception/AIPerceptionStimuliSourceComponent.h>
-#include <vector>
-#include <functional>
 #include "Orion/OrionWeaponProjectile/OrionWeapon.h"
 #include "Orion/OrionActor/OrionActor.h"
 #include "Orion/OrionActor/OrionActorStorage.h"
-#include "deque"
+#include "Orion/OrionCppFunctionLibrary/OrionCppFunctionLibrary.h"
 #include "Orion/OrionActor/OrionActorOre.h"
 #include "Orion/OrionActor/OrionActorProduction.h"
+#include "Orion/OrionInterface/OrionInterfaceActionable.h"
 #include "Orion/OrionInterface/OrionInterfaceSelectable.h"
 #include "OrionChara.generated.h"
 
@@ -56,14 +54,30 @@ enum class EAIState : uint8
 };
 
 
-class Action
+UENUM(BlueprintType)
+enum class EOrionAction : uint8
+{
+	AttackOnChara UMETA(DisplayName = "Attack On Character"),
+	InteractWithActor UMETA(DisplayName = "Interact With Actor"),
+	InteractWithProduction UMETA(DisplayName = "Interact With Production"),
+	InteractWithStorage UMETA(DisplayName = "Interact With Storage"),
+};
+
+UENUM(BlueprintType)
+enum class EActionExecution : uint8
+{
+	Procedural,
+	RealTime,
+};
+
+class OrionAction
 {
 public:
 	FString Name;
 
 	TFunction<bool(float)> ExecuteFunction;
 
-	Action(const FString& ActionName, TFunction<bool(float)> Func)
+	OrionAction(const FString& ActionName, TFunction<bool(float)> Func)
 		: Name(ActionName)
 		  , ExecuteFunction(MoveTemp(Func))
 	{
@@ -73,23 +87,16 @@ public:
 class ActionQueue
 {
 public:
-	std::deque<Action> Actions;
+	//std::deque<Action> Actions;
+	TObservableArray<OrionAction> Actions;
 
-	bool IsEmpty() const
-	{
-		return Actions.empty();
-	}
+	FORCEINLINE OrionAction* GetFrontAction() { return Actions.IsEmpty() ? nullptr : &Actions[0]; }
 
-	Action* GetFrontAction()
+	FORCEINLINE void PopFrontAction()
 	{
-		return IsEmpty() ? nullptr : &Actions.front();
-	}
-
-	void PopFrontAction()
-	{
-		if (!IsEmpty())
+		if (!Actions.IsEmpty())
 		{
-			Actions.pop_front();
+			Actions.RemoveAt(0);
 		}
 	}
 };
@@ -102,15 +109,116 @@ enum class ETradeStep : uint8
 	ToSource UMETA(DisplayName = "To Source"),
 	Pickup UMETA(DisplayName = "Pickup"),
 	ToDest UMETA(DisplayName = "To Destination"),
-	Dropoff UMETA(DisplayName = "Dropoff")
+	DropOff UMETA(DisplayName = "Dropoff")
 };
 
 UCLASS()
-class ORION_API AOrionChara : public ACharacter, public IOrionInterfaceSelectable
+class ORION_API AOrionChara : public ACharacter, public IOrionInterfaceSelectable, public IOrionInterfaceActionable
 {
 	GENERATED_BODY()
 
 public:
+	virtual FString GetUnifiedActionName() const override;
+
+	virtual bool GetIsCharaProcedural() override
+	{
+		return bIsCharaProcedural;
+	}
+
+	virtual bool SetIsCharaProcedural(bool bInIsCharaProcedural) override
+	{
+		bIsCharaProcedural = bInIsCharaProcedural;
+		return bIsCharaProcedural;
+	}
+
+	virtual void InsertOrionActionToQueue(
+		const OrionAction& OrionActionInstance,
+		const EActionExecution ActionExecutionType,
+		const int32 Index) override
+	{
+		auto& Actions = (ActionExecutionType == EActionExecution::Procedural)
+			                ? CharacterProcActionQueue.Actions
+			                : CharacterActionQueue.Actions;
+
+		if (Index == INDEX_NONE || Index < 0 || Index > Actions.Num())
+		{
+			Actions.Add(OrionActionInstance);
+		}
+		else
+		{
+			Actions.Insert(OrionActionInstance, Index);
+		}
+	}
+
+	virtual OrionAction InitActionMoveToLocation(const FString& ActionName, const FVector& TargetLocation) override
+	{
+		return OrionAction(
+			ActionName,
+			[charaPtr = this, targetLocation = TargetLocation](float DeltaTime) -> bool
+			{
+				return charaPtr->MoveToLocation(targetLocation);
+			}
+		);
+	}
+
+	virtual OrionAction InitActionAttackOnChara(const FString& ActionName,
+	                                            AActor* TargetChara, const FVector& HitOffset) override
+	{
+		return OrionAction(
+			ActionName,
+			[charaPtr = this, targetChara = TargetChara, inHitOffset = HitOffset](float DeltaTime) -> bool
+			{
+				return charaPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
+			}
+		);
+	}
+
+	virtual OrionAction InitActionInteractWithActor(const FString& ActionName,
+	                                                AOrionActor* TargetActor) override
+	{
+		return OrionAction(
+			ActionName,
+			[charaPtr = this, targetActor = TargetActor](float DeltaTime) -> bool
+			{
+				return charaPtr->InteractWithActor(DeltaTime, targetActor);
+			}
+		);
+	}
+
+	virtual OrionAction InitActionInteractWithProduction(const FString& ActionName,
+	                                                     AOrionActorProduction* TargetActor) override
+	{
+		return OrionAction(
+			ActionName,
+			[charaPtr = this, targetActor = TargetActor](float DeltaTime) -> bool
+			{
+				return charaPtr->InteractWithProduction(DeltaTime, targetActor);
+			}
+		);
+	}
+
+	virtual OrionAction InitActionCollectCargo(const FString& ActionName, AOrionActorStorage* TargetActor) override
+	{
+		return OrionAction(
+			ActionName,
+			[charaPtr = this, targetActor = TargetActor](float DeltaTime) -> bool
+			{
+				return charaPtr->CollectingCargo(targetActor);
+			}
+		);
+	}
+
+	virtual OrionAction InitActionCollectBullets(const FString& ActionName) override
+	{
+		return OrionAction(
+			ActionName,
+			[charaPtr = this](float DeltaTime) -> bool
+			{
+				return charaPtr->CollectBullets();
+			}
+		);
+	}
+
 	AOrionChara();
 
 	virtual void BeginPlay() override;
@@ -144,7 +252,7 @@ public:
 
 	FOnCharaActionChange OnCharaActionChange;
 
-
+	UPROPERTY()
 	AAIController* AIController;
 
 	UFUNCTION(BlueprintCallable, Category = "Basics")
@@ -166,7 +274,7 @@ public:
 	/** True while we’re in the process of fetching bullets */
 	bool bIsCollectingBullets = false;
 
-	bool CollectBullets(float DeltaTime);
+	bool CollectBullets();
 
 	/** Montage to play when picking up bullets */
 	UPROPERTY(EditDefaultsOnly, Category = "Animation")
@@ -223,19 +331,19 @@ public:
 
 	/* Character Action Queue */
 	ActionQueue CharacterActionQueue;
-	Action* CurrentAction;
-	Action* PreviousAction;
+	OrionAction* CurrentAction;
+	OrionAction* PreviousAction;
 
 	ActionQueue CharacterProcActionQueue;
-	Action* CurrentProcAction;
-	Action* PreviousProcAction;
+	OrionAction* CurrentProcAction;
+	OrionAction* PreviousProcAction;
 
 	void DistributeCharaAction(float DeltaTime);
 	void DistributeRealTimeAction(float DeltaTime);
 	void DistributeProceduralAction(float DeltaTime);
 	void SwitchingStateHandle(const FString& Prev, const FString& Curr);
-	void RemoveAllActions(const FString& Except = FString());
-	FString GetUnifiedActionName() const;
+	virtual void RemoveAllActions(const FString& Except = FString()) override;
+
 	/** last non-empty action name, persists across frames when current action is interrupted */
 	FString LastActionName;
 
@@ -371,12 +479,6 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
 	void RemoveHammerOnChara();
-
-	/* Inventory */
-	std::unordered_map<int, int> CharaInventoryMap;
-	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	void AddItemToInventory(int ItemID, int Quantity);
-	int TempCharaInventory;
 
 	/* Equipment */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | AttackOnChara")

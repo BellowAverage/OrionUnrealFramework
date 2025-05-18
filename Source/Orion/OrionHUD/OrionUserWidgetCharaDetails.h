@@ -35,8 +35,8 @@ public:
 			const int32 ItemId = Pair.Key;
 			const int32 Quantity = Pair.Value;
 
-			const FOrionItemInfo* Info = UOrionInventoryComponent::ItemInfoTable.FindByPredicate(
-				[ItemId](const FOrionItemInfo& I) { return I.ItemId == ItemId; });
+			const FOrionDataItem* Info = UOrionInventoryComponent::ItemInfoTable.FindByPredicate(
+				[ItemId](const FOrionDataItem& I) { return I.ItemId == ItemId; });
 
 			const FText Name = Info
 				                   ? Info->DisplayName

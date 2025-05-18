@@ -8,15 +8,19 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include <Kismet/GameplayStatics.h>
-#include "Orion/OrionAIController/OrionAIController.h"
-#include "Orion/OrionHUD/OrionHUD.h"
 #include <algorithm>
-#include "Orion/OrionActor/OrionActor.h"
-#include "Orion/OrionGameMode/OrionGameMode.h"
-#include "Orion/OrionStructure/OrionStructureFoundation.h"
-#include "EngineUtils.h"
 #include "Orion/OrionActor/OrionActorOre.h"
 #include "Orion/OrionInterface/OrionInterfaceSelectable.h"
+#include "Orion/OrionAIController/OrionAIController.h"
+#include "Orion/OrionHUD/OrionHUD.h"
+#include "Orion/OrionActor/OrionActor.h"
+#include "Orion/OrionGameMode/OrionGameMode.h"
+
+
+// Forward declarations
+#include "Orion/OrionStructure/OrionStructureFoundation.h"
+#include "Orion/OrionStructure/OrionStructureWall.h"
+#include "Orion/OrionStructure/OrionStructure.h"
 
 
 AOrionPlayerController::AOrionPlayerController()
@@ -72,6 +76,12 @@ void AOrionPlayerController::BeginPlay()
 	if (OrionHUD == nullptr)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Cast to OrionHUD failed!"));
+	}
+
+	if (BuildingManager = GetGameInstance() ? GetGameInstance()->GetSubsystem<UOrionBuildingManager>() : nullptr;
+		!BuildingManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get OrionBuildingManager subsystem!"));
 	}
 }
 
@@ -205,7 +215,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<TOrionStructure>
 
 	FVector DesiredLocation = GroundHit.ImpactPoint;
 
-	EOrionStructure OrionStructureCategory = PreviewStructure->GetOrionStructureCategory();
+	const EOrionStructure OrionStructureCategory = PreviewStructure->GetOrionStructureCategory();
 
 	if (OrionStructureCategory == EOrionStructure::Wall)
 	{
@@ -217,15 +227,13 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<TOrionStructure>
 	FOrionGlobalSocket BestSocket;
 
 
-	const auto& FreeSockets = AOrionStructure::GetFreeSockets();
-	for (const auto& Socket : FreeSockets)
+	for (const auto& FreeSockets = BuildingManager->GetFreeSockets(); const auto& Socket : FreeSockets)
 	{
 		if (Socket.Kind != OrionStructureCategory)
 		{
 			continue;
 		}
-		const float DistSqr = FVector::DistSquared(DesiredLocation, Socket.Location);
-		if (DistSqr < BestDistSqr)
+		if (const float DistSqr = FVector::DistSquared(DesiredLocation, Socket.Location); DistSqr < BestDistSqr)
 		{
 			BestDistSqr = DistSqr;
 			BestSocket = Socket;
@@ -299,8 +307,6 @@ void AOrionPlayerController::TogglePlacingStructure(
 		PreviewStructurePtr = World->SpawnActor<TOrionStructure>(
 			BPOrionStructure, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
 
-		//bIsSpawnPreviewStructure = false;
-
 		if (PreviewStructurePtr)
 		{
 			PreviewStructurePtr->SetActorEnableCollision(false);
@@ -344,35 +350,18 @@ void AOrionPlayerController::ConfirmPlaceStructure(TSubclassOf<TOrionStructure> 
 		return;
 	}
 
-	if (PreviewStructurePtr->bForceSnapOnGrid && !bStructureSnapped)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Structure must snap to an unoccupied socket!"));
-		return;
-	}
-
-	FActorSpawnParameters StructureSpawnParameter;
-	StructureSpawnParameter.SpawnCollisionHandlingOverride =
-		ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FTransform SpawnTransform = FTransform::Identity;
 
 	if (bStructureSnapped)
 	{
-		FTransform SpawnTransform(
+		SpawnTransform = FTransform(
 			SnappedSocketRot,
 			SnappedSocketLoc,
 			SnappedSocketScale
 		);
-
-		TOrionStructure* StructurePlaced = GetWorld()->SpawnActor<TOrionStructure>(
-			BPOrionStructure, SpawnTransform, StructureSpawnParameter);
-	}
-	else if (!bStructureSnapped && PreviewStructurePtr && !PreviewStructurePtr->bForceSnapOnGrid)
-	{
-		TOrionStructure* StructurePlaced = GetWorld()->SpawnActor<TOrionStructure>(
-			BPOrionStructure, PreviewStructurePtr->GetActorLocation(),
-			PreviewStructurePtr->GetActorRotation(), StructureSpawnParameter);
 	}
 
-	bStructureSnapped = false;
+	BuildingManager->ConfirmPlaceStructure(BPOrionStructure, PreviewStructurePtr, bStructureSnapped, SpawnTransform);
 }
 
 void AOrionPlayerController::OnLeftMouseDown()
@@ -436,7 +425,7 @@ void AOrionPlayerController::OnLeftMouseUp()
 	}
 }
 
-void AOrionPlayerController::DemolishStructureUnderCursor()
+void AOrionPlayerController::DemolishStructureUnderCursor() const
 {
 	UE_LOG(LogTemp, Log, TEXT("Demolishing structure under cursor."));
 
@@ -729,62 +718,116 @@ void AOrionPlayerController::OnRightMouseUp()
 		return;
 	}
 
-	if (PressDuration < RightClickHoldThreshold)
+	if (PressDuration < RightClickHoldThreshold) /* Short Press */
 	{
-		// Short press
-		UE_LOG(LogTemp, Log, TEXT("Short Press on OrionActor => InteractWithActor."));
-		AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
-		if (OrionGameMode && !OrionCharaSelection.IsEmpty())
+		if (AOrionActorStorage* StorageActorInstance = Cast<AOrionActorStorage>(CachedRightClickedOrionActor))
 		{
-			if (AOrionActorStorage* TempActorStorage = Cast<AOrionActorStorage>(CachedRightClickedOrionActor))
+			if (!bIsShiftPressed)
 			{
-				if (!bIsShiftPressed)
+				UE_LOG(LogTemp, Log, TEXT("Immediate Command on Storage Currently Unavailable. "));
+			}
+			else
+			{
+				for (const auto& EachChara : OrionCharaSelection)
 				{
-					UE_LOG(LogTemp, Log, TEXT("Immediate Command on Storage Currently Unavailable. "));
-				}
-				else
-				{
-					OrionGameMode->ApproveCollectingCargo(OrionCharaSelection, TempActorStorage,
-					                                      CommandType::Append);
+					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					{
+						FString ActionName = FString::Printf(
+							TEXT("CollectingCargo_%s"), *StorageActorInstance->GetName());
+						OrionAction AddingAction = IActionable->
+							InitActionCollectCargo(ActionName, StorageActorInstance);
+						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+					}
 				}
 			}
-			else if (AOrionActorProduction* TempActorProduction = Cast<AOrionActorProduction>(
-				CachedRightClickedOrionActor))
+		}
+		else if (AOrionActorProduction* ProductionActorInstance = Cast<AOrionActorProduction>(
+			CachedRightClickedOrionActor))
+		{
+			if (!bIsShiftPressed)
 			{
-				if (!bIsShiftPressed)
+				for (const auto& EachChara : OrionCharaSelection)
 				{
-					OrionGameMode->ApproveInteractWithProduction(OrionCharaSelection, TempActorProduction,
-					                                             CommandType::Force);
-				}
-				else
-				{
-					OrionGameMode->ApproveInteractWithProduction(OrionCharaSelection, TempActorProduction,
-					                                             CommandType::Append);
-				}
-			}
-			else if (AOrionActorOre* TempActorOre = Cast<AOrionActorOre>(CachedRightClickedOrionActor))
-			{
-				if (!bIsShiftPressed)
-				{
-					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
-					                                        CommandType::Force);
-				}
+					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					{
+						if (IActionable->GetIsCharaProcedural())
+						{
+							IActionable->SetIsCharaProcedural(false);
+						}
 
-				else
-				{
-					OrionGameMode->ApproveInteractWithActor(OrionCharaSelection, CachedRightClickedOrionActor,
-					                                        CommandType::Append);
+
+						IActionable->RemoveAllActions();
+
+						FString ActionName = FString::Printf(
+							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
+						OrionAction AddingAction = IActionable->InitActionInteractWithProduction(
+							ActionName, ProductionActorInstance);
+						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+					}
 				}
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Right Clicked on an unknown Actor."));
+				for (const auto& EachChara : OrionCharaSelection)
+				{
+					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					{
+						FString ActionName = FString::Printf(
+							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
+						OrionAction AddingAction = IActionable->InitActionInteractWithProduction(
+							ActionName, ProductionActorInstance);
+						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+					}
+				}
 			}
 		}
+		else if (AOrionActorOre* OreActorInstance = Cast<AOrionActorOre>(CachedRightClickedOrionActor))
+		{
+			if (!bIsShiftPressed)
+			{
+				for (const auto& EachChara : OrionCharaSelection)
+				{
+					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					{
+						if (IActionable->GetIsCharaProcedural())
+						{
+							IActionable->SetIsCharaProcedural(false);
+						}
+
+						IActionable->RemoveAllActions();
+
+						FString ActionName = FString::Printf(
+							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
+						OrionAction AddingAction = IActionable->InitActionInteractWithActor(
+							ActionName, OreActorInstance);
+						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+					}
+				}
+			}
+
+			else
+			{
+				for (const auto& EachChara : OrionCharaSelection)
+				{
+					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					{
+						FString ActionName = FString::Printf(
+							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
+						OrionAction AddingAction = IActionable->InitActionInteractWithActor(
+							ActionName, OreActorInstance);
+						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+					}
+				}
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Right Clicked on an unknown Actor."));
+		}
 	}
-	else
+
+	else /* Long Press */
 	{
-		// Long press
 		UE_LOG(LogTemp, Warning, TEXT("Long Press on OrionActor => do something else (not InteractWithActor)."));
 
 		// 1. Cache the selected OrionCharas - Subjects
@@ -817,7 +860,6 @@ void AOrionPlayerController::OnRightMouseUp()
 		}
 	}
 
-	// 清空缓存，避免下一次按下时仍旧拿到旧的Actor
 	CachedRightClickedOrionActor = nullptr;
 }
 
@@ -834,7 +876,16 @@ void AOrionPlayerController::OnRightMouseDown()
 		HitResult
 	);
 
-	if (!HitResult.bBlockingHit)
+	AActor* HitActor = nullptr;
+	bool BHitOnActor = false;
+	bool BHitOnLandscape = false;
+
+	if (HitResult.bBlockingHit)
+	{
+		HitActor = HitResult.GetActor();
+		BHitOnActor = true;
+	}
+	else /*!HitResult.bBlockingHit*/
 	{
 		// Pass Custom Channel directly if that overload exists: ECC_GameTraceChannel1 is mapped as "Landscape" in Editor. See DefaultEngine.ini.
 		// Try to trace landscape using landscape channel
@@ -849,152 +900,162 @@ void AOrionPlayerController::OnRightMouseDown()
 		// 0. If clicked on Landscape => Default action is MoveToLocation
 		if (HitResult.bBlockingHit)
 		{
-			if (NiagaraHitResultEffect)
-			{
-				UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-					GetWorld(),
-					NiagaraHitResultEffect,
-					HitResult.Location
-				);
-			}
+			BHitOnLandscape = true;
+		}
+	}
 
-			AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
-			if (OrionGameMode)
+	bool BHitFoundationActor = false;
+
+	if (BHitOnActor && HitActor)
+	{
+		BHitFoundationActor = HitActor->IsA(AOrionStructureFoundation::StaticClass());
+	}
+
+	if (BHitOnLandscape || BHitFoundationActor)
+	{
+		if (NiagaraHitResultEffect)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+				GetWorld(),
+				NiagaraHitResultEffect,
+				HitResult.Location
+			);
+		}
+
+		if (!bIsShiftPressed)
+		{
+			/* Invoke Debug Menu */
+			if (OrionCharaSelection.IsEmpty())
 			{
-				if (!bIsShiftPressed)
+				if (OrionHUD)
 				{
-					// If no OrionChara or OrionPawn selected => show menu
-					if (OrionCharaSelection.IsEmpty() && OrionPawnSelection.IsEmpty())
+					TArray<FString> ArrOptionNames;
+					ArrOptionNames.Add("SpawnHostileOrionCharacterHere");
+					ArrOptionNames.Add("Operation2");
+					ArrOptionNames.Add("Operation3");
+					OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
+				}
+			}
+			else /* OrionCharaSelection is not empty. */
+			{
+				for (const auto& EachChara : OrionCharaSelection)
+				{
+					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
 					{
-						//if (OrionHUD)
-						//{
-						//	std::vector<std::string> ArrOptionNames;
-						//	ArrOptionNames.push_back("SpawnHostileOrionCharacterHere");
-						//	ArrOptionNames.push_back("Operation2");
-						//	ArrOptionNames.push_back("Operation3");
-						//	OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
-						//}
-					}
-
-					// If OrionChara or OrionPawn selected => move them to the clicked location
-					else
-					{
-						if (!OrionCharaSelection.IsEmpty())
+						if (IActionable->GetIsCharaProcedural())
 						{
-							OrionGameMode->ApproveCharaMoveToLocation(OrionCharaSelection, HitResult.Location,
-							                                          CommandType::Force);
+							IActionable->SetIsCharaProcedural(false);
 						}
-						if (!OrionPawnSelection.IsEmpty())
+
+						IActionable->RemoveAllActions();
+
+						OrionAction AddingAction = IActionable->InitActionMoveToLocation(
+							TEXT("MoveToLocation"), HitResult.Location);
+						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+					}
+				}
+			}
+		}
+		else /* bIsShiftPressed == true */
+		{
+			// If OrionChara or OrionPawn selected => move them to the clicked location
+			for (const auto& EachChara : OrionCharaSelection)
+			{
+				if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+				{
+					OrionAction AddingAction = IActionable->InitActionMoveToLocation(
+						TEXT("MoveToLocation"), HitResult.Location);
+					IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+				}
+			}
+		}
+	}
+
+	else if (BHitOnActor && HitActor)
+	{
+		// 1. If clicked on OrionChara => Default action is AttackOnChara
+		if (AOrionChara* HitChara = Cast<AOrionChara>(HitActor))
+		{
+			const FVector HitOffset = HitResult.ImpactPoint - HitChara->GetActorLocation();
+			const FString ActionName = FString::Printf(
+				TEXT("AttackOnCharaLongRange-%s"), *HitActor->GetName());
+
+			if (!bIsShiftPressed)
+			{
+				if (!OrionCharaSelection.IsEmpty())
+				{
+					for (const auto& EachChara : OrionCharaSelection)
+					{
+						if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
 						{
-							OrionGameMode->ApprovePawnMoveToLocation(OrionPawnSelection, HitResult.Location,
-							                                         CommandType::Force);
+							if (IActionable->GetIsCharaProcedural())
+							{
+								IActionable->SetIsCharaProcedural(false);
+							}
+
+
+							if (IActionable->GetUnifiedActionName() == ActionName)
+							{
+								UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
+								continue;
+							}
+
+							/* else if (IActionable->GetUnifiedActionName().Contains("AttackOnCharaLongRange"))
+							{
+								UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
+								continue;
+							} */
+
+							IActionable->RemoveAllActions();
+
+							OrionAction AddingAction = IActionable->InitActionAttackOnChara(
+								ActionName, HitActor, HitOffset);
+							IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 						}
 					}
 				}
 				else
 				{
-					OrionGameMode->ApproveCharaMoveToLocation(OrionCharaSelection, HitResult.Location,
-					                                          CommandType::Append);
-					OrionGameMode->ApprovePawnMoveToLocation(OrionPawnSelection, HitResult.Location,
-					                                         CommandType::Append);
+					UE_LOG(LogTemp, Log, TEXT("No OrionChara selected."));
 				}
 			}
-
-			return;
-		}
-	}
-
-	if (HitResult.bBlockingHit)
-	{
-		AActor* HitWorldActor = HitResult.GetActor();
-
-		// 1. If clicked on OrionChara => Default action is AttackOnChara
-		if (AOrionChara* HitChara = Cast<AOrionChara>(HitWorldActor))
-		{
-			FVector HitOffset = HitResult.ImpactPoint - HitChara->GetActorLocation();
-
-			if (!bIsShiftPressed)
+			else /* bIsShiftPressed == true */
 			{
-				AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
-				if (OrionGameMode && !OrionCharaSelection.IsEmpty())
+				if (!OrionCharaSelection.IsEmpty())
 				{
-					OrionGameMode->ApproveCharaAttackOnActor(OrionCharaSelection, HitChara, HitOffset,
-					                                         CommandType::Force);
+					for (const auto& EachChara : OrionCharaSelection)
+					{
+						if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+						{
+							OrionAction AddingAction = IActionable->InitActionAttackOnChara(
+								ActionName, HitActor, HitOffset);
+							IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						}
+					}
 				}
-			}
-			else
-			{
-				AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
-				if (OrionGameMode && !OrionCharaSelection.IsEmpty())
+				else
 				{
-					OrionGameMode->ApproveCharaAttackOnActor(OrionCharaSelection, HitChara, HitOffset,
-					                                         CommandType::Append);
+					UE_LOG(LogTemp, Log, TEXT("No OrionChara selected."));
 				}
 			}
 		}
 
 		// 2. If clicked on OrionActor => Default action is InteractWithActor
-		else if (AOrionActor* HitActor = Cast<AOrionActor>(HitWorldActor))
+		else if (AOrionActor* HitOtherActor = Cast<AOrionActor>(HitActor))
 		{
-			// ★ 把它存起来，等 OnRightMouseUp 时再做区分：短按=Interact，长按=其他逻辑
-			CachedRightClickedOrionActor = HitActor;
+			// ★ Store it here, and distinguish between short press = Interact, and long press = other logic in OnRightMouseUp
+			CachedRightClickedOrionActor = HitOtherActor;
 		}
 
 		// 3. If clicked on OrionVehicle => Default action is (...)
-		else if (HitWorldActor->GetName().Contains("OrionVehicle"))
+		else if (HitActor->GetName().Contains("OrionVehicle"))
 		{
-			UE_LOG(LogTemp, Log, TEXT("Clicked on OrionVehicle: %s"), *HitWorldActor->GetName());
-		}
-
-		else if (AOrionStructureFoundation* ClickedStructureFoundation = Cast<AOrionStructureFoundation>(HitWorldActor))
-		{
-			UE_LOG(LogTemp, Log, TEXT("Clicked on Structure Foundation: %s"), *ClickedStructureFoundation->GetName());
-			AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
-			if (OrionGameMode)
-			{
-				if (!bIsShiftPressed)
-				{
-					// If no OrionChara or OrionPawn selected => show menu
-					if (OrionCharaSelection.IsEmpty() && OrionPawnSelection.IsEmpty())
-					{
-						//if (OrionHUD)
-						//{
-						//	std::vector<std::string> ArrOptionNames;
-						//	ArrOptionNames.push_back("SpawnHostileOrionCharacterHere");
-						//	ArrOptionNames.push_back("Operation2");
-						//	ArrOptionNames.push_back("Operation3");
-						//	OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
-						//}
-					}
-
-					// If OrionChara or OrionPawn selected => move them to the clicked location
-					else
-					{
-						if (!OrionCharaSelection.IsEmpty())
-						{
-							OrionGameMode->ApproveCharaMoveToLocation(OrionCharaSelection, HitResult.Location,
-							                                          CommandType::Force);
-						}
-						if (!OrionPawnSelection.IsEmpty())
-						{
-							OrionGameMode->ApprovePawnMoveToLocation(OrionPawnSelection, HitResult.Location,
-							                                         CommandType::Force);
-						}
-					}
-				}
-				else
-				{
-					OrionGameMode->ApproveCharaMoveToLocation(OrionCharaSelection, HitResult.Location,
-					                                          CommandType::Append);
-					OrionGameMode->ApprovePawnMoveToLocation(OrionPawnSelection, HitResult.Location,
-					                                         CommandType::Append);
-				}
-			}
+			UE_LOG(LogTemp, Log, TEXT("Clicked on OrionVehicle: %s"), *HitActor->GetName());
 		}
 
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("Clicked other actor: %s"), *HitWorldActor->GetName());
+			UE_LOG(LogTemp, Log, TEXT("Clicked other actor: %s"), *HitActor->GetName());
 		}
 	}
 }
@@ -1043,13 +1104,38 @@ void AOrionPlayerController::OnShiftReleased()
 
 void AOrionPlayerController::RequestAttackOnOrionActor(FVector HitOffset, CommandType inCommandType)
 {
-	if (!CachedActionSubjects.IsEmpty() && !CachedActionObjects)
+	if (!CachedActionSubjects.IsEmpty() && !CachedActionObjects && !OrionCharaSelection.IsEmpty())
 	{
-		AOrionGameMode* OrionGameMode = GetWorld()->GetAuthGameMode<AOrionGameMode>();
-		if (OrionGameMode)
+		for (const auto& EachChara : OrionCharaSelection)
 		{
-			OrionGameMode->ApproveCharaAttackOnActor(CachedActionSubjects, CachedActionObjects, HitOffset,
-			                                         CommandType::Force);
+			if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+			{
+				if (IActionable->GetIsCharaProcedural())
+				{
+					IActionable->SetIsCharaProcedural(false);
+				}
+
+				FString ActionName = FString::Printf(
+					TEXT("AttackOnCharaLongRange-%s"), *CachedActionObjects->GetName());
+
+				if (IActionable->GetUnifiedActionName() == ActionName)
+				{
+					UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
+					continue;
+				}
+
+				/* else if (IActionable->GetUnifiedActionName().Contains("AttackOnCharaLongRange"))
+				{
+					UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
+					continue;
+				} */
+
+				IActionable->RemoveAllActions();
+
+				OrionAction AddingAction = IActionable->InitActionAttackOnChara(
+					ActionName, CachedActionObjects, HitOffset);
+				IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+			}
 		}
 	}
 }
@@ -1074,7 +1160,7 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 		{
 			FString ActionName = FString::Printf(
 				TEXT("InteractWithInventory%s"), *CachedActionObjects->GetName());
-			OrionCharaSelection[0]->CharacterActionQueue.Actions.push_back(Action(
+			OrionCharaSelection[0]->CharacterActionQueue.Actions.Add(OrionAction(
 				ActionName,
 				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](
 				float DeltaTime) -> bool
@@ -1161,7 +1247,7 @@ void AOrionPlayerController::DrawOrionActorStatus()
 							int32 Quantity = Pair.Y;
 
 							// 3) 拿静态信息（DisplayName/ChineseDisplayName）
-							FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
+							FOrionDataItem Info = InvComp->GetItemInfo(ItemId);
 
 							// 4) 格式化成 "<Name>: <数量>"
 							Lines.Add(FString::Printf(
@@ -1188,7 +1274,7 @@ void AOrionPlayerController::DrawOrionActorStatus()
 							int32 ItemId = Pair.X;
 							int32 Quantity = Pair.Y;
 
-							FOrionItemInfo Info = InvComp->GetItemInfo(ItemId);
+							FOrionDataItem Info = InvComp->GetItemInfo(ItemId);
 
 							Lines.Add(FString::Printf(
 								TEXT("%s: %d"),

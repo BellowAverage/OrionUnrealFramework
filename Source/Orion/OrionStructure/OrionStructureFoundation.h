@@ -34,7 +34,7 @@ public:
 	TSubclassOf<AOrionStructureFoundation> BlueprintFoundationInstance;
 
 	UFUNCTION(BlueprintCallable, Category = "Basics")
-	EOrionStructure GetOrionStructureCategory()
+	static EOrionStructure GetOrionStructureCategory()
 	{
 		return EOrionStructure::Foundation;
 	}

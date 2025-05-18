@@ -5,6 +5,7 @@
 #include "GameFramework/Actor.h"
 //#include "Perception/AIPerceptionStimuliSourceComponent.h"
 //#include "Perception/AISense_Sight.h"
+#include "Orion/OrionInterface/OrionInterfaceActionable.h"
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -38,6 +39,19 @@ void AOrionAIController::BeginPlay()
 	}
 
 	ControlledPawn = Cast<AOrionChara>(GetPawn());
+
+	if (!ControlledPawn)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ControlledPawn is nullptr"));
+		return;
+	}
+
+	ControlledPawnActionableInterface = Cast<IOrionInterfaceActionable>(ControlledPawn);
+
+	if (!ControlledPawnActionableInterface)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ControlledPawnActionableInterface is nullptr"));
+	}
 }
 
 void AOrionAIController::Tick(float DeltaTime)
@@ -87,20 +101,17 @@ void AOrionAIController::RegisterFetchingAmmoEvent()
 	// only if nothing else is queued or running
 	if (ControlledPawn->CharaState == ECharaState::Alive
 		&& ControlledPawn->CurrentAction == nullptr
-		&& ControlledPawn->CharacterActionQueue.IsEmpty())
+		&& ControlledPawn->CharacterActionQueue.Actions.IsEmpty())
 	{
 		UE_LOG(LogTemp, Log, TEXT("Enqueuing FetchAmmo action"));
 
-		ControlledPawn->CharacterActionQueue.Actions.push_back(
-			Action(
-				TEXT("FetchAmmo"),
-				[charaPtr = ControlledPawn](float DeltaTime) -> bool
-				{
-					// CollectBullets returns true when fully done fetching
-					return charaPtr->CollectBullets(DeltaTime);
-				}
-			)
-		);
+		if (ControlledPawnActionableInterface)
+		{
+			const OrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionCollectBullets(
+				TEXT("AC_CollectAmmo"));
+			ControlledPawnActionableInterface->InsertOrionActionToQueue(
+				AddingOrionAction, EActionExecution::RealTime, -1);
+		}
 	}
 }
 
@@ -108,7 +119,7 @@ void AOrionAIController::RegisterFetchingAmmoEvent()
 void AOrionAIController::RegisterDefensiveAIActon()
 {
 	if (ControlledPawn->CharaState == ECharaState::Alive && ControlledPawn->CurrentAction == nullptr && ControlledPawn
-		->CharacterActionQueue.IsEmpty() && ControlledPawn->InventoryComp->GetItemQuantity(3) > 0)
+		->CharacterActionQueue.Actions.IsEmpty() && ControlledPawn->InventoryComp->GetItemQuantity(3) > 0)
 	{
 		if (AOrionChara* TargetOrionChara = GetClosestOrionCharaByRelation(
 			ERelation::Hostile, ControlledPawn->HostileGroupsIndex, ControlledPawn->FriendlyGroupsIndex))
@@ -117,15 +128,15 @@ void AOrionAIController::RegisterDefensiveAIActon()
 			       *TargetOrionChara->GetName());
 
 			const FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange|%s"), *TargetOrionChara->GetName());
-			ControlledPawn->CharacterActionQueue.Actions.push_back(
-				Action(ActionName,
-				       [charPtr = ControlledPawn, targetChara = TargetOrionChara, inHitOffset = FVector()](
-				       float DeltaTime) -> bool
-				       {
-					       return charPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
-				       }
-				)
-			);
+
+
+			if (ControlledPawnActionableInterface)
+			{
+				const OrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionAttackOnChara(
+					ActionName, TargetOrionChara, FVector());
+				ControlledPawnActionableInterface->InsertOrionActionToQueue(
+					AddingOrionAction, EActionExecution::RealTime, -1);
+			}
 		}
 		else
 		{

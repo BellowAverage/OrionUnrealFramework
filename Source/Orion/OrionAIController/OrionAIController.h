@@ -7,6 +7,7 @@
 #include "Orion/OrionChara/OrionChara.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
+#include "Orion/OrionInterface/OrionInterfaceActionable.h"
 #include "OrionAIController.generated.h"
 
 UENUM(BlueprintType)
@@ -42,6 +43,8 @@ protected:
 	void OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
 
 	// AIController Utility Functions
+
+	IOrionInterfaceActionable* ControlledPawnActionableInterface;
 
 	UPROPERTY()
 	AOrionChara* ControlledPawn;

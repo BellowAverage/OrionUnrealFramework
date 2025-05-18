@@ -189,9 +189,9 @@ void UOrionUserWidgetCharaInfo::UpdateProcActionQueue(AOrionChara* InChara)
 	ProceduralActionBox->ClearChildren();
 
 	const auto& Q = InChara->CharacterProcActionQueue.Actions;
-	for (int32 i = 0; i < Q.size(); ++i)
+	for (int32 i = 0; i < Q.Num(); ++i)
 	{
-		const Action& Act = Q[i];
+		const OrionAction& Act = Q[i];
 		auto* Item = CreateWidget<UOrionUserWidgetProceduralAction>(
 			this, ProceduralActionItemClass);
 		Item->SetupActionItem(Act.Name, i);
@@ -241,7 +241,7 @@ void UOrionUserWidgetCharaInfo::OnMoveDownClicked()
 	{
 		return;
 	}
-	int32 Count = CharaRef->CharacterProcActionQueue.Actions.size();
+	int32 Count = CharaRef->CharacterProcActionQueue.Actions.Num();
 	if (SelectedIndex >= 0 && SelectedIndex < Count - 1)
 	{
 		CharaRef->ReorderProceduralAction(SelectedIndex, SelectedIndex + 2);
@@ -258,7 +258,7 @@ void UOrionUserWidgetCharaInfo::OnDeleteClicked()
 		return;
 	}
 	if (SelectedIndex >= 0 &&
-		SelectedIndex < CharaRef->CharacterProcActionQueue.Actions.size())
+		SelectedIndex < CharaRef->CharacterProcActionQueue.Actions.Num())
 	{
 		CharaRef->RemoveProceduralActionAt(SelectedIndex);
 		UpdateProcActionQueue(CharaRef);
@@ -326,7 +326,7 @@ void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 
 	// 构造当前的名称列表
 	TArray<FString> CurrProcNames;
-	CurrProcNames.Reserve(InChara->CharacterProcActionQueue.Actions.size());
+	CurrProcNames.Reserve(InChara->CharacterProcActionQueue.Actions.Num());
 	for (const auto& Act : InChara->CharacterProcActionQueue.Actions)
 	{
 		CurrProcNames.Add(Act.Name);

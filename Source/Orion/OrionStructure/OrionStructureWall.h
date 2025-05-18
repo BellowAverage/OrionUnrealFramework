@@ -29,7 +29,7 @@ public:
 	TSubclassOf<AOrionStructureWall> BlueprintWallInstance;
 
 	UFUNCTION(BlueprintCallable, Category = "Basics")
-	EOrionStructure GetOrionStructureCategory()
+	static EOrionStructure GetOrionStructureCategory()
 	{
 		return EOrionStructure::Wall;
 	}

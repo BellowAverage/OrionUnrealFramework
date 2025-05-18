@@ -2,40 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Orion/OrionGameData/OrionDataItem.h"
 #include "OrionInventoryComponent.generated.h"
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
-
-USTRUCT(BlueprintType)
-struct FOrionItemInfo
-{
-	GENERATED_BODY()
-
-	/** 唯一 ID */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-	int32 ItemId = 0;
-
-	/** 内部名称 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-	FName Name;
-
-	/** 英文显示名 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-	FText DisplayName;
-
-	/** 中文显示名 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-	FText ChineseDisplayName;
-
-	/** 标准价格 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-	float PriceSTD = 0.f;
-
-	/** 标准生产/处理时间（秒） */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
-	float ProductionTimeCostSTD = 0.f;
-};
 
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -85,11 +56,11 @@ public:
 
 	/** 根据 ItemId 查询静态物品信息，找不到返回 nullptr */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	FOrionItemInfo GetItemInfo(int32 ItemId) const;
+	FOrionDataItem GetItemInfo(int32 ItemId) const;
 
 	/** 返回所有预设的物品信息列表 */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
-	const TArray<FOrionItemInfo>& GetAllItemInfos() const;
+	const TArray<FOrionDataItem>& GetAllItemInfos() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void RefreshInventoryText();
@@ -97,5 +68,5 @@ public:
 
 	virtual void BeginPlay() override;
 
-	static TArray<FOrionItemInfo> ItemInfoTable;
+	static TArray<FOrionDataItem> ItemInfoTable;
 };

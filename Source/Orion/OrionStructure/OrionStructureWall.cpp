@@ -47,7 +47,7 @@ void AOrionStructureWall::BeginPlay()
 	}
 
 	/* ① 自身 socket —— 视为“占用” */
-	RegisterSocket(
+	BuildingManager->RegisterSocket(
 		StructureMesh->GetComponentLocation(),
 		StructureMesh->GetComponentRotation(),
 		EOrionStructure::Wall,
@@ -57,7 +57,7 @@ void AOrionStructureWall::BeginPlay()
 	/* ② 普通接口 socket —— 视为“空闲” */
 	for (const auto& S : WallSockets)
 	{
-		RegisterSocket(
+		BuildingManager->RegisterSocket(
 			S.SocketLocation,
 			S.SocketRotation,
 			EOrionStructure::Wall,
