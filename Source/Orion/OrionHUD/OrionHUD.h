@@ -1,10 +1,14 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "OrionUserWidgetUIBase.h"
 #include "GameFramework/HUD.h"
 #include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "OrionHUD.generated.h"
+
+DECLARE_DELEGATE(FOnViewLevelUp);
+DECLARE_DELEGATE(FOnViewLevelDown);
 
 UCLASS()
 class ORION_API AOrionHUD : public AHUD
@@ -18,10 +22,14 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+
 	/* Developer UI Base */
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-	TSubclassOf<UUserWidget> WB_DeveloperUIBase;
+	TSubclassOf<UOrionUserWidgetUIBase> WB_DeveloperUIBase;
+
+	FOnViewLevelUp OnViewLevelUp;
+	FOnViewLevelUp OnViewLevelDown;
 
 
 	/* Player Operation Menu */
@@ -49,6 +57,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "UI")
 	void ShowCharaInfoPanel();
+	void ShowBuildingMenu();
+	void HideBuildingMenu();
 
 
 	UFUNCTION(BlueprintCallable, Category = "UI")

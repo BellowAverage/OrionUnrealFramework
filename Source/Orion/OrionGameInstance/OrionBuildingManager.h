@@ -4,97 +4,45 @@
 
 #include "CoreMinimal.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "EngineUtils.h"
+#include "Orion/OrionGlobals/EOrionStructure.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Orion/OrionSaveGame/OrionSaveGame.h"
+
+class AOrionStructure;
+class UOrionStructureComponent;
+
 #include "OrionBuildingManager.generated.h"
 
-USTRUCT()
-struct FFoundationSocket
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	bool bIsOccupied = false;
-
-	UPROPERTY()
-	FVector SocketLocation;
-
-	UPROPERTY()
-	FRotator SocketRotation;
-
-	FFoundationSocket()
-		: bIsOccupied(false)
-		  , SocketLocation(FVector::ZeroVector)
-		  , SocketRotation(FRotator::ZeroRotator)
-	{
-	}
-
-	FFoundationSocket(
-		bool InbIsOccupied,
-		FVector InSocketLocation,
-		FRotator InSocketRotator)
-		: bIsOccupied(InbIsOccupied)
-		  , SocketLocation(InSocketLocation)
-		  , SocketRotation(InSocketRotator)
-	{
-	}
-};
-
-USTRUCT()
-struct FWallSocket
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	bool bIsOccupied = false;
-
-	UPROPERTY()
-	FVector SocketLocation;
-
-	UPROPERTY()
-	FRotator SocketRotation;
-
-	FWallSocket()
-		: bIsOccupied(false)
-		  , SocketLocation(FVector::ZeroVector)
-		  , SocketRotation(FRotator::ZeroRotator)
-	{
-	}
-
-	FWallSocket(
-		bool InbIsOccupied,
-		FVector InSocketLocation,
-		FRotator InSocketRotator)
-		: bIsOccupied(InbIsOccupied)
-		  , SocketLocation(InSocketLocation)
-		  , SocketRotation(InSocketRotator)
-	{
-	}
-};
-
-UENUM()
-enum class EOrionStructure : uint8
-{
-	Foundation,
-	Wall
-};
 
 USTRUCT()
 struct FOrionGlobalSocket
 {
 	GENERATED_BODY()
 
+	UPROPERTY()
 	FVector Location;
+	UPROPERTY()
 	FRotator Rotation;
+	UPROPERTY()
 	EOrionStructure Kind;
-	TWeakObjectPtr<AActor> Owner; // 谁登记的
+	UPROPERTY()
+	bool bOccupied = false;
+	UPROPERTY()
+	TWeakObjectPtr<AActor> Owner;
 
 	FOrionGlobalSocket() = default;
 
 	FOrionGlobalSocket(const FVector& InLoc,
 	                   const FRotator& InRot,
-	                   EOrionStructure InKind,
+	                   const EOrionStructure InKind,
+	                   const bool bInOccupied,
 	                   AActor* InOwner)
-		: Location(InLoc), Rotation(InRot), Kind(InKind), Owner(InOwner)
+		: Location(InLoc)
+		  , Rotation(InRot)
+		  , Kind(InKind)
+		  , bOccupied(bInOccupied)
+		  , Owner(InOwner)
 	{
 	}
 };
@@ -108,91 +56,77 @@ class ORION_API UOrionBuildingManager : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	int32 AliveCount = 0;
-	TArray<FOrionGlobalSocket> FreeSockets;
-	TArray<FOrionGlobalSocket> OccupiedSockets;
+	UPROPERTY()
+	TArray<FOrionGlobalSocket> SocketsRaw;
 
-	const TArray<FOrionGlobalSocket>& GetFreeSockets()
+	/* 参考池：不允许重复，用于吸附 & Debug，随时由 Raw 重建 */
+	UPROPERTY()
+	TArray<FOrionGlobalSocket> SocketsUnique;
+
+
+	/* Save & Load */
+
+	/* ========== ① 收集当前世界里的所有建筑 ========== */
+	template <typename TStructureIterator = AOrionStructure>
+	void CollectStructureRecords(TArray<FOrionStructureRecord>& Out) const
 	{
-		return FreeSockets;
+		UWorld* World = GetWorld();
+		if (!World)
+		{
+			return;
+		}
+
+		for (TActorIterator<TStructureIterator> It(World); It; ++It)
+		{
+			const AActor* Act = *It;
+			FString Path = Act->GetClass()->GetPathName();
+			Out.Emplace(Path, Act->GetActorTransform());
+		}
 	}
 
-	virtual void Initialize(FSubsystemCollectionBase& Collection) override
+	/* ========== ② 彻底重置 Socket 池（读档前调用） ========== */
+	void ResetAllSockets(const UWorld* World)
 	{
-		Super::Initialize(Collection);
-		AliveCount = 0;
+		SocketsRaw.Empty();
+		SocketsUnique.Empty();
+		UKismetSystemLibrary::FlushPersistentDebugLines(World);
+	}
+
+	static constexpr float MergeTolSqr = 5.f * 5.f;
+
+	virtual void Initialize(FSubsystemCollectionBase&) override
+	{
 	}
 
 	virtual void Deinitialize() override
 	{
-		Super::Deinitialize();
 	}
 
-	template <typename TOrionStructure>
-	void ConfirmPlaceStructure(TSubclassOf<TOrionStructure>& BPOrionStructure, TOrionStructure*& PreviewStructurePtr,
-	                           bool& bStructureSnapped, FTransform& SpawnTransform)
+	static bool ConfirmPlaceStructure(
+		TSubclassOf<AActor> BPClass,
+		AActor*& PreviewPtr,
+		bool& bSnapped,
+		const FTransform& SnapXform);
+
+	const TArray<FOrionGlobalSocket>& GetSnapSockets() const { return SocketsUnique; }
+
+	bool IsSocketFree(const FVector& Loc, EOrionStructure Kind) const
 	{
-		if (PreviewStructurePtr->bForceSnapOnGrid && !bStructureSnapped)
+		for (const FOrionGlobalSocket& S : SocketsUnique)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Structure must snap to an unoccupied socket!"));
-			return;
-		}
-
-		FActorSpawnParameters StructureSpawnParameter;
-		StructureSpawnParameter.SpawnCollisionHandlingOverride =
-			ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		if (bStructureSnapped)
-		{
-			TOrionStructure* StructurePlaced = GetWorld()->SpawnActor<TOrionStructure>(
-				BPOrionStructure, SpawnTransform, StructureSpawnParameter);
-		}
-		else if (!bStructureSnapped && PreviewStructurePtr && !PreviewStructurePtr->bForceSnapOnGrid)
-		{
-			TOrionStructure* StructurePlaced = GetWorld()->SpawnActor<TOrionStructure>(
-				BPOrionStructure, PreviewStructurePtr->GetActorLocation(),
-				PreviewStructurePtr->GetActorRotation(), StructureSpawnParameter);
-		}
-
-		bStructureSnapped = false;
-	}
-
-	template <typename TOrionStructure>
-	void RemoveSocketRegistration(TOrionStructure& OrionStructureRef)
-	{
-		TArray<FOrionGlobalSocket> Freed;
-
-		for (int32 i = OccupiedSockets.Num() - 1; i >= 0; --i)
-		{
-			if (OccupiedSockets[i].Owner == &OrionStructureRef)
+			if (S.Kind == Kind && !S.bOccupied &&
+				FVector::DistSquared(S.Location, Loc) < MergeTolSqr)
 			{
-				// 转成 Free，稍后重新登记
-				Freed.Add(OccupiedSockets[i]);
-				OccupiedSockets.RemoveAt(i);
+				return true;
 			}
 		}
-
-		for (int32 i = FreeSockets.Num() - 1; i >= 0; --i)
-		{
-			if (FreeSockets[i].Owner == &OrionStructureRef)
-			{
-				FreeSockets.RemoveAt(i);
-			}
-		}
-
-		for (const auto& S : Freed)
-		{
-			RegisterSocket(S.Location, S.Rotation, S.Kind,
-			               /*bOccupied=*/false, GetWorld(), nullptr);
-		}
+		return false;
 	}
-
-	static constexpr float MergeTolSqr = 5.f * 5.f; // 5 cm²
 
 	void RegisterSocket(const FVector& Loc,
 	                    const FRotator& Rot,
 	                    EOrionStructure Kind,
-	                    const bool bOccupied,
+	                    bool bOccupied,
 	                    const UWorld* World,
 	                    AActor* Owner)
 	{
@@ -201,78 +135,174 @@ public:
 			return;
 		}
 
-
-		/* 1. 先检查是否被 Occupied 覆盖 */
-		for (const auto& S : OccupiedSockets)
-		{
-			if (S.Kind == Kind &&
-				FVector::DistSquared(S.Location, Loc) < MergeTolSqr)
-			{
-				if (bOccupied) // 已有占用，再来一个占用 = 逻辑错误
-				{
-					UE_LOG(LogTemp, Error, TEXT("[Socket] Two OCCUPIED sockets overlap! Kind=%d"), int32(Kind));
-				}
-				return; // 被占用覆盖，不登记
-			}
-		}
-
-		if (bOccupied)
-		{
-			/* 2‑A  新占用：把所有重合的 Free 删除，再加入 Occupied */
-			for (int32 i = FreeSockets.Num() - 1; i >= 0; --i)
-			{
-				if (FreeSockets[i].Kind == Kind &&
-					FVector::DistSquared(FreeSockets[i].Location, Loc) < MergeTolSqr)
-				{
-					FreeSockets.RemoveAt(i); // 删掉所有重合条目
-				}
-			}
-			OccupiedSockets.Emplace(Loc, Rot, Kind, Owner);
-		}
-		else
-		{
-			/* 2‑B  新 Free：**不再查重**，直接加入表 */
-			FreeSockets.Emplace(Loc, Rot, Kind, Owner);
-		}
-
+		SocketsRaw.Emplace(Loc, Rot, Kind, bOccupied, Owner);
+		RebuildUnique();
 		RefreshDebug(World);
 	}
 
-	void RefreshDebug(const UWorld* World)
+	void RemoveSocketRegistration(AActor& Ref)
 	{
-		// 先清空
-		UKismetSystemLibrary::FlushPersistentDebugLines(World);
-
-		constexpr float AxisLen = 40.f;
-		constexpr bool bPersist = true;
-		constexpr int32 Depth = 0;
-
-		// 未占用：细轴
-		for (const auto& S : FreeSockets)
+		const UWorld* World = Ref.GetWorld();
+		for (int32 i = SocketsRaw.Num() - 1; i >= 0; --i)
 		{
-			DrawDebugCoordinateSystem(World, S.Location, S.Rotation,
-			                          AxisLen, bPersist, -1.f, Depth,
-			                          /*Thickness=*/2.f);
+			if (SocketsRaw[i].Owner.Get() == &Ref)
+			{
+				SocketsRaw.RemoveAt(i, 1, EAllowShrinking::No);
+			}
 		}
-		// 占用：粗轴
-		for (const auto& S : OccupiedSockets)
+		RebuildUnique();
+		if (World) { RefreshDebug(World); }
+	}
+
+	void RebuildUnique()
+	{
+		SocketsUnique.Empty();
+
+		for (const FOrionGlobalSocket& Src : SocketsRaw)
 		{
-			DrawDebugCoordinateSystem(World, S.Location, S.Rotation,
-			                          AxisLen, bPersist, -1.f, Depth,
-			                          /*Thickness=*/5.f);
+			// 查是否已存在“同位置 + 同Kind”的条目
+			int32 FoundIdx = INDEX_NONE;
+			for (int32 i = 0; i < SocketsUnique.Num(); ++i)
+			{
+				if (SocketsUnique[i].Kind == Src.Kind &&
+					FVector::DistSquared(SocketsUnique[i].Location, Src.Location) < MergeTolSqr)
+				{
+					FoundIdx = i;
+					break;
+				}
+			}
+
+			if (FoundIdx == INDEX_NONE)
+			{
+				SocketsUnique.Add(Src);
+			}
+			else
+			{
+				// 同一点已有条目：若现有为空闲而新条目为占用，则替换
+				if (!SocketsUnique[FoundIdx].bOccupied && Src.bOccupied)
+				{
+					SocketsUnique[FoundIdx] = Src;
+				}
+			}
 		}
 	}
 
-	bool IsSocketFree(const FVector& Loc, EOrionStructure Kind)
+	bool BEnableDebugLine = false;
+
+	//void RefreshDebug(const UWorld* World)
+	//{
+	//	UKismetSystemLibrary::FlushPersistentDebugLines(World);
+
+	//	for (const FOrionGlobalSocket& S : SocketsUnique)
+	//	{
+	//		constexpr float AxisLen = 40.f;
+	//		DrawDebugCoordinateSystem(
+	//			World, S.Location, S.Rotation,
+	//			AxisLen, /*bPersist=*/true, -1.f, 0,
+	//			S.bOccupied ? 5.f : 2.f);
+	//	}
+	//}
+
+	void RefreshDebug(const UWorld* World)
 	{
-		for (const auto& S : FreeSockets)
+		if (!World)
 		{
-			if (S.Kind == Kind &&
-				FVector::DistSquared(S.Location, Loc) < MergeTolSqr)
+			return;
+		}
+
+		if (!BEnableDebugLine)
+		{
+			return;
+		}
+
+		// 清掉上一帧的线
+		UKismetSystemLibrary::FlushPersistentDebugLines(World);
+
+		// 调试线粗细
+		constexpr float LineThickness = 2.f;
+
+		for (const FOrionGlobalSocket& S : SocketsUnique)
+		{
+			const FColor Color = S.bOccupied ? FColor::Red : FColor::Green;
+
+			switch (S.Kind)
 			{
-				return true;
+			//--------------------------------------------------
+			// 1) 方形基座：画一个 100×100 的正方形
+			//--------------------------------------------------
+			//case EOrionStructure::BasicSquareFoundation:
+			//	{
+			//		// 半边长
+			//		constexpr float HalfEdge = 50.f;
+			//		DrawDebugBox(
+			//			World,
+			//			S.Location,
+			//			FVector(HalfEdge, HalfEdge, 2.f),
+			//			S.Rotation.Quaternion(),
+			//			Color, /*bPersistent=*/true,
+			//			/*LifeTime=*/-1.f,
+			//			/*DepthPriority=*/0,
+			//			LineThickness
+			//		);
+			//		break;
+			//	}
+
+			////--------------------------------------------------
+			//// 2) 三角基座：画一个等边三角形轮廓
+			////--------------------------------------------------
+			//case EOrionStructure::BasicTriangleFoundation:
+			//	{
+			//		// 假设三角边长也是 100
+			//		constexpr float EdgeLen = 100.f;
+			//		// 等边三角高度
+			//		const float TriHeight = EdgeLen * FMath::Sqrt(3.f) / 2.f;
+
+			//		// 本地坐标系下的顶点（质心在原点）
+			//		const FVector LocalVerts[3] = {
+			//			FVector(-EdgeLen * 0.5f, -TriHeight / 3.f, 0.f),
+			//			FVector(EdgeLen * 0.5f, -TriHeight / 3.f, 0.f),
+			//			FVector(0.f, 2.f * TriHeight / 3.f, 0.f)
+			//		};
+
+			//		// 用插槽自己的旋转和位置来做变换
+			//		const FTransform SockT(S.Rotation, S.Location);
+
+			//		const FVector W0 = SockT.TransformPosition(LocalVerts[0]);
+			//		const FVector W1 = SockT.TransformPosition(LocalVerts[1]);
+			//		const FVector W2 = SockT.TransformPosition(LocalVerts[2]);
+
+			//		DrawDebugLine(World, W0, W1, Color, true, -1.f, 0, LineThickness);
+			//		DrawDebugLine(World, W1, W2, Color, true, -1.f, 0, LineThickness);
+			//		DrawDebugLine(World, W2, W0, Color, true, -1.f, 0, LineThickness);
+			//		break;
+			//	}
+
+			//--------------------------------------------------
+			// 3) 墙：画一条垂直线
+			//--------------------------------------------------
+			case EOrionStructure::Wall:
+				{
+					constexpr float WallHeight = 150.f;
+					DrawDebugLine(
+						World,
+						S.Location,
+						S.Location + FVector(0.f, 0.f, WallHeight),
+						S.bOccupied ? FColor::Red : FColor::Blue,
+						/*bPersistent=*/true,
+						/*LifeTime=*/-1.f,
+						/*DepthPriority=*/0,
+						/*Thickness=*/3.f
+					);
+					break;
+				}
+
+			//--------------------------------------------------
+			// 其它（fallback，用一个点标记）
+			//--------------------------------------------------
+			default:
+				DrawDebugPoint(World, S.Location, 8.f, Color, true, -1.f, 0);
+				break;
 			}
 		}
-		return false;
 	}
 };

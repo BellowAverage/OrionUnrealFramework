@@ -2,14 +2,24 @@
 
 
 #include "OrionStructure.h"
+
+#include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
-//#include "Kismet/KismetSystemLibrary.h"
-#include "Orion/OrionGameInstance/OrionBuildingManager.h"
 
 AOrionStructure::AOrionStructure()
 {
+	if (UOrionStructureComponent* FoundStructureComp = FindComponentByClass<UOrionStructureComponent>())
+	{
+		StructureComponent = FoundStructureComp;
+	}
+	else
+	{
+		/*StructureComponent = CreateDefaultSubobject<UOrionStructureComponent>(TEXT("StructureComponent"));*/
+		return;
+	}
+
+
 	PrimaryActorTick.bCanEverTick = false;
-	StructureMesh = nullptr;
 }
 
 
@@ -17,37 +27,13 @@ void AOrionStructure::BeginPlay()
 {
 	Super::BeginPlay();
 
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	AOrionPlayerController* OrionPC = Cast<AOrionPlayerController>(PC);
 
-	if (OrionPC->bIsSpawnPreviewStructure)
+	if (const auto* PC = Cast<AOrionPlayerController>(GetWorld()->GetFirstPlayerController()))
 	{
-		OrionPC->bIsSpawnPreviewStructure = false;
-		return;
-	}
-
-	if (BuildingManager = GetGameInstance() ? GetGameInstance()->GetSubsystem<UOrionBuildingManager>() : nullptr;
-		!BuildingManager)
-	{
-		UE_LOG(LogTemp, Error, TEXT("BuildingManager not found!"));
-		return;
-	}
-
-
-	TArray<UActorComponent*> TaggedComps =
-		GetComponentsByTag(
-			UStaticMeshComponent::StaticClass(),
-			FName("StructureMesh")
-		);
-
-	if (TaggedComps.Num() > 0)
-	{
-		StructureMesh = Cast<UStaticMeshComponent>(TaggedComps[0]);
-	}
-
-	if (!StructureMesh)
-	{
-		UE_LOG(LogTemp, Error, TEXT("No StructureMesh Found. "));
+		if (PC->bIsSpawnPreviewStructure)
+		{
+			const_cast<AOrionPlayerController*>(PC)->bIsSpawnPreviewStructure = false;
+		}
 	}
 }
 
@@ -58,17 +44,5 @@ void AOrionStructure::Tick(float DeltaTime)
 
 void AOrionStructure::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UOrionBuildingManager* NewBuildingManager = nullptr;
-
-	if (NewBuildingManager = GetGameInstance() ? GetGameInstance()->GetSubsystem<UOrionBuildingManager>() : nullptr;
-		!NewBuildingManager)
-	{
-		UE_LOG(LogTemp, Error, TEXT("NewBuildingManager not found!"));
-		return;
-	}
-	NewBuildingManager->RemoveSocketRegistration<AOrionStructure>(*this);
-
-
-	// 2) 再交给父类做销毁流程
 	Super::EndPlay(EndPlayReason);
 }

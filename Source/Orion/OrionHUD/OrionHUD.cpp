@@ -6,18 +6,53 @@
 #include "Blueprint/UserWidget.h"
 #include <vector>
 
+#include "Orion/OrionPlayerController/OrionPlayerController.h"
+
 void AOrionHUD::BeginPlay()
 {
 	Super::BeginPlay();
 
 	if (WB_DeveloperUIBase)
 	{
-		UUserWidget* DeveloperUIBase = CreateWidget<UUserWidget>(GetWorld(), WB_DeveloperUIBase);
+		UOrionUserWidgetUIBase* DeveloperUIBase = CreateWidget<UOrionUserWidgetUIBase>(GetWorld(), WB_DeveloperUIBase);
+
+		DeveloperUIBase->OnViewLevelUp.BindLambda([this]()
+		{
+			UE_LOG(LogTemp, Log, TEXT("View Level Up"));
+			OnViewLevelUp.ExecuteIfBound();
+		});
+
+		DeveloperUIBase->OnViewLevelDown.BindLambda([this]()
+		{
+			UE_LOG(LogTemp, Log, TEXT("View Level Down"));
+			OnViewLevelDown.ExecuteIfBound();
+		});
+
 		DeveloperUIBase->AddToViewport();
 	}
 
 	InitCharaInfoPanel();
 	HideCharaInfoPanel();
+
+	AOrionPlayerController* OrionPlayerController = Cast<AOrionPlayerController>(GetOwningPlayerController());
+	if (OrionPlayerController)
+	{
+		OrionPlayerController->OnToggleBuildingMode.BindLambda([this](bool bIsBuildingMode)
+		{
+			if (bIsBuildingMode)
+			{
+				ShowBuildingMenu();
+			}
+			else
+			{
+				HideBuildingMenu();
+			}
+		});
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to get OrionPlayerController!"));
+	}
 }
 
 void AOrionHUD::Tick(float DeltaTime)
@@ -162,8 +197,8 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				FStringView(*CombinedText), // <- 传 FString 而不是 FStringView
-				//CombinedText,
+				//FStringView(*CombinedText), // <- 传 FString 而不是 FStringView
+				CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -214,8 +249,8 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			FStringView(*Line), // <- 这里直接传 FString
-			//Line,
+			//FStringView(*Line), // <- 这里直接传 FString
+			Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,
@@ -259,4 +294,14 @@ void AOrionHUD::ShowCharaInfoPanel()
 	{
 		CharaInfoPanel->SetVisibility(ESlateVisibility::Visible);
 	}
+}
+
+void AOrionHUD::ShowBuildingMenu()
+{
+	UE_LOG(LogTemp, Log, TEXT("Show Building Menu"));
+}
+
+void AOrionHUD::HideBuildingMenu()
+{
+	UE_LOG(LogTemp, Log, TEXT("Hide Building Menu"));
 }

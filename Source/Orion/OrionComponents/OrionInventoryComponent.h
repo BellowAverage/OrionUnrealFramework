@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Orion/OrionGameData/OrionDataItem.h"
+#include "Orion/OrionGlobals/OrionDataItem.h"
 #include "OrionInventoryComponent.generated.h"
 
 

@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -6,12 +6,31 @@
 #include "GameFramework/SaveGame.h"
 #include "OrionSaveGame.generated.h"
 
-/**
- * 
- */
+
+USTRUCT()
+struct FOrionStructureRecord
+{
+	GENERATED_BODY()
+
+	/** Blueprint 或 C++ 类完整路径（例： /Game/BP/BP_OrionFoundation.BP_OrionFoundation_C ） */
+	UPROPERTY() FString ClassPath;
+
+	UPROPERTY() FTransform Transform;
+
+	FOrionStructureRecord() = default;
+	FOrionStructureRecord(const FString& InPath, const FTransform& InTM)
+		: ClassPath(InPath), Transform(InTM) {
+	}
+};
+
+
+
 UCLASS()
 class ORION_API UOrionSaveGame : public USaveGame
 {
 	GENERATED_BODY()
+
+public:
+	UPROPERTY() TArray<FOrionStructureRecord> SavedStructures;
 	
 };
