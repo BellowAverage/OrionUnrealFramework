@@ -90,11 +90,12 @@ void UOrionStructureComponent::RegisterAllSockets() const
 
 	const FVector StructureLocation = StructureMesh->GetComponentLocation();
 	const FRotator StructureRotation = StructureMesh->GetComponentRotation();
-	const FVector StructureBound = FVector(50.f, 50.f, 10.f);
 
 	/*========= Square Foundation =========*/
 	if (OrionStructureType == EOrionStructure::BasicSquareFoundation)
 	{
+		const FVector StructureBound = FVector(50.f, 50.f, 10.f);
+
 		// ─ 自身（占用）
 		BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::BasicSquareFoundation,
 		                                true, GetWorld(), GetOwner());
@@ -156,11 +157,13 @@ void UOrionStructureComponent::RegisterAllSockets() const
 	/*========= Triangle Foundation =========*/
 	else if (OrionStructureType == EOrionStructure::BasicTriangleFoundation)
 	{
+		const float HalfSquareRootThree = FMath::Sqrt(3.f) / 2.f;
+		const float HalfSquareRootTwo = FMath::Sqrt(3.f) / 2.f;
+		const FVector StructureBound = FVector(50.f * 2.f * HalfSquareRootThree, 50.f, 10.f);
 		//const float EdgeLength = StructureBound.Y * 2.f; // 等边三角形的边长
 		constexpr float EdgeLength = 100.f; // 等边三角形的边长
 		const float HalfMeshHeight = StructureBound.Z;
-		const float HalfSquareRootThree = FMath::Sqrt(3.f) / 2.f;
-		const float HalfSquareRootTwo = FMath::Sqrt(3.f) / 2.f;
+
 
 		const FVector AdjTriangleOffset[3] = {
 			{EdgeLength / (HalfSquareRootThree * 2.f), 0.f, 0.f},
@@ -237,8 +240,12 @@ void UOrionStructureComponent::RegisterAllSockets() const
 	}
 
 	/*========= Wall =========*/
+
 	else if (OrionStructureType == EOrionStructure::Wall)
 	{
+		const FVector StructureBound = FVector(10.f, 50.f, 150.f);
+
+
 		// ─ 自身（占用）
 		BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::Wall,
 		                                true, GetWorld(), GetOwner());
@@ -248,5 +255,37 @@ void UOrionStructureComponent::RegisterAllSockets() const
 		Up.Z += StructureBound.Z * 2.f;
 		BuildingManager->RegisterSocket(Up, StructureRotation, EOrionStructure::Wall,
 		                                false, GetWorld(), GetOwner());
+	}
+
+	/*========= DoubleWall =========*/
+	else if (OrionStructureType == EOrionStructure::DoubleWall)
+	{
+		const FVector StructureBound = FVector(10.f, 50.f * 2, 150.f); // 高度翻倍
+
+		// ─ 自身（占用）由管理器自动注册，不需组件主动注册
+
+		// 上方插槽
+		FVector Up1 = StructureLocation;
+		Up1.Z += 300.f;
+		BuildingManager->RegisterSocket(
+			Up1,
+			StructureRotation,
+			EOrionStructure::Wall,
+			false,
+			GetWorld(),
+			GetOwner()
+		);
+
+		FVector Up2 = StructureLocation;
+		Up2.Z += 300.f;
+		Up2.Y += 100.f;
+		BuildingManager->RegisterSocket(
+			Up2,
+			StructureRotation,
+			EOrionStructure::Wall,
+			false,
+			GetWorld(),
+			GetOwner()
+		);
 	}
 }

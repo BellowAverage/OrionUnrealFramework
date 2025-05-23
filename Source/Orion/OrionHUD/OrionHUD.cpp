@@ -4,9 +4,51 @@
 #include "Orion/OrionChara/OrionChara.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
+#include "Orion/OrionGameInstance/OrionGameInstance.h"
 #include <vector>
 
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
+
+
+const TArray<FOrionDataBuilding> AOrionHUD::BuildingMenuOptions = {
+	{
+		1, FName(TEXT("SquareFoundation")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/SquareFoundationSnapshot.SquareFoundationSnapshot")),
+		FString(TEXT(
+			"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureSquareFoundation.BP_OrionStructureSquareFoundation_C")),
+		EOrionStructure::BasicSquareFoundation
+	},
+	{
+		2, FName(TEXT("TriangleFoundation")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/TriangleFoundationSnapshot.TriangleFoundationSnapshot")),
+		FString(TEXT(
+			"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureTriangleFoundation.BP_OrionStructureTriangleFoundation_C")),
+		EOrionStructure::BasicTriangleFoundation
+	},
+	{
+		3, FName(TEXT("Wall")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/WallSnapshot.WallSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureWall.BP_OrionStructureWall_C")),
+		EOrionStructure::Wall
+	},
+	{
+		4, FName(TEXT("DoubleWallDoor")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/DoubleWallSnapshot.DoubleWallSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureDoubleWall.BP_OrionStructureDoubleWall_C")),
+		EOrionStructure::DoubleWall
+	},
+};
+
+const TMap<int32, FOrionDataBuilding> AOrionHUD::BuildingMenuOptionsMap = []()
+{
+	TMap<int32, FOrionDataBuilding> Map;
+	for (const FOrionDataBuilding& Data : BuildingMenuOptions)
+	{
+		Map.Add(Data.BuildingId, Data);
+	}
+	return Map;
+}();
+
 
 void AOrionHUD::BeginPlay()
 {
@@ -26,6 +68,18 @@ void AOrionHUD::BeginPlay()
 		{
 			UE_LOG(LogTemp, Log, TEXT("View Level Down"));
 			OnViewLevelDown.ExecuteIfBound();
+		});
+
+		DeveloperUIBase->OnSaveGame.BindLambda([this]()
+		{
+			UE_LOG(LogTemp, Log, TEXT("Save Game"));
+			GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGame();
+		});
+
+		DeveloperUIBase->OnLoadGame.BindLambda([this]()
+		{
+			UE_LOG(LogTemp, Log, TEXT("Load Game"));
+			GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGame();
 		});
 
 		DeveloperUIBase->AddToViewport();
@@ -59,8 +113,8 @@ void AOrionHUD::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime); // ①
 
-	// —— 状态切换 —— //
-	// 无论 InfoChara 是否为空，都先检查 bShowCharaInfoPanel 的变化
+	// —— State switching —— //
+	// Regardless of whether InfoChara is empty, first check for changes in bShowCharaInfoPanel
 	if (bShowCharaInfoPanel != PreviousbShowCharaInfoPanel ||
 		(InfoChara && InfoChara->GetName() != PreviousInfoChara))
 	{
@@ -83,7 +137,7 @@ void AOrionHUD::Tick(float DeltaTime)
 		PreviousInfoChara = InfoChara ? InfoChara->GetName() : TEXT("");
 	}
 
-	// —— 每帧刷新 —— //
+	// —— Per-frame refresh —— //
 	if (CharaInfoPanel && bShowCharaInfoPanel && InfoChara)
 	{
 		UE_LOG(LogTemp, Verbose, TEXT("Update Chara Info Panel"));
@@ -170,35 +224,35 @@ void AOrionHUD::DrawHUD()
 			*CurrUnifiedAction
 		);
 
-		// 2) 将OrionChara的世界坐标 转成 屏幕坐标
+		// 2) Convert OrionChara's world coordinates to screen coordinates
 		FVector2D ScreenPos;
 		bool bProjected = UGameplayStatics::ProjectWorldToScreen(
 			PC,
-			// 可稍微抬高一点，让文字显示在头顶
+			// Can lift it up a bit to display text above the head
 			OrionChara->GetActorLocation() + FVector(0.f, 0.f, 100.f),
 			ScreenPos
 		);
 
-		// 3) 在Canvas上绘制文字
+		// 3) Draw text on Canvas
 		if (bProjected)
 		{
-			// 选一个字体，UE 默认有 GetLargeFont() / GetMediumFont() 等等
+			// Choose a font, UE has GetLargeFont() / GetMediumFont() etc. by default
 			UFont* RenderFont = GEngine->GetMediumFont();
 
-			// 先设置文本颜色
+			// First set text color
 			Canvas->SetDrawColor(FColor::Yellow);
 
-			// 如果需要阴影，可设置 FFontRenderInfo
+			// If shadow is needed, set FFontRenderInfo
 			FFontRenderInfo RenderInfo;
 			RenderInfo.bEnableShadow = true;
 
-			// Canvas->DrawText(...) 在 UE5.5 中的原型：
+			// Canvas->DrawText(...) prototype in UE5.5:
 			// float DrawText(const UFont*, const FString&, float X, float Y, float XScale=..., float YScale=..., const FFontRenderInfo& RenderInfo=...);
 
 			Canvas->DrawText(
 				RenderFont,
-				//FStringView(*CombinedText), // <- 传 FString 而不是 FStringView
-				CombinedText,
+				FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				//CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -206,7 +260,7 @@ void AOrionHUD::DrawHUD()
 				RenderInfo
 			);
 
-			// 如果需要再次换别的颜色，就再次 SetDrawColor(...) 后再绘制
+			// If you need to change to another color, call SetDrawColor(...) again and then draw
 		}
 	}
 
@@ -249,8 +303,8 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			//FStringView(*Line), // <- 这里直接传 FString
-			Line,
+			FStringView(*Line), // <- 这里直接传 FString
+			//Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,
@@ -299,9 +353,50 @@ void AOrionHUD::ShowCharaInfoPanel()
 void AOrionHUD::ShowBuildingMenu()
 {
 	UE_LOG(LogTemp, Log, TEXT("Show Building Menu"));
+
+	if (!WB_BuildingMenu)
+	{
+		return;
+	}
+
+	BuildingMenu = CreateWidget<UOrionUserWidgetBuildingMenu>(
+		GetWorld(), WB_BuildingMenu);
+
+	if (BuildingMenu)
+	{
+		BuildingMenu->InitBuildingMenu(BuildingMenuOptions);
+
+		BuildingMenu->OnBuildingOptionSelected.BindLambda(
+			[&](int32 InBuildingId, bool bIsChecked)
+			{
+				OnBuildingOptionSelected.ExecuteIfBound(InBuildingId, bIsChecked);
+			});
+
+		BuildingMenu->OnToggleDemolishMode.BindLambda(
+			[&](bool bIsChecked)
+			{
+				OnToggleDemolishMode.ExecuteIfBound(bIsChecked);
+			});
+
+		BuildingMenu->AddToViewport();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Failed to create Building Menu!"));
+	}
 }
 
 void AOrionHUD::HideBuildingMenu()
 {
 	UE_LOG(LogTemp, Log, TEXT("Hide Building Menu"));
+
+	if (BuildingMenu)
+	{
+		BuildingMenu->RemoveFromParent();
+		BuildingMenu = nullptr;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("Building Menu is null!"));
+	}
 }

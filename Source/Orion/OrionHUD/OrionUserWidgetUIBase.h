@@ -9,6 +9,8 @@
 
 DECLARE_DELEGATE(FOnViewLevelUp);
 DECLARE_DELEGATE(FOnViewLevelDown);
+DECLARE_DELEGATE(FOnSaveGame);
+DECLARE_DELEGATE(FOnLoadGame);
 
 UCLASS()
 class ORION_API UOrionUserWidgetUIBase : public UUserWidget
@@ -21,6 +23,15 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	UButton* ViewLevelDown;
+
+	UPROPERTY(meta = (BindWidget))
+	UButton* SaveGame;
+
+	UPROPERTY(meta = (BindWidget))
+	UButton* LoadGame;
+
+	FOnSaveGame OnSaveGame;
+	FOnLoadGame OnLoadGame;
 
 	FOnViewLevelUp OnViewLevelUp;
 	FOnViewLevelUp OnViewLevelDown;
@@ -37,6 +48,18 @@ public:
 		OnViewLevelDown.ExecuteIfBound();
 	}
 
+	UFUNCTION()
+	void OnSaveGameClicked()
+	{
+		OnSaveGame.ExecuteIfBound();
+	}
+
+	UFUNCTION()
+	void OnLoadGameClicked()
+	{
+		OnLoadGame.ExecuteIfBound();
+	}
+
 	virtual void NativeConstruct() override
 	{
 		Super::NativeConstruct();
@@ -49,6 +72,16 @@ public:
 		if (ViewLevelDown)
 		{
 			ViewLevelDown->OnClicked.AddDynamic(this, &UOrionUserWidgetUIBase::OnViewLevelDownClicked);
+		}
+
+		if (SaveGame)
+		{
+			SaveGame->OnClicked.AddDynamic(this, &UOrionUserWidgetUIBase::OnSaveGameClicked);
+		}
+
+		if (LoadGame)
+		{
+			LoadGame->OnClicked.AddDynamic(this, &UOrionUserWidgetUIBase::OnLoadGameClicked);
 		}
 	}
 };

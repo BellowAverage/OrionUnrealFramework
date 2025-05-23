@@ -14,19 +14,19 @@ bool SaveStructureRecordsToJsonFile_Manual(
 	const TArray<FOrionStructureRecord>& Records,
 	const FString& Filename)
 {
-	// 1) 开头写数组标记
+	// 1) Write array marker at the beginning
 	FString JsonOut = TEXT("[\n");
 
 	for (int32 i = 0; i < Records.Num(); ++i)
 	{
 		const FOrionStructureRecord& R = Records[i];
 
-		// 拆 Transform
+		// Decompose Transform
 		const FVector Loc = R.Transform.GetLocation();
 		const FRotator Rot = R.Transform.GetRotation().Rotator();
 		const FVector Scale = R.Transform.GetScale3D();
 
-		// 拼一个对象
+		// Assemble an object
 		JsonOut += TEXT("  {\n");
 		JsonOut += FString::Printf(
 			TEXT("    \"ClassPath\": \"%s\",\n"),
@@ -54,7 +54,7 @@ bool SaveStructureRecordsToJsonFile_Manual(
 		JsonOut += TEXT("    }\n");
 
 		JsonOut += TEXT("  }");
-		// 如果不是最后一个，就加逗号
+		// If not the last one, add comma
 		if (i < Records.Num() - 1)
 		{
 			JsonOut += TEXT(",");
@@ -64,17 +64,17 @@ bool SaveStructureRecordsToJsonFile_Manual(
 
 	JsonOut += TEXT("]\n");
 
-	// 2) 写盘
+	// 2) Write to disk
 	const FString SaveDir = FPaths::ProjectSavedDir(); // e.g. ".../Saved/"
 	const FString FullPath = SaveDir / Filename; // e.g. ".../Saved/structure_records.json"
 
 	if (!FFileHelper::SaveStringToFile(JsonOut, *FullPath))
 	{
-		UE_LOG(LogTemp, Error, TEXT("[SaveJSON] 写 JSON 文件失败: %s"), *FullPath);
+		UE_LOG(LogTemp, Error, TEXT("[SaveJSON] Failed to write JSON file: %s"), *FullPath);
 		return false;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[SaveJSON] 成功写入 JSON: %s"), *FullPath);
+	UE_LOG(LogTemp, Log, TEXT("[SaveJSON] Successfully wrote JSON: %s"), *FullPath);
 	return true;
 }
 
@@ -85,16 +85,16 @@ void UOrionGameInstance::SaveGame()
 
 	//TArray<FOrionStructureRecord> Records;
 
-	/* ① 让 BuildingManager 把所有建筑快照写进存档对象 */
+	/* ① Let BuildingManager write all building snapshots to save object */
 	if (auto* BM = GetSubsystem<UOrionBuildingManager>())
 	{
 		TArray<FOrionStructureRecord> Records;
 		BM->CollectStructureRecords(Records);
 
-		// 手写 JSON 存一份到 Saved 目录
+		// Manually write JSON to save a copy to Saved directory
 		SaveStructureRecordsToJsonFile_Manual(Records, TEXT("structure_records.json"));
 
-		// 再把 Records 存到 SaveGame 对象里
+		// Then store Records in SaveGame object
 		SaveObj->SavedStructures = MoveTemp(Records);
 	}
 
@@ -116,7 +116,7 @@ void UOrionGameInstance::LoadGame()
 	UWorld* World = GetWorld();
 	check(World);
 
-	/* ① — 清空旧建筑 & Socket 池 — */
+	/* ① — Clear old buildings & Socket pool — */
 	for (TActorIterator<AOrionStructure> It(World); It; ++It)
 	{
 		It->Destroy();
@@ -126,7 +126,7 @@ void UOrionGameInstance::LoadGame()
 		BuildingManager->ResetAllSockets(World);
 	}
 
-	/* ② — 重新生成建筑（BeginPlay 里会自动 RegisterSocket） — */
+	/* ② — Regenerate buildings (BeginPlay will automatically RegisterSocket) — */
 	for (const FOrionStructureRecord& Rec : LoadObj->SavedStructures)
 	{
 		UClass* StructClass =
@@ -140,7 +140,7 @@ void UOrionGameInstance::LoadGame()
 		World->SpawnActor<AOrionStructure>(StructClass, Rec.Transform);
 	}
 
-	/* ……此处可追加恢复其他系统数据…… */
+	/* ……Additional restoration of other system data can be added here…… */
 
 	//UE_LOG(LogTemp, Log, TEXT("[Load] Game loaded from slot %s"), SlotName);
 }

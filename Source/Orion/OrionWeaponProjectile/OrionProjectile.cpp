@@ -13,20 +13,20 @@ AOrionProjectile::AOrionProjectile()
 	PrimaryActorTick.bCanEverTick = true;
 	bHasHit = false;
 
-	// 1. 创建一个空的 SceneComponent 作为根组件
+	// 1. Create an empty SceneComponent as the root component
 	USceneComponent* DefaultRoot = CreateDefaultSubobject<USceneComponent>(TEXT("DefaultRoot"));
 	RootComponent = DefaultRoot;
 
-	// 2. 创建 ArrowMesh 并将其附加到根组件
+	// 2. Create ArrowMesh and attach it to the root component
 	ArrowMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ArrowMesh"));
 	ArrowMesh->SetupAttachment(RootComponent);
 	//ArrowMesh->SetSimulatePhysics(true);
-	ArrowMesh->SetNotifyRigidBodyCollision(true); // 是否生成刚体碰撞事件
+	ArrowMesh->SetNotifyRigidBodyCollision(true); // Whether to generate rigid body collision events
 	ArrowMesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	ArrowMesh->OnComponentHit.AddDynamic(this, &AOrionProjectile::OnHit);
-	ArrowMesh->SetCanEverAffectNavigation(false); // 不参与导航系统
+	ArrowMesh->SetCanEverAffectNavigation(false); // Do not participate in navigation system
 
-	// 3. 创建 ProjectileMovement 并与 ArrowMesh 关联
+	// 3. Create ProjectileMovement and associate it with ArrowMesh
 	ProjectileMovement = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("ProjectileMovement"));
 	ProjectileMovement->UpdatedComponent = ArrowMesh;
 	//ProjectileMovement->InitialSpeed = 3000.0f;
@@ -59,7 +59,7 @@ void AOrionProjectile::Tick(float DeltaTime)
 	{
 		FVector Velocity = ProjectileMovement->Velocity;
 
-		// 如果速度足够大，调整箭矢的旋转
+		// If the velocity is large enough, adjust the arrow's rotation
 		if (!Velocity.IsNearlyZero())
 		{
 			FRotator DesiredRotation = Velocity.Rotation();

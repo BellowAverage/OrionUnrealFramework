@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-//#include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionCppFunctionLibrary/OrionCppFunctionLibrary.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "OrionPlayerController.generated.h"
@@ -43,6 +42,10 @@ class ORION_API AOrionPlayerController : public APlayerController
 
 public:
 	AOrionPlayerController();
+	void OnKey8Pressed();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Build")
+	TSubclassOf<AActor> DoubleWallBP = nullptr;
+
 	virtual void SetupInputComponent() override;
 	void QuickSave();
 	void QuickLoad();
@@ -116,6 +119,7 @@ public:
 
 	/* Building */
 
+	void SwitchFromPlacingStructures(int32 InBuildingId, bool bIsChecked);
 
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
 	float SnapInDist = 150.f;
@@ -143,11 +147,9 @@ public:
 	bool bPlacingStructure = false;
 	bool bStructureSnapped = false;
 
-	void TogglePlacingStructure(TSubclassOf<AActor> BPClass, AActor*& PreviewPtr);
-
 	/* 0. Demolishing Mode */
 
-	void OnToggleDemolishingMode();
+	void OnToggleDemolishingMode(bool bIsChecked);
 	void SpawnPreviewStructure(TSubclassOf<AActor> BPClass, AActor*& OutPtr);
 	bool bDemolishingMode = false;
 	void DemolishStructureUnderCursor() const;

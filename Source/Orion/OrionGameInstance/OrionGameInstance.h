@@ -15,7 +15,6 @@ class ORION_API UOrionGameInstance : public UGameInstance
 	GENERATED_BODY()
 
 public:
-	/** 手动绑定到 UI / 按键即可 */
 	UFUNCTION(BlueprintCallable)
 	void SaveGame();
 	UFUNCTION(BlueprintCallable)

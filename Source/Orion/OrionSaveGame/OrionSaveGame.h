@@ -12,7 +12,7 @@ struct FOrionStructureRecord
 {
 	GENERATED_BODY()
 
-	/** Blueprint 或 C++ 类完整路径（例： /Game/BP/BP_OrionFoundation.BP_OrionFoundation_C ） */
+	/** Blueprint or C++ class full path (example: /Game/BP/BP_OrionFoundation.BP_OrionFoundation_C) */
 	UPROPERTY() FString ClassPath;
 
 	UPROPERTY() FTransform Transform;

@@ -1,14 +1,22 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "OrionUserWidgetBuildingMenu.h"
 #include "OrionUserWidgetUIBase.h"
 #include "GameFramework/HUD.h"
 #include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
+#include "Orion/OrionGlobals/OrionDataBuilding.h"
 #include "OrionHUD.generated.h"
 
 DECLARE_DELEGATE(FOnViewLevelUp);
 DECLARE_DELEGATE(FOnViewLevelDown);
+
+DECLARE_DELEGATE_TwoParams(FOnBuildingOptionSelected, int32, bool);
+DECLARE_DELEGATE_OneParam(FOnToggleDemolishMode, bool);
+
+//DECLARE_DELEGATE(FOnSaveGame);
+//DECLARE_DELEGATE(FOnLoadGame);
 
 UCLASS()
 class ORION_API AOrionHUD : public AHUD
@@ -22,6 +30,22 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	/* Building Menu */
+
+	FOnBuildingOptionSelected OnBuildingOptionSelected;
+	FOnToggleDemolishMode OnToggleDemolishMode;
+
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	TSubclassOf<UOrionUserWidgetBuildingMenu> WB_BuildingMenu;
+
+	UPROPERTY()
+	UOrionUserWidgetBuildingMenu* BuildingMenu = nullptr;;
+
+	static const TArray<FOrionDataBuilding> BuildingMenuOptions;
+
+	static const TMap<int32, FOrionDataBuilding> BuildingMenuOptionsMap;
+
 
 	/* Developer UI Base */
 
@@ -30,6 +54,8 @@ public:
 
 	FOnViewLevelUp OnViewLevelUp;
 	FOnViewLevelUp OnViewLevelDown;
+	//FOnSaveGame OnSaveGame;
+	//FOnLoadGame OnLoadGame;
 
 
 	/* Player Operation Menu */

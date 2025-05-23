@@ -8,7 +8,7 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 	TSubclassOf<AActor> BPClass,
 	AActor*& PreviewPtr,
 	bool& bSnapped,
-	const FTransform& SnapXform)
+	const FTransform& SnapTransform)
 {
 	if (!PreviewPtr || !BPClass)
 	{
@@ -40,7 +40,7 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 	/* ② 计算最终放置的目标变换 */
 	const FTransform TargetXform =
 		bSnapped
-			? SnapXform
+			? SnapTransform
 			: FTransform(PreviewPtr->GetActorRotation(),
 			             PreviewPtr->GetActorLocation(),
 			             PreviewPtr->GetActorScale3D());
