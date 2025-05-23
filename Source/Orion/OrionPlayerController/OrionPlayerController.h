@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-//#include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionCppFunctionLibrary/OrionCppFunctionLibrary.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "OrionPlayerController.generated.h"
@@ -43,6 +42,10 @@ class ORION_API AOrionPlayerController : public APlayerController
 
 public:
 	AOrionPlayerController();
+	void OnKey8Pressed();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Build")
+	TSubclassOf<AActor> DoubleWallBP = nullptr;
+
 	virtual void SetupInputComponent() override;
 	void QuickSave();
 	void QuickLoad();
@@ -64,17 +67,17 @@ public:
 
 	EOrionInputMode CurrentInputMode = EOrionInputMode::Default;
 
-	FVector WorldOrigin, WorldDirection;
-	FHitResult GroundHit;
+	FVector WorldOrigin = FVector(), WorldDirection = FVector();
+	FHitResult GroundHit = FHitResult();
 
-	float MouseX, MouseY;
+	float MouseX = 0.f, MouseY = 0.f;
 
 	void UpdateBasicPlayerControllerParams();
 
 	/* Sole & Identifiable Pointers */
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	AOrionStructure* StructureSelected = nullptr;
+	AActor* StructureSelected = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	int32 ViewLevel = 0;
@@ -85,6 +88,9 @@ public:
 	TObservableArray<AOrionChara*> OrionCharaSelection;
 	void OnOrionCharaSelectionChanged(FName OperationName);
 	void EmptyOrionCharaSelection(TObservableArray<AOrionChara*>& OrionCharaSelection);
+
+	UPROPERTY()
+	TArray<AOrionChara*> CachedOrionCharaSelectionInBuilding = {};
 
 	UFUNCTION(BlueprintCallable, Category = "OrionChara Selection")
 	TArray<AOrionChara*> GetOrionCharaSelection() const
@@ -104,8 +110,8 @@ public:
 	bool bIsSelecting = false;
 	bool bHasDragged = false;
 
-	FVector2D InitialClickPos;
-	FVector2D CurrentMousePos;
+	FVector2D InitialClickPos = FVector2D();
+	FVector2D CurrentMousePos = FVector2D();
 
 	void DetectDraggingControl();
 
@@ -113,19 +119,22 @@ public:
 
 	/* Building */
 
+	void SwitchFromPlacingStructures(int32 InBuildingId, bool bIsChecked);
+
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
-	float SnapInDist = 150.f; // cm，进入吸附
+	float SnapInDist = 150.f;
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
-	float SnapOutDist = 180.f; // cm，离开吸附
+	float SnapOutDist = 180.f;
 
 	const float SnapInDistSqr = SnapInDist * SnapInDist;
 
 	void UpdateBuildingControl();
+	void UpdatePlacingStructure(TSubclassOf<AActor>, AActor*& Preview);
 
 
-	FVector SnappedSocketLoc;
-	FRotator SnappedSocketRot;
-	FVector SnappedSocketScale;
+	FVector SnappedSocketLoc = FVector();
+	FRotator SnappedSocketRot = FRotator();
+	FVector SnappedSocketScale = FVector();
 
 
 	/* Place Structure */
@@ -135,24 +144,13 @@ public:
 
 	bool bIsSpawnPreviewStructure = false;
 
-	template <typename TOrionStructure>
-	void TogglePlacingStructure(TSubclassOf<TOrionStructure> BPOrionStructure,
-	                            TOrionStructure*& PreviewStructurePtr);
-
 	bool bPlacingStructure = false;
 	bool bStructureSnapped = false;
 
-	template <typename TOrionStructure>
-	void UpdatePlacingStructure(TSubclassOf<TOrionStructure> BPOrionStructure, TOrionStructure*& PreviewStructure);
-
-	template <typename TOrionStructure>
-	void ConfirmPlaceStructure(TSubclassOf<TOrionStructure> BPOrionStructure, TOrionStructure*& PreviewStructurePtr);
-
 	/* 0. Demolishing Mode */
 
-	void OnToggleDemolishingMode();
-	template <class TOrionStructure>
-	void SpawnPreviewStructure(TSubclassOf<TOrionStructure> BPClass, TOrionStructure*& OutPtr);
+	void OnToggleDemolishingMode(bool bIsChecked);
+	void SpawnPreviewStructure(TSubclassOf<AActor> BPClass, AActor*& OutPtr);
 	bool bDemolishingMode = false;
 	void DemolishStructureUnderCursor() const;
 
@@ -160,19 +158,22 @@ public:
 
 
 	UPROPERTY()
-	AOrionStructureFoundation* PreviewFoundation = nullptr;
+	AActor* PreviewStructure = nullptr;
+
+	TSubclassOf<AActor> BuildBP = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
-	TSubclassOf<AOrionStructureFoundation> FoundationBP;
+	TSubclassOf<AActor> SquareFoundationBP;
+
+
+	UPROPERTY(EditDefaultsOnly, Category = "Build")
+	TSubclassOf<AActor> TriangleFoundationBP;
 
 	/* 2. Place Wall Structure */
 
-
 	UPROPERTY(EditAnywhere, Category = "Build")
-	TSubclassOf<AOrionStructureWall> WallBP;
+	TSubclassOf<AActor> WallBP;
 
-	UPROPERTY()
-	AOrionStructureWall* PreviewWall = nullptr;
 
 	/* Developer & Debug */
 
@@ -181,12 +182,12 @@ public:
 	void OnKey4Pressed();
 	void OnKey5Pressed();
 	void OnKey6Pressed();
-	// void OnKey7Pressed();
+	void OnKey7Pressed();
 
 
 	/* Niagara Interaction Effect */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Niagara")
-	UNiagaraSystem* NiagaraHitResultEffect;
+	UNiagaraSystem* NiagaraHitResultEffect = nullptr;
 
 
 	/* Clicked On OrionActor */
@@ -197,6 +198,7 @@ public:
 	/* Input Interaction Functions*/
 
 
+	void ConfirmPlaceStructure(TSubclassOf<AActor> BPClass, AActor*& PreviewPtr);
 	void OnLeftMouseDown();
 	void OnLeftMouseUp();
 	void SingleSelectionUnderCursor();
@@ -220,7 +222,7 @@ public:
 	TArray<AOrionChara*> CachedActionSubjects;
 
 	UPROPERTY()
-	AOrionActor* CachedActionObjects;
+	AOrionActor* CachedActionObjects = nullptr;
 
 	TArray<FString> CachedRequestCaseNames;
 

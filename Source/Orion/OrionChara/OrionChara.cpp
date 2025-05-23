@@ -132,7 +132,7 @@ void AOrionChara::Tick(float DeltaTime)
 
 FString AOrionChara::GetUnifiedActionName() const
 {
-	// choose between procedural vs real‐time
+	// choose between procedural vs real-time
 	if (bIsCharaProcedural)
 	{
 		return CurrentProcAction ? CurrentProcAction->Name : TEXT("");
@@ -326,7 +326,7 @@ TArray<AOrionActor*> AOrionChara::FindAvailableCargoContainersByDistance(int32 I
 			continue;
 		}
 
-		// ❌ 排除 Storage 或 Production
+		// Exclude Storage or Production
 		if (OrionActor->IsA<AOrionActorStorage>() ||
 			OrionActor->IsA<AOrionActorProduction>())
 		{
@@ -363,7 +363,7 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 {
 	constexpr int32 StoneItemId = 2;
 
-	// 1) 验证目标仓库
+	// 1) Validate target storage
 	if (!IsValid(StorageActor) ||
 		StorageActor->StorageCategory != EStorageCategory::StoneStorage)
 	{
@@ -379,27 +379,27 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 
 		if (Have > 0)
 		{
-			// 构建 this -> Storage 的路由（自身取货、放到仓库）
+			// Build this -> Storage route (pickup from self, deliver to storage)
 			TMap<AActor*, TMap<int32, int32>> SelfRoute;
 			SelfRoute.Add(this, {{StoneItemId, Have}});
 			SelfRoute.Add(StorageActor, {});
 
-			// 交给 TradingCargo 去跑这一段
+			// Let TradingCargo handle this segment
 			bool bDone = TradingCargo(SelfRoute);
 			if (!bDone)
 			{
-				// 还在送自身库存，下一帧继续
+				// Still delivering self inventory, continue next frame
 				return false;
 			}
-			// 送完了就标记，下面才进入场上容器逻辑
+			// Delivery complete, mark it so we can proceed to field container logic below
 		}
 		bSelfDeliveryDone = true;
 	}
 
-	// 3) 每次 bIsTrading==false，都重新选下一个源头 并发起新一段运输
+	// 3) Each time bIsTrading==false, reselect next source and start new transport segment
 	if (!bIsTrading)
 	{
-		// 3.1) 现场所有可用矿 + （不含自身，这里自身库存已送完）
+		// 3.1) All available ore on site + (excluding self, self inventory already delivered here)
 		TArray<AOrionActor*> Sources =
 			FindAvailableCargoContainersByDistance(
 				StoneItemId
@@ -407,14 +407,14 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 
 		if (Sources.Num() == 0)
 		{
-			// 连一个都没—结束
+			// Not even one - end
 			UE_LOG(LogTemp, Log, TEXT("CollectingCargo: no more sources, done"));
-			// 重置，以便下次再调用能重跑自身送货
+			// Reset so next call can re-run self delivery
 			bSelfDeliveryDone = false;
 			return true;
 		}
 
-		// 3.2) 选最近的那个，构建 一段 Source -> Storage
+		// 3.2) Select the nearest one, build one segment Source -> Storage
 		AOrionActor* NextSource = Sources[0];
 		int32 Qty = NextSource->InventoryComp->GetItemQuantity(StoneItemId);
 
@@ -422,28 +422,28 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 		Route.Add(NextSource, {{StoneItemId, Qty}});
 		Route.Add(StorageActor, {});
 
-		// 发起这段运输
+		// Start this transport segment
 		TradingCargo(Route);
 
-		// 始终 return false，等待 TradingCargo 状态机自行推进
+		// Always return false, wait for TradingCargo state machine to progress itself
 		return false;
 	}
 
-	// 4) bIsTrading 为 true，说明上一段正在执行 → 继续推进
+	// 4) bIsTrading is true, meaning the previous segment is executing → continue advancing
 	TradingCargo(TMap<AActor*, TMap<int32, int32>>());
 	return false;
 }
 
 void AOrionChara::CollectingCargoStop()
 {
-	// 1) 停止任何挂起的拾取/放下动画回调
+	// 1) Stop any pending pickup/dropoff animation callbacks
 	if (GetWorld())
 	{
 		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Pickup);
 		GetWorld()->GetTimerManager().ClearTimer(TimerHandle_Dropoff);
 	}
 
-	// 2) 重置 TradingCargo 状态机
+	// 2) Reset TradingCargo state machine
 	bIsTrading = false;
 	bPickupAnimPlaying = false;
 	bDropoffAnimPlaying = false;
@@ -451,13 +451,13 @@ void AOrionChara::CollectingCargoStop()
 	CurrentSegIndex = 0;
 	TradeStep = ETradeStep::ToSource;
 
-	// 3) 重置“先送自身库存”标记
+	// 3) Reset "first deliver self inventory" mark
 	//bSelfDeliveryDone = false;
 
-	// 4) 停止导航并清空路径
-	MoveToLocationStop(); // 内部会清空 NavPathPoints 和 CurrentNavPointIndex
+	// 4) Stop navigation and clear path
+	MoveToLocationStop(); // Internal will clear NavPathPoints and CurrentNavPointIndex
 
-	// 5) 清理 CollectingCargo 自身状态
+	// 5) Clean up CollectingCargo itself state
 	bIsCollectingCargo = false;
 	AvailableCargoSources.Empty();
 	CurrentCargoIndex = 0;
@@ -467,7 +467,7 @@ void AOrionChara::CollectingCargoStop()
 
 bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 {
-	// 记录目标以备“重新规划”时使用
+	// Record target for "replan" use
 	LastMoveDestination = InTargetLocation;
 	bHasMoveDestination = true;
 
@@ -487,7 +487,7 @@ bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 		return true;
 	}
 
-	// 如果还没有生成路径，则同步计算一次
+	// If path hasn't been generated yet, sync calculate once
 	if (NavPathPoints.Num() == 0)
 	{
 		FNavLocation ProjectedNav;
@@ -496,7 +496,7 @@ bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 		{
 			DestLocation = ProjectedNav.Location;
 		}
-		// 计算路径
+		// Calculate path
 		FPathFindingQuery Query;
 		UNavigationPath* Path = NavSys->FindPathToLocationSynchronously(GetWorld(), GetActorLocation(), DestLocation,
 		                                                                this);
@@ -506,21 +506,21 @@ bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 			return true;
 		}
 		NavPathPoints = Path->PathPoints;
-		CurrentNavPointIndex = 1; // 跳过起点
+		CurrentNavPointIndex = 1; // Skip start point
 
 		for (int32 i = 0; i < NavPathPoints.Num(); ++i)
 		{
-			// 绘制路径点球体
+			// Draw path point sphere
 			DrawDebugSphere(
 				GetWorld(),
 				NavPathPoints[i],
-				20.f, // 半径
-				12, // 分段数
+				20.f, // Radius
+				12, // Segment count
 				FColor::Green,
-				false, // 不持续
-				5.f // 显示时长
+				false, // Not persistent
+				5.f // Display duration
 			);
-			// 绘制点与点之间的连线
+			// Draw line between points
 			if (i > 0)
 			{
 				DrawDebugLine(
@@ -528,27 +528,27 @@ bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 					NavPathPoints[i - 1],
 					NavPathPoints[i],
 					FColor::Green,
-					false, // 不持续
-					5.f, // 显示时长
+					false, // Not persistent
+					5.f, // Display duration
 					0,
-					2.f // 线宽
+					2.f // Line width
 				);
 			}
 		}
 	}
 
-	// 当前目标点
+	// Current target point
 	FVector TargetPoint = NavPathPoints[CurrentNavPointIndex];
 	float Dist2D = FVector::Dist2D(GetActorLocation(), TargetPoint);
 	UE_LOG(LogTemp, Verbose, TEXT("[MoveToLocation] NextPt=%s, Dist2D=%.1f"), *TargetPoint.ToString(), Dist2D);
 
-	// 到达当前路径点后推进到下一个
+	// After reaching current path point, advance to next
 	if (Dist2D <= AcceptanceRadius)
 	{
 		CurrentNavPointIndex++;
 		if (CurrentNavPointIndex >= NavPathPoints.Num())
 		{
-			// 全部点到齐，停止移动
+			// All points reached, stop moving
 			NavPathPoints.Empty();
 			CurrentNavPointIndex = 0;
 			UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Arrived at final destination"));
@@ -556,11 +556,11 @@ bool AOrionChara::MoveToLocation(const FVector& InTargetLocation)
 		}
 	}
 
-	// 通过添加输入来移动：朝向下一个路径点
+	// Move by adding input: toward next path point
 	FVector Dir = (TargetPoint - GetActorLocation()).GetSafeNormal2D();
 	AddMovementInput(Dir, 1.0f, true);
 
-	return false; // 仍在移动
+	return false; // Still moving
 }
 
 void AOrionChara::MoveToLocationStop()
@@ -581,11 +581,11 @@ void AOrionChara::ReRouteMoveToLocation()
 		return;
 	}
 
-	// 1) 清空旧导航点
+	// 1) Clear old navigation points
 	NavPathPoints.Empty();
 	CurrentNavPointIndex = 0;
 
-	// 2) 立刻向 AIController 发一个新的 MoveToLocation 请求
+	// 2) Immediately send a new MoveToLocation request to AIController
 	constexpr float AcceptanceRadius = 50.f;
 	const FVector SearchExtent(500.f, 500.f, 500.f);
 
@@ -596,7 +596,7 @@ void AOrionChara::ReRouteMoveToLocation()
 		return;
 	}
 
-	// 投影到 NavMesh
+	// Project to NavMesh
 	FNavLocation ProjectedNav;
 	FVector Dest = LastMoveDestination;
 	if (NavSys->ProjectPointToNavigation(LastMoveDestination, ProjectedNav, SearchExtent))
@@ -604,7 +604,7 @@ void AOrionChara::ReRouteMoveToLocation()
 		Dest = ProjectedNav.Location;
 	}
 
-	// 发起寻路
+	// Start pathfinding
 	AIController->MoveToLocation(
 		Dest,
 		AcceptanceRadius,
@@ -744,12 +744,12 @@ void AOrionChara::OnBulletPickupFinished()
 bool AOrionChara::InteractWithProduction(float DeltaTime,
                                          AOrionActorProduction* InTarget)
 {
-	// === 配置：true = 先查 Storage，再查 Ore；false = 先查 Ore，再查 Storage ===
+	// === Configuration: true = First check Storage, then check Ore; false = First check Ore, then check Storage ===
 	constexpr bool bPreferStorageFirst = true;
 
 	bPreparingInteractProd = true;
 
-	// ① 无效或不可交互时停止
+	// ① Invalid or uninteractable when stopped
 	if (!IsValid(InTarget) ||
 		InTarget->ActorStatus == EActorStatus::NotInteractable)
 	{
@@ -762,17 +762,17 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		return true;
 	}
 
-	// ② 检查生产点原料
+	// ② Check production point raw material
 	constexpr int32 RawItemId = 2;
 	constexpr int32 NeedPerCycle = 2;
 
 	UOrionInventoryComponent* ProdInv = InTarget->InventoryComp;
 	int32 HaveProd = ProdInv ? ProdInv->GetItemQuantity(RawItemId) : 0;
 
-	// ③ 原料不足时触发搬运
+	// ③ Raw material insufficient triggers transport
 	if (HaveProd < NeedPerCycle)
 	{
-		// ③.1 优先用角色背包中的
+		// ③.1 Priority use from character's backpack
 		if (InventoryComp &&
 			InventoryComp->GetItemQuantity(RawItemId) >= NeedPerCycle)
 		{
@@ -783,20 +783,20 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 			Route.Add(InTarget, {{}});
 			if (!TradingCargo(Route))
 			{
-				return false; // 运输未完成，继续本 Action
+				return false; // Transport not completed, continue this Action
 			}
 		}
 
-		// ③.2 现场容器搬运
+		// ③.2 Field container transport
 		AOrionActorOre* BestOre = nullptr;
 		float BestOreDist = TNumericLimits<float>::Max();
 		AOrionActorStorage* BestStore = nullptr;
 		float BestStoreDist = TNumericLimits<float>::Max();
 
-		// 如果优先 Storage
+		// If prioritize Storage
 		if (bPreferStorageFirst)
 		{
-			// 查 Storage
+			// Check Storage
 			for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
 			{
 				auto* S = *It;
@@ -817,7 +817,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 					BestStore = S;
 				}
 			}
-			// 若无 Storage，再查 Ore
+			// If no Storage, then check Ore
 			if (!BestStore)
 			{
 				for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
@@ -842,7 +842,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 				}
 			}
 		}
-		else // 优先 Ore
+		else // Priority Ore
 		{
 			for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
 			{
@@ -889,7 +889,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 			}
 		}
 
-		// 都没有来源时退出
+		// No source when exiting
 		AActor* ChosenSource =
 			BestStore
 				? static_cast<AActor*>(BestStore)
@@ -897,7 +897,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 
 		if (!ChosenSource) { return true; }
 
-		// 计算搬运量
+		// Calculate transport amount
 		auto* SrcInv = ChosenSource->FindComponentByClass<UOrionInventoryComponent>();
 		int32 SrcHave = SrcInv ? SrcInv->GetItemQuantity(RawItemId) : 0;
 		int32 MaxCanPut = ProdInv && ProdInv->AvailableInventoryMap.Contains(RawItemId)
@@ -917,14 +917,14 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		}
 	}
 
-	// ④ 原料准备完毕，开始生产交互
+	// ④ Raw material preparation complete, start production interaction
 	bIsInteractProd = true;
 	return InteractWithActor(DeltaTime, InTarget);
 }
 
 void AOrionChara::InteractWithProductionStop()
 {
-	// 如果已经进入“正式交互”阶段，需要减少生产点的工人数
+	// If already in "formal interaction" stage, need to reduce production point worker count
 	UE_LOG(LogTemp, Warning, TEXT("[IP] 231331"));
 	if (IsInteractWithActor)
 	{
@@ -937,20 +937,20 @@ void AOrionChara::InteractWithProductionStop()
 		MoveToLocationStop();
 	}
 
-	// 停止“正式交互”状态
+	// Stop "formal interaction" state
 	IsInteractWithActor = false;
 
 
-	// 重置“准备交互”标记
+	// Reset "preparing interaction" mark
 	bPreparingInteractProd = false;
 
-	// 清空当前生产目标
+	// Clear current production target
 	//CurrentInteractProduction = nullptr;
 }
 
 bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 {
-	// 1) 无效目标立即终止
+	// 1) Invalid target immediately terminate
 	if (!IsValid(InTarget))
 	{
 		if (IsInteractWithActor)
@@ -961,7 +961,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		return true;
 	}
 
-	// 2) 不可交互立即终止
+	// 2) Uninteractable immediately terminate
 	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
 	{
 		if (IsInteractWithActor)
@@ -972,7 +972,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		return true;
 	}
 
-	// 3) 只查一次 SphereComponent
+	// 3) Only check SphereComponent once
 	USphereComponent* CollisionSphere = InTarget->CollisionSphere;
 	const bool bOverlapping = CollisionSphere && CollisionSphere->IsOverlappingActor(this);
 
@@ -980,10 +980,10 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 	{
 		MoveToLocationStop();
 
-		// 4) 缓存一次字符串引用，避免拷贝
+		// 4) Cache once string reference, avoid copy
 		const FString& TargetType = InTarget->GetInteractType();
 
-		// 5) 根据类型设置交互类别
+		// 5) Set interaction category based on type
 		if (TargetType == TEXT("Mining"))
 		{
 			InteractType = EInteractCategory::Mining;
@@ -994,7 +994,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		}
 		else
 		{
-			// 不支持的类型
+			// Unsupported type
 			InteractType = EInteractCategory::Unavailable;
 			UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: Unavailable interact type."));
 
@@ -1006,7 +1006,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 			return true;
 		}
 
-		// 6) 第一次到达，触发开始交互
+		// 6) First arrival, trigger start interaction
 		if (!IsInteractWithActor)
 		{
 			if (InteractType == EInteractCategory::Mining)
@@ -1027,7 +1027,7 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 			InTarget->CurrWorkers += 1;
 		}
 
-		// 7) 停止移动并面向目标
+		// 7) Stop moving and face target
 		if (AIController)
 		{
 			AIController->StopMovement();
@@ -1043,12 +1043,12 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 		return false;
 	}
 
-	// —— 此处进入「移动到目标」分支 ——
+	// —— Here enters the "move to target" branch ——
 
 	bIsMovingToInteraction = true;
 	MoveToLocation(InTarget->GetActorLocation());
 
-	// 8) 如果我们正处于「已经开始交互」状态，但又脱离了范围，取消之前的交互
+	// 8) If we are in the "already interacting" state but have left the range, cancel the previous interaction
 	if (IsInteractWithActor)
 	{
 		InteractWithActorStop();
@@ -1087,7 +1087,7 @@ void AOrionChara::InteractWithActorStop()
 bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
 {
 	/*--------------------------------------------------------------------
-	 * 0) 进入状态机时的“一次性”初始化
+	 * 0) "一次性" initialization at the beginning of state machine
 	 *------------------------------------------------------------------*/
 	if (!bIsTrading)
 	{
@@ -1098,7 +1098,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		bPickupAnimPlaying = false;
 		bDropoffAnimPlaying = false;
 
-		// 生成 TradeSegments
+		// Generate TradeSegments
 		TArray<AActor*> Nodes;
 		TradeRoute.GetKeys(Nodes);
 		if (Nodes.Num() < 2)
@@ -1126,7 +1126,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	}
 
 	/*--------------------------------------------------------------------
-	 * 1) 所有段都已完成？
+	 * 1) All segments completed?
 	 *------------------------------------------------------------------*/
 	if (CurrentSegIndex >= TradeSegments.Num())
 	{
@@ -1143,8 +1143,8 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	}
 
 	/*--------------------------------------------------------------------
-	 * 2) 判断“是否抵达”当前节点
-	 *    —— 角色本身作为 Source/Dest 时，天然视作“已抵达” ——
+	 * 2) Check "whether arrived" at current node
+	 *    —— Role itself as Source/Dest is naturally considered "arrived" ——
 	 *------------------------------------------------------------------*/
 	bool bSourceIsSelf = (Seg.Source == this);
 	bool bDestIsSelf = (Seg.Destination == this);
@@ -1164,7 +1164,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		|| (TradeStep == ETradeStep::ToDest && bDestIsSelf);
 
 	/*--------------------------------------------------------------------
-	 * 3) 状态机
+	 * 3) State machine
 	 *------------------------------------------------------------------*/
 	switch (TradeStep)
 	{
@@ -1174,7 +1174,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	case ETradeStep::ToSource:
 		if (bAtNode)
 		{
-			MoveToLocationStop(); // 已到达（或本就是自己），停止寻路
+			MoveToLocationStop(); // Already arrived (or it's self), stop pathfinding
 			TradeStep = ETradeStep::Pickup;
 			if (AIController)
 			{
@@ -1192,10 +1192,10 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	 *============================================================*/
 	case ETradeStep::Pickup:
 		{
-			/* 如果 Source 就是自己：直接记数量，不放动画，马上进入 ToDest */
+			/* If Source is self: directly record quantity, no animation, immediately enter ToDest */
 			if (bSourceIsSelf)
 			{
-				// 已经在自己背包里，只需记下实际要搬运的数量
+				// Already in self backpack, just record actual quantity to move
 				if (InventoryComp)
 				{
 					int32 Have = InventoryComp->GetItemQuantity(Seg.ItemId);
@@ -1203,14 +1203,14 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 					Seg.Moved = ToMove;
 				}
 
-				// 跳过动画，直接下一步
+				// Skip animation, directly next step
 				TradeStep = ETradeStep::ToDest;
 				bPickupAnimPlaying = false;
 				return false;
 			}
 
-			// ---------- OLD 旧逻辑 ----------
-			// if (!bPickupAnimPlaying) { … 播放动画并取货 … }
+			// ---------- OLD Old logic ----------
+			// if (!bPickupAnimPlaying) { … Play animation and pickup … }
 			// --------------------------------
 
 			if (!bPickupAnimPlaying)
@@ -1274,7 +1274,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	 *============================================================*/
 	case ETradeStep::DropOff:
 		{
-			/* 如果 Destination 是自己：直接扣背包，不放动画，马上下一段 */
+			/* If Destination is self: directly deduct backpack, no animation, immediately next segment */
 			if (bDestIsSelf)
 			{
 				if (InventoryComp)
@@ -1316,7 +1316,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 		}
 	}
 
-	return true; // 不会走到这里
+	return true; // Won't reach here
 }
 
 void AOrionChara::OnPickupAnimFinished()
@@ -1406,7 +1406,7 @@ void AOrionChara::Die()
 		UE_LOG(LogTemp, Warning, TEXT("StimuliSourceComp is null in Die()."));
 	}
 
-	// 3. 停止AI控制
+	// 3. StopAI control
 	if (AIController)
 	{
 		AIController->StopMovement();

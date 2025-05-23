@@ -10,7 +10,7 @@ public class Orion : ModuleRules
 
         //AddEngineThirdPartyPrivateStaticDependencies(Target, "Eigen");
 
-        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "Niagara", "UMG", "Slate", "SlateCore", "ChaosVehicles" });
+        PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "AIModule", "Niagara", "UMG", "Slate", "SlateCore", "ChaosVehicles", "Json", "JsonUtilities"});
 
         PrivateDependencyModuleNames.AddRange(new string[] { "NavigationSystem" });
 

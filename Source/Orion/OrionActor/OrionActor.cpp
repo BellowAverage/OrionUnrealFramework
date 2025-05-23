@@ -110,7 +110,7 @@ void AOrionActor::SpawnDeathEffect_Implementation(FVector DeathLocation)
 		MeshComp->SetSimulatePhysics(true);
 	}
 
-	// 3) 5 秒后调用 HandleDelayedDestroy() 来销毁自己
+	// 3) Call HandleDelayedDestroy() after 5 seconds to destroy itself
 	GetWorldTimerManager()
 		.SetTimer(DeathDestroyTimerHandle,
 		          this,

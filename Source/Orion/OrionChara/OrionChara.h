@@ -264,14 +264,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	bool bIsCharaArmed = false;
 
-	/** BlendSpace 用的移动输入量 */
+	/** Movement input amount for BlendSpace */
 	UPROPERTY(BlueprintReadOnly, Category = "CombatMove")
 	float MoveForwardScale;
 
 	UPROPERTY(BlueprintReadOnly, Category = "CombatMove")
 	float MoveRightScale;
 
-	/** True while we’re in the process of fetching bullets */
+	/** True while we're in the process of fetching bullets */
 	bool bIsCollectingBullets = false;
 
 	bool CollectBullets();
@@ -291,7 +291,7 @@ public:
 	UFUNCTION()
 	void OnBulletPickupFinished();
 
-	/** The production building we’re currently drawing bullets from */
+	/** The production building we're currently drawing bullets from */
 	AOrionActor* BulletSource = nullptr;
 
 	/* Character Movement */
@@ -435,9 +435,9 @@ public:
 	bool MoveToLocation(const FVector& InTargetLocation);
 	void MoveToLocationStop();
 
-	/** 当前寻路路径点列表 */
+	/** Current pathfinding path point list */
 	TArray<FVector> NavPathPoints;
-	/** 当前目标路径点索引 */
+	/** Current target path point index */
 	int32 CurrentNavPointIndex = 0;
 
 	UFUNCTION(BlueprintCallable, Category = "Movement")
@@ -445,7 +445,7 @@ public:
 
 	FVector LastMoveDestination;
 
-	/** 标记是否已有有效的 MoveToLocation 目标 */
+	/** Flag indicating whether there is a valid MoveToLocation target */
 	bool bHasMoveDestination = false;
 
 

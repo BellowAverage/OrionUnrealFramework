@@ -6,6 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "DrawDebugHelpers.h"
 //#include "Kismet/KismetSystemLibrary.h"
+#include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "OrionStructure.generated.h"
 
@@ -29,9 +30,8 @@ public:
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManager = nullptr;
 
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	UStaticMeshComponent* StructureMesh;
+	UPROPERTY()
+	UOrionStructureComponent* StructureComponent = nullptr;
 
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
