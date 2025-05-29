@@ -29,14 +29,14 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	EProductionCategory ProductionCategory;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	EProductionCategory ProductionCategory = EProductionCategory::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int ProductionTimeCost;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	int32 ProductionTimeCost = 15;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	float ProductionProgress;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	float ProductionProgress = 0.f;
 
 	UFUNCTION(BlueprintCallable, Category = "Basics")
 	void ProductionProgressUpdate(float DeltaTime);

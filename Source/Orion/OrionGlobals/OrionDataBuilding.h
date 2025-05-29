@@ -8,7 +8,7 @@ struct FOrionDataBuilding
 {
 	GENERATED_BODY()
 
-	int32 BuildingId; // Building ID
+	int32 BuildingId;
 
 	FName BuildingDisplayName;
 

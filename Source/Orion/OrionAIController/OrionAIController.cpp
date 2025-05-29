@@ -37,21 +37,6 @@ void AOrionAIController::BeginPlay()
 	{
 		AIPerceptionComp->OnTargetPerceptionUpdated.AddDynamic(this, &AOrionAIController::OnTargetPerceptionUpdated);
 	}
-
-	ControlledPawn = Cast<AOrionChara>(GetPawn());
-
-	if (!ControlledPawn)
-	{
-		UE_LOG(LogTemp, Error, TEXT("ControlledPawn is nullptr"));
-		return;
-	}
-
-	ControlledPawnActionableInterface = Cast<IOrionInterfaceActionable>(ControlledPawn);
-
-	if (!ControlledPawnActionableInterface)
-	{
-		UE_LOG(LogTemp, Error, TEXT("ControlledPawnActionableInterface is nullptr"));
-	}
 }
 
 void AOrionAIController::Tick(float DeltaTime)
@@ -96,6 +81,26 @@ void AOrionAIController::Tick(float DeltaTime)
 	CachedAIState = ControlledPawn->CharaAIState;
 }
 
+void AOrionAIController::OnPossess(APawn* InPawn)
+{
+	Super::OnPossess(InPawn);
+
+	ControlledPawn = Cast<AOrionChara>(GetPawn());
+
+	if (!ControlledPawn)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ControlledPawn is nullptr"));
+		return;
+	}
+
+	ControlledPawnActionableInterface = Cast<IOrionInterfaceActionable>(ControlledPawn);
+
+	if (!ControlledPawnActionableInterface)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ControlledPawnActionableInterface is nullptr"));
+	}
+}
+
 void AOrionAIController::RegisterFetchingAmmoEvent()
 {
 	// only if nothing else is queued or running
@@ -107,7 +112,7 @@ void AOrionAIController::RegisterFetchingAmmoEvent()
 
 		if (ControlledPawnActionableInterface)
 		{
-			const OrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionCollectBullets(
+			const FOrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionCollectBullets(
 				TEXT("AC_CollectAmmo"));
 			ControlledPawnActionableInterface->InsertOrionActionToQueue(
 				AddingOrionAction, EActionExecution::RealTime, -1);
@@ -132,7 +137,7 @@ void AOrionAIController::RegisterDefensiveAIActon()
 
 			if (ControlledPawnActionableInterface)
 			{
-				const OrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionAttackOnChara(
+				const FOrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionAttackOnChara(
 					ActionName, TargetOrionChara, FVector());
 				ControlledPawnActionableInterface->InsertOrionActionToQueue(
 					AddingOrionAction, EActionExecution::RealTime, -1);

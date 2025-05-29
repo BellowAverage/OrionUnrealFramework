@@ -37,6 +37,12 @@ const TArray<FOrionDataBuilding> AOrionHUD::BuildingMenuOptions = {
 		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureDoubleWall.BP_OrionStructureDoubleWall_C")),
 		EOrionStructure::DoubleWall
 	},
+	{
+		5, FName(TEXT("BasicRoof")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/BasicRoofSnapShot.BasicRoofSnapShot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureBasicRoof.BP_OrionStructureBasicRoof_C")),
+		EOrionStructure::BasicRoof
+	},
 };
 
 const TMap<int32, FOrionDataBuilding> AOrionHUD::BuildingMenuOptionsMap = []()
@@ -73,13 +79,15 @@ void AOrionHUD::BeginPlay()
 		DeveloperUIBase->OnSaveGame.BindLambda([this]()
 		{
 			UE_LOG(LogTemp, Log, TEXT("Save Game"));
-			GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGame();
+			/*GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGameWithDialog();*/
+			GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGame("Developer");
 		});
 
 		DeveloperUIBase->OnLoadGame.BindLambda([this]()
 		{
 			UE_LOG(LogTemp, Log, TEXT("Load Game"));
-			GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGame();
+			/*GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGameWithDialog();*/
+			GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGame("Developer");
 		});
 
 		DeveloperUIBase->AddToViewport();
@@ -251,8 +259,8 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				FStringView(*CombinedText), // <- Pass FString instead of FStringView
-				//CombinedText,
+				//FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -303,8 +311,8 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			FStringView(*Line), // <- 这里直接传 FString
-			//Line,
+			//FStringView(*Line), // <- 这里直接传 FString
+			Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,

@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "OrionActorOre.h"
@@ -7,18 +7,20 @@
 AOrionActorOre::AOrionActorOre()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
-	if (OreCategory == EOreCategory::StoneOre)
-	{
-		AvailableInventoryMap = {
-			{2, 10} // Stone Ore
-		};
-	}
 }
 
 void AOrionActorOre::BeginPlay()
 {
 	Super::BeginPlay();
+
+	/*checkf(InventoryComp, TEXT("[%s] InventoryComp is NULL!"), *GetName()); // 崩溃*/
+
+	if (InventoryComp && OreCategory == EOreCategory::StoneOre)
+	{
+		AvailableInventoryMap = {{2, 10}};
+		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
+		InventoryComp->ModifyItemQuantity(2, 5); // 初始存储 10 个石矿
+	}
 }
 
 
@@ -28,7 +30,9 @@ void AOrionActorOre::Tick(float DeltaTime)
 
 	ProductionProgressUpdate(DeltaTime);
 
-	if (OreCategory == EOreCategory::StoneOre && InventoryComp->FullInventoryStatus.FindRef(2))
+	/* 满仓则不可交互 */
+	if (OreCategory == EOreCategory::StoneOre &&
+		InventoryComp && InventoryComp->FullInventoryStatus.FindRef(2))
 	{
 		ActorStatus = EActorStatus::NotInteractable;
 	}
@@ -41,10 +45,7 @@ void AOrionActorOre::Tick(float DeltaTime)
 void AOrionActorOre::ProductionProgressUpdate(float DeltaTime)
 {
 	// Only update production if there's at least one worker.
-	if (CurrWorkers < 1)
-	{
-		return;
-	}
+	if (CurrWorkers < 1 || !InventoryComp) { return; }
 
 	// Calculate the progress increment.
 	// For one worker, the progress rate is 100 / ProductionTimeCost per second.

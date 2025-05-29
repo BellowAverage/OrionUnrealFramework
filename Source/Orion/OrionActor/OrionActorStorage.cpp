@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "OrionActorStorage.h"
@@ -12,7 +12,16 @@ void AOrionActorStorage::BeginPlay()
 {
 	Super::BeginPlay();
 
-	InventoryComp->ModifyItemQuantity(3, 100);
+	if (!InventoryComp)
+	{
+		return;
+	}
+
+	/* 示例：给成品 3 预存 100 */
+	if (StorageCategory == EStorageCategory::StoneStorage)
+	{
+		InventoryComp->ModifyItemQuantity(3, +100);
+	}
 }
 
 void AOrionActorStorage::Tick(float DeltaTime)
@@ -21,6 +30,6 @@ void AOrionActorStorage::Tick(float DeltaTime)
 
 	if (StorageCategory == EStorageCategory::None)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("StorageCategory is None!"));
+		UE_LOG(LogTemp, Warning, TEXT("[%s] StorageCategory is None!"), *GetName());
 	}
 }

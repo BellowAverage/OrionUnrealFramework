@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "DrawDebugHelpers.h"
-//#include "Kismet/KismetSystemLibrary.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "OrionStructure.generated.h"

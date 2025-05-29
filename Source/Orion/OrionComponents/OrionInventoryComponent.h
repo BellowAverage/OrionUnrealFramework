@@ -1,10 +1,25 @@
-#pragma once
+﻿#pragma once
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Orion/OrionGlobals/OrionDataItem.h"
 #include "OrionInventoryComponent.generated.h"
 
+
+USTRUCT(BlueprintType)
+struct FOrionInventorySerializable
+{
+	GENERATED_BODY()
+
+	UPROPERTY(SaveGame)
+	FGuid OwnerGameId;
+
+	UPROPERTY(SaveGame)
+	TMap<int32, int32> SerializedInventoryMap;
+
+	UPROPERTY(SaveGame)
+	TMap<int32, int32> SerializedAvailableInventoryMap;
+};
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnInventoryChanged);
 
@@ -16,6 +31,29 @@ class ORION_API UOrionInventoryComponent : public UActorComponent
 
 public:
 	UOrionInventoryComponent();
+
+	const TMap<int32, int32>& GetInventoryMap() const { return InventoryMap; }
+	const TMap<int32, int32>& GetAvailableInventoryMap() const { return AvailableInventoryMap; }
+
+	void ForceSetInventory(const TMap<int32, int32>& NewInv)
+	{
+		InventoryMap = NewInv;
+		RefreshInventoryText();
+		OnInventoryChange();
+	}
+
+	void SetCapacityMap(const TMap<int32, int32>& Map)
+	{
+		AvailableInventoryMap = Map;
+
+		for (const auto& Pair : AvailableInventoryMap)
+		{
+			int32 ItemId = Pair.Key;
+			const int32 MaxCapacity = Pair.Value;
+			bool bIsFull = InventoryMap.Contains(ItemId) && InventoryMap[ItemId] >= MaxCapacity;
+			FullInventoryStatus.Add(ItemId, bIsFull);
+		}
+	}
 
 	UPROPERTY(BlueprintAssignable, Category = "Inventory")
 	FOnInventoryChanged OnInventoryChanged;

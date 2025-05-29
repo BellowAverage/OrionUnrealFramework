@@ -14,6 +14,10 @@
 #include "Orion/OrionActor/OrionActorProduction.h"
 #include "Orion/OrionInterface/OrionInterfaceActionable.h"
 #include "Orion/OrionInterface/OrionInterfaceSelectable.h"
+#include "Orion/OrionInterface/OrionInterfaceSerializable.h"
+#include "Misc/Guid.h"
+#include "Orion/OrionGlobals/EOrionAction.h"
+#include "Orion/OrionComponents/OrionCharaActionComponent.h"
 #include "OrionChara.generated.h"
 
 DECLARE_DELEGATE_OneParam(FOnInteractWithInventory, AOrionActor*);
@@ -37,30 +41,11 @@ enum class EInteractCategory : uint8
 };
 
 UENUM(BlueprintType)
-enum class EActionType : uint8
-{
-	MoveToLocation UMETA(DisplayName = "Move To Location"),
-	AttackOnCharaLongRange UMETA(DisplayName = "Attack On Character Long Range"),
-	WorkingTest UMETA(DisplayName = "Working Test")
-};
-
-UENUM(BlueprintType)
 enum class EAIState : uint8
 {
 	Unavailable UMETA(DisplayName = "Unavailable"),
 	Defensive UMETA(DisplayName = "Defensive"),
-
 	Aggressive UMETA(DisplayName = "Aggressive"),
-};
-
-
-UENUM(BlueprintType)
-enum class EOrionAction : uint8
-{
-	AttackOnChara UMETA(DisplayName = "Attack On Character"),
-	InteractWithActor UMETA(DisplayName = "Interact With Actor"),
-	InteractWithProduction UMETA(DisplayName = "Interact With Production"),
-	InteractWithStorage UMETA(DisplayName = "Interact With Storage"),
 };
 
 UENUM(BlueprintType)
@@ -70,27 +55,45 @@ enum class EActionExecution : uint8
 	RealTime,
 };
 
-class OrionAction
+UENUM(BlueprintType)
+enum class EInteractWithActorState : uint8
+{
+	Unavailable UMETA(DisplayName = "Unavailable"),
+	MovingToTarget UMETA(DisplayName = "MovingToTarget"),
+	Interacting UMETA(DisplayName = "Interacting"),
+};
+
+
+class FOrionAction
 {
 public:
 	FString Name;
 
+	EOrionAction OrionActionType;
+
+	FOrionActionParams Params;
+
 	TFunction<bool(float)> ExecuteFunction;
 
-	OrionAction(const FString& ActionName, TFunction<bool(float)> Func)
+	FOrionAction(const FString& ActionName, TFunction<bool(float)> Func)
 		: Name(ActionName)
 		  , ExecuteFunction(MoveTemp(Func))
 	{
 	}
+
+	EOrionAction GetActionType() const
+	{
+		return OrionActionType;
+	}
 };
 
-class ActionQueue
+class FActionQueue
 {
 public:
 	//std::deque<Action> Actions;
-	TObservableArray<OrionAction> Actions;
+	TObservableArray<FOrionAction> Actions;
 
-	FORCEINLINE OrionAction* GetFrontAction() { return Actions.IsEmpty() ? nullptr : &Actions[0]; }
+	FORCEINLINE FOrionAction* GetFrontAction() { return Actions.IsEmpty() ? nullptr : &Actions[0]; }
 
 	FORCEINLINE void PopFrontAction()
 	{
@@ -113,11 +116,79 @@ enum class ETradeStep : uint8
 };
 
 UCLASS()
-class ORION_API AOrionChara : public ACharacter, public IOrionInterfaceSelectable, public IOrionInterfaceActionable
+class ORION_API AOrionChara : public ACharacter, public IOrionInterfaceSelectable, public IOrionInterfaceActionable,
+                              public IOrionInterfaceSerializable
 {
 	GENERATED_BODY()
 
 public:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UOrionCharaActionComponent* CharaActionComp = nullptr;
+
+
+	/* ---------- 序列化标识 ---------- */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Basics")
+	FSerializable GameSerializable; // C++ 内部 ID，不打 SaveGame
+
+	UPROPERTY(SaveGame)
+	FOrionCharaSerializable CharaSerializable; // 快照
+
+	/* ---------- 组件指针（运行时创建 / 蓝图继承） ---------- */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UOrionInventoryComponent* InventoryComp = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
+	UAIPerceptionStimuliSourceComponent* StimuliSourceComp = nullptr;
+
+	/* ---------- 持久化 Gameplay 状态 ---------- */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Gameplay")
+	ECharaState CharaState = ECharaState::Alive;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Gameplay")
+	float CurrHealth = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Gameplay")
+	float MaxHealth = 10.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "AI")
+	EAIState CharaAIState = EAIState::Unavailable;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "AI")
+	int32 CharaSide = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Inventory")
+	TMap<int32, int32> AvailableInventoryMap;
+
+	/* ---------- 非持久化运行时缓存 ---------- */
+	UPROPERTY(BlueprintReadOnly, Category = "Move")
+	float MoveForwardScale = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category = "Move")
+	float MoveRightScale = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	UAnimMontage* BulletPickupMontage = nullptr;
+	UPROPERTY(EditDefaultsOnly, Category = "Animation")
+	float BulletPickupDuration = 1.f;
+
+
+	virtual void InitSerializable(const FSerializable& InSerializable) override
+	{
+		// Initialize the character with the provided serializable data
+		if (!GameSerializable.GameId.IsValid())
+		{
+			GameSerializable.GameId = FGuid::NewGuid();
+		}
+	}
+
+	virtual FSerializable GetSerializable() const override
+	{
+		return GameSerializable;
+	}
+
+
+	void SerializeCharaStats();
+
+
 	virtual FString GetUnifiedActionName() const override;
 
 	virtual bool GetIsCharaProcedural() override
@@ -132,7 +203,7 @@ public:
 	}
 
 	virtual void InsertOrionActionToQueue(
-		const OrionAction& OrionActionInstance,
+		const FOrionAction& OrionActionInstance,
 		const EActionExecution ActionExecutionType,
 		const int32 Index) override
 	{
@@ -150,73 +221,114 @@ public:
 		}
 	}
 
-	virtual OrionAction InitActionMoveToLocation(const FString& ActionName, const FVector& TargetLocation) override
+	virtual FOrionAction InitActionMoveToLocation(const FString& ActionName, const FVector& TargetLocation) override
 	{
-		return OrionAction(
+		FOrionAction AddingAction = FOrionAction(
 			ActionName,
 			[charaPtr = this, targetLocation = TargetLocation](float DeltaTime) -> bool
 			{
 				return charaPtr->MoveToLocation(targetLocation);
 			}
 		);
+
+		AddingAction.Params.TargetLocation = TargetLocation;
+		AddingAction.Params.OrionActionType = EOrionAction::MoveToLocation;
+
+		return AddingAction;
 	}
 
-	virtual OrionAction InitActionAttackOnChara(const FString& ActionName,
-	                                            AActor* TargetChara, const FVector& HitOffset) override
+	virtual FOrionAction InitActionAttackOnChara(const FString& ActionName,
+	                                             AActor* TargetChara, const FVector& HitOffset) override
 	{
-		return OrionAction(
+		FOrionAction AddingAction = FOrionAction(
 			ActionName,
 			[charaPtr = this, targetChara = TargetChara, inHitOffset = HitOffset](float DeltaTime) -> bool
 			{
 				return charaPtr->AttackOnChara(DeltaTime, targetChara, inHitOffset);
 			}
 		);
+
+		AddingAction.Params.HitOffset = HitOffset;
+		AddingAction.Params.OrionActionType = EOrionAction::AttackOnChara;
+
+		IOrionInterfaceSerializable* TargetCharaSerializable = Cast<IOrionInterfaceSerializable>(TargetChara);
+
+		if (TargetCharaSerializable)
+		{
+			AddingAction.Params.TargetActorId = TargetCharaSerializable->GetSerializable().GameId;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error,
+			       TEXT("InitActionAttackOnChara: TargetChara does not implement IOrionInterfaceSerializable!"));
+		}
+
+		return AddingAction;
 	}
 
-	virtual OrionAction InitActionInteractWithActor(const FString& ActionName,
-	                                                AOrionActor* TargetActor) override
+	virtual FOrionAction InitActionInteractWithActor(const FString& ActionName,
+	                                                 AOrionActor* TargetActor) override
 	{
-		return OrionAction(
+		FOrionAction AddingAction = FOrionAction(
 			ActionName,
 			[charaPtr = this, targetActor = TargetActor](float DeltaTime) -> bool
 			{
 				return charaPtr->InteractWithActor(DeltaTime, targetActor);
 			}
 		);
+
+		AddingAction.Params.TargetActorId = TargetActor->GetSerializable().GameId;
+		AddingAction.Params.OrionActionType = EOrionAction::InteractWithActor;
+
+		return AddingAction;
 	}
 
-	virtual OrionAction InitActionInteractWithProduction(const FString& ActionName,
-	                                                     AOrionActorProduction* TargetActor) override
+	virtual FOrionAction InitActionInteractWithProduction(const FString& ActionName,
+	                                                      AOrionActorProduction* TargetActor) override
 	{
-		return OrionAction(
+		FOrionAction AddingAction = FOrionAction(
 			ActionName,
 			[charaPtr = this, targetActor = TargetActor](float DeltaTime) -> bool
 			{
 				return charaPtr->InteractWithProduction(DeltaTime, targetActor);
 			}
 		);
+
+		AddingAction.Params.TargetActorId = TargetActor->GetSerializable().GameId;
+		AddingAction.Params.OrionActionType = EOrionAction::InteractWithProduction;
+
+		return AddingAction;
 	}
 
-	virtual OrionAction InitActionCollectCargo(const FString& ActionName, AOrionActorStorage* TargetActor) override
+	virtual FOrionAction InitActionCollectCargo(const FString& ActionName, AOrionActorStorage* TargetActor) override
 	{
-		return OrionAction(
+		FOrionAction AddingAction = FOrionAction(
 			ActionName,
 			[charaPtr = this, targetActor = TargetActor](float DeltaTime) -> bool
 			{
 				return charaPtr->CollectingCargo(targetActor);
 			}
 		);
+
+		AddingAction.Params.TargetActorId = TargetActor->GetSerializable().GameId;
+		AddingAction.Params.OrionActionType = EOrionAction::CollectCargo;
+
+		return AddingAction;
 	}
 
-	virtual OrionAction InitActionCollectBullets(const FString& ActionName) override
+
+	/* Collecting Bullets is currently not serializable */
+	virtual FOrionAction InitActionCollectBullets(const FString& ActionName) override
 	{
-		return OrionAction(
+		FOrionAction AddingAction = FOrionAction(
 			ActionName,
 			[charaPtr = this](float DeltaTime) -> bool
 			{
 				return charaPtr->CollectBullets();
 			}
 		);
+
+		return AddingAction;
 	}
 
 	AOrionChara();
@@ -261,28 +373,17 @@ public:
 
 	/* Armed */
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
 	bool bIsCharaArmed = false;
 
 	/** Movement input amount for BlendSpace */
-	UPROPERTY(BlueprintReadOnly, Category = "CombatMove")
-	float MoveForwardScale;
 
-	UPROPERTY(BlueprintReadOnly, Category = "CombatMove")
-	float MoveRightScale;
 
 	/** True while we're in the process of fetching bullets */
 	bool bIsCollectingBullets = false;
 
 	bool CollectBullets();
 
-	/** Montage to play when picking up bullets */
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	UAnimMontage* BulletPickupMontage;
-
-	/** How long (in seconds) that montage should last */
-	UPROPERTY(EditDefaultsOnly, Category = "Animation")
-	float BulletPickupDuration = 1.0f;
 
 	bool bBulletPickupAnimPlaying = false;
 	FTimerHandle TimerHandle_BulletPickup;
@@ -330,13 +431,13 @@ public:
 	float OrionCharaSpeed = 500.0f;
 
 	/* Character Action Queue */
-	ActionQueue CharacterActionQueue;
-	OrionAction* CurrentAction;
-	OrionAction* PreviousAction;
+	FActionQueue CharacterActionQueue;
+	FOrionAction* CurrentAction;
+	FOrionAction* PreviousAction;
 
-	ActionQueue CharacterProcActionQueue;
-	OrionAction* CurrentProcAction;
-	OrionAction* PreviousProcAction;
+	FActionQueue CharacterProcActionQueue;
+	FOrionAction* CurrentProcAction;
+	FOrionAction* PreviousProcAction;
 
 	void DistributeCharaAction(float DeltaTime);
 	void DistributeRealTimeAction(float DeltaTime);
@@ -351,7 +452,7 @@ public:
 
 
 	/* AI: Character Procedural Action Distributor */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "AI Information")
 	bool bIsCharaProcedural;
 
 	/* Trading Cargo */
@@ -397,8 +498,6 @@ public:
 	void OnPickupAnimFinished();
 	void OnDropoffAnimFinished();
 
-	UPROPERTY(VisibleAnywhere, Category = "Inventory")
-	UOrionInventoryComponent* InventoryComp;
 
 	/* Interact With Production */
 	bool InteractWithProduction(float DeltaTime, AOrionActorProduction* InTargetProduction);
@@ -413,6 +512,7 @@ public:
 
 	bool bSelfDeliveryDone = false;
 
+	UPROPERTY()
 	AOrionActorStorage* LastStorageActor = nullptr;
 
 
@@ -451,22 +551,21 @@ public:
 
 	/* InteractWithActor */
 	bool InteractWithActor(float DeltaTime, AOrionActor* InTarget);
+	bool SetInteractingAnimation();
+	bool InteractWithActorStart(const EInteractWithActorState& State);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | InteractWithActor")
 	bool IsInteractWithActor = false;
-	void InteractWithActorStop();
-
-	bool bIsMovingToInteraction = false;
+	void InteractWithActorStop(EInteractWithActorState& State);
+	EInteractWithActorState InteractWithActorState = EInteractWithActorState::Unavailable;
 
 	TWeakObjectPtr<AOrionActor> MoveTargetActor;
 
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Action | InteractWithActor")
-	EInteractCategory InteractType = EInteractCategory::Unavailable;
+	EInteractCategory InteractAnimationKind = EInteractCategory::Unavailable;
 
 	UPROPERTY()
 	AOrionActor* CurrentInteractActor = nullptr;
-
-	bool DoOnceInteractWithActor = false;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "OrionChara Utility")
 	void SpawnAxeOnChara();
@@ -522,12 +621,7 @@ public:
 
 	/* Gameplay Mechanism */
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GameplayMechanism")
-	ECharaState CharaState = ECharaState::Alive;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GameplayMechanism")
-	float CurrHealth;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GameplayMechanism")
-	float MaxHealth = 10.0f;
+
 	virtual float TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator,
 	                         AActor* DamageCauser) override;
 	void Die();
@@ -535,8 +629,7 @@ public:
 	void Ragdoll();
 
 	/* AI Vision */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
-	UAIPerceptionStimuliSourceComponent* StimuliSourceComp;
+
 	bool bIsOrionAIControlled = true;
 
 	/* Optimization */
@@ -548,11 +641,6 @@ public:
 
 	/* AI Information */
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
-	EAIState CharaAIState = EAIState::Unavailable;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
-	int CharaSide = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI Information")
 	TArray<int> HostileGroupsIndex;

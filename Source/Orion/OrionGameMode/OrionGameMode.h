@@ -6,6 +6,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "WheeledVehiclePawn.h"
+#include "Orion/OrionGameInstance/OrionCharaManager.h"
 #include "OrionGameMode.generated.h"
 
 
@@ -17,6 +18,8 @@ class ORION_API AOrionGameMode : public AGameModeBase
 public:
 	AOrionGameMode();
 
+	void OnTestKey3Pressed();
+	void OnTestKey4Pressed();
 	virtual void BeginPlay() override;
 
 	virtual void Tick(float DeltaTime) override;
@@ -37,6 +40,7 @@ public:
 	void SpawnCharaInstance(FVector SpawnLocation);
 
 	void OnTestKey1Pressed();
+	bool GenerateExplosionSimulation();
 	void OnTestKey2Pressed();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Developer")
 	TSubclassOf<AActor> ExplosionClass;

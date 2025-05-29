@@ -44,30 +44,51 @@ AOrionChara::AOrionChara()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
+	/* Register AI Controller */
 	AIControllerClass = AOrionAIController::StaticClass();
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
-
+	/* Register AI Senses */
 	StimuliSourceComp = CreateDefaultSubobject<UAIPerceptionStimuliSourceComponent>(TEXT("StimuliSourceComp"));
 	StimuliSourceComp->RegisterForSense(TSubclassOf<UAISense_Sight>());
 	StimuliSourceComp->bAutoRegister = true;
 
+	/* Register Inventory Component */
 	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
 
-	SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
+	/* Register OrionChara Components */
+	CharaActionComp = CreateDefaultSubobject<UOrionCharaActionComponent>(TEXT("CharaActionComp"));
 
-	//CharacterActionQueue.Actions.reserve(100);
+	/* Init Static Value */
+	SpawnBulletActorAccumulatedTime = AttackFrequencyLongRange - AttackTriggerTimeLongRange;
+}
+
+void AOrionChara::SerializeCharaStats()
+{
+	UE_LOG(LogTemp, Log, TEXT("Saving Chara: %s"), *GetName());
+
+	/* Serialize Procedural Actions */
+	for (const auto& ProcAction : CharacterProcActionQueue.Actions)
+	{
+		CharaSerializable.CharaGameId = GameSerializable.GameId;
+		CharaSerializable.CharaLocation = GetActorLocation();
+		CharaSerializable.CharaRotation = GetActorRotation();
+		CharaSerializable.SerializedProcActions.Add(ProcAction.Params);
+	}
 }
 
 void AOrionChara::BeginPlay()
 {
 	Super::BeginPlay();
 
+	InitSerializable(GameSerializable);
+
 	AIController = Cast<AOrionAIController>(GetController());
 
 	InitOrionCharaMovement();
 
 	CurrHealth = MaxHealth;
+
 	this->SetCanBeDamaged(true);
 }
 
@@ -75,7 +96,6 @@ void AOrionChara::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	//UE_LOG(LogTemp, Log, TEXT("Current Action: %s"), *GetUnifiedActionName());
 
 	if (CharaState == ECharaState::Dead || CharaState == ECharaState::Incapacitated)
 	{
@@ -94,9 +114,6 @@ void AOrionChara::Tick(float DeltaTime)
 	DistributeCharaAction(DeltaTime);
 
 	const FString CurrName = GetUnifiedActionName();
-
-	//if (this->GetName().Contains("1")) UE_LOG(LogTemp, Log, TEXT("Previous: %s, Current: %s, bIsCached: %s"), *PrevName,
-	//                                          *CurrName, bCachedEmptyAction ? TEXT("True") : TEXT("False"));
 
 	if (!bCachedEmptyAction && CurrName.IsEmpty())
 	{
@@ -128,6 +145,7 @@ void AOrionChara::Tick(float DeltaTime)
 	/* Refresh Attack Frequency */
 
 	RefreshAttackFrequency();
+	IsInteractWithActor = InteractWithActorState == EInteractWithActorState::Interacting;
 }
 
 FString AOrionChara::GetUnifiedActionName() const
@@ -205,36 +223,15 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 
 	if (Prev.Contains(TEXT("InteractWithActor")) && Curr.Contains(TEXT("MoveToLocation")))
 	{
-		if (IsInteractWithActor)
-		{
-			InteractWithActorStop();
-		}
-		else if (bIsMovingToInteraction)
-		{
-			MoveToLocationStop();
-		}
+		InteractWithActorStop(InteractWithActorState);
 	}
 	else if (Prev.Contains(TEXT("InteractWithActor")) && Curr.IsEmpty())
 	{
-		if (IsInteractWithActor)
-		{
-			InteractWithActorStop();
-		}
-		else if (bIsMovingToInteraction)
-		{
-			MoveToLocationStop();
-		}
+		InteractWithActorStop(InteractWithActorState);
 	}
 	else if (Prev.Contains(TEXT("InteractWithActor")))
 	{
-		if (IsInteractWithActor)
-		{
-			InteractWithActorStop();
-		}
-		else if (bIsMovingToInteraction)
-		{
-			MoveToLocationStop();
-		}
+		InteractWithActorStop(InteractWithActorState);
 	}
 
 	else if (Prev.Contains(TEXT("InteractWithProduction")) && Curr.Contains(TEXT("MoveToLocation")))
@@ -271,7 +268,6 @@ void AOrionChara::SwitchingStateHandle(const FString& Prev, const FString& Curr)
 		MoveToLocationStop();
 	}
 }
-
 
 AOrionActor* AOrionChara::FindClosetAvailableCargoContainer(int32 ItemId) const
 {
@@ -756,7 +752,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		if (bPreparingInteractProd) { InteractWithProductionStop(); }
 		if (bIsInteractProd)
 		{
-			InteractWithActorStop();
+			InteractWithActorStop(InteractWithActorState);
 			bIsInteractProd = false;
 		}
 		return true;
@@ -776,7 +772,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		if (InventoryComp &&
 			InventoryComp->GetItemQuantity(RawItemId) >= NeedPerCycle)
 		{
-			if (bIsInteractProd) { InteractWithActorStop(); }
+			if (bIsInteractProd) { InteractWithActorStop(InteractWithActorState); }
 
 			TMap<AActor*, TMap<int32, int32>> Route;
 			Route.Add(this, {{RawItemId, NeedPerCycle}});
@@ -906,7 +902,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		int32 ToMove = FMath::Min(SrcHave, MaxCanPut);
 		if (ToMove < NeedPerCycle) { return true; }
 
-		if (bIsInteractProd) { InteractWithActorStop(); }
+		if (bIsInteractProd) { InteractWithActorStop(InteractWithActorState); }
 
 		TMap<AActor*, TMap<int32, int32>> Route;
 		Route.Add(ChosenSource, {{RawItemId, ToMove}});
@@ -929,7 +925,7 @@ void AOrionChara::InteractWithProductionStop()
 	if (IsInteractWithActor)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithProductionStop: bIsInteractProd = true"));
-		InteractWithActorStop();
+		InteractWithActorStop(InteractWithActorState);
 	}
 	else
 	{
@@ -953,136 +949,155 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 	// 1) Invalid target immediately terminate
 	if (!IsValid(InTarget))
 	{
-		if (IsInteractWithActor)
-		{
-			InteractWithActorStop();
-		}
-		IsInteractWithActor = false;
+		InteractWithActorStop(InteractWithActorState);
 		return true;
 	}
 
-	// 2) Uninteractable immediately terminate
+	// 2) not interactable immediately terminate
 	if (InTarget->ActorStatus == EActorStatus::NotInteractable)
 	{
-		if (IsInteractWithActor)
-		{
-			InteractWithActorStop();
-		}
-		IsInteractWithActor = false;
+		InteractWithActorStop(InteractWithActorState);
 		return true;
 	}
 
-	// 3) Only check SphereComponent once
-	USphereComponent* CollisionSphere = InTarget->CollisionSphere;
+	// 3) check SphereComponent once
+	const USphereComponent* CollisionSphere = InTarget->CollisionSphere;
 	const bool bOverlapping = CollisionSphere && CollisionSphere->IsOverlappingActor(this);
 
-	if (bOverlapping)
+
+	switch (InteractWithActorState)
 	{
-		MoveToLocationStop();
-
-		// 4) Cache once string reference, avoid copy
-		const FString& TargetType = InTarget->GetInteractType();
-
-		// 5) Set interaction category based on type
-		if (TargetType == TEXT("Mining"))
+	case EInteractWithActorState::Unavailable:
 		{
-			InteractType = EInteractCategory::Mining;
-		}
-		else if (TargetType == TEXT("CraftingBullets"))
-		{
-			InteractType = EInteractCategory::CraftingBullets;
-		}
-		else
-		{
-			// Unsupported type
-			InteractType = EInteractCategory::Unavailable;
-			UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: Unavailable interact type."));
-
-			if (IsInteractWithActor)
+			if (!bOverlapping)
 			{
-				InteractWithActorStop();
+				InteractWithActorState = EInteractWithActorState::MovingToTarget;
+				return false;
 			}
-			IsInteractWithActor = false;
-			return true;
-		}
+			/* Overlapped */
 
-		// 6) First arrival, trigger start interaction
-		if (!IsInteractWithActor)
-		{
-			if (InteractType == EInteractCategory::Mining)
-			{
-				SpawnAxeOnChara();
-			}
-			else // CraftingBullets
-			{
-				SpawnHammerOnChara();
-			}
 
-			IsInteractWithActor = true;
-
-			MoveToLocationStop();
-
-			bIsMovingToInteraction = false;
 			CurrentInteractActor = InTarget;
-			InTarget->CurrWorkers += 1;
+			const bool InitActionRes = InteractWithActorStart(InteractWithActorState);
+			InteractWithActorState = EInteractWithActorState::Interacting;
+			return InitActionRes;
 		}
-
-		// 7) Stop moving and face target
-		if (AIController)
+		break;
+	case EInteractWithActorState::MovingToTarget:
 		{
-			AIController->StopMovement();
+			if (!bOverlapping)
+			{
+				MoveToLocation(InTarget->GetActorLocation());
+				return false;
+			}
+			/* Overlapped */
+			CurrentInteractActor = InTarget;
+			const bool InitActionRes = InteractWithActorStart(InteractWithActorState);
+			InteractWithActorState = EInteractWithActorState::Interacting;
+			return InitActionRes;
 		}
-		FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
-			GetActorLocation(),
-			InTarget->GetActorLocation()
-		);
-		LookAtRot.Pitch = 0;
-		LookAtRot.Roll = 0;
-		SetActorRotation(LookAtRot);
-
-		return false;
+		break;
+	case EInteractWithActorState::Interacting:
+		{
+			if (!bOverlapping)
+			{
+				InteractWithActorStop(InteractWithActorState);
+				return true; // Interaction ended
+			}
+			/* Overlapped */
+			return false;
+		}
+		break;
 	}
 
-	// —— Here enters the "move to target" branch ——
-
-	bIsMovingToInteraction = true;
-	MoveToLocation(InTarget->GetActorLocation());
-
-	// 8) If we are in the "already interacting" state but have left the range, cancel the previous interaction
-	if (IsInteractWithActor)
-	{
-		InteractWithActorStop();
-	}
-	IsInteractWithActor = false;
 
 	return false;
 }
 
-void AOrionChara::InteractWithActorStop()
+bool AOrionChara::SetInteractingAnimation()
 {
-	if (!CurrentInteractActor)
+	if (const FString& TargetType = CurrentInteractActor->GetInteractType(); TargetType == TEXT("Mining"))
 	{
-		return;
+		InteractAnimationKind = EInteractCategory::Mining;
+	}
+	else if (TargetType == TEXT("CraftingBullets"))
+	{
+		InteractAnimationKind = EInteractCategory::CraftingBullets;
+	}
+	else
+	{
+		InteractAnimationKind = EInteractCategory::Unavailable;
+		UE_LOG(LogTemp, Warning, TEXT("InteractWithActor: Unavailable interact type."));
+		InteractWithActorStop(InteractWithActorState);
+		return true;
 	}
 
-	if (InteractType == EInteractCategory::Mining)
-	{
-		RemoveAxeOnChara();
-	}
-	else if (InteractType == EInteractCategory::CraftingBullets)
-	{
-		RemoveHammerOnChara();
-	}
+	// First arrival, trigger start interaction
 
-	bIsMovingToInteraction = false;
-
-	IsInteractWithActor = false;
-	DoOnceInteractWithActor = false;
-	CurrentInteractActor->CurrWorkers -= 1;
-	CurrentInteractActor = nullptr;
-	InteractType = EInteractCategory::Unavailable;
+	if (InteractAnimationKind == EInteractCategory::Mining)
+	{
+		SpawnAxeOnChara();
+	}
+	else // CraftingBullets
+	{
+		SpawnHammerOnChara();
+	}
+	return false;
 }
 
+bool AOrionChara::InteractWithActorStart(const EInteractWithActorState& State)
+{
+	/* Set Interacting Animation */
+	if (bool SetInteractingAnimationFailed = SetInteractingAnimation())
+	{
+		return true; // Animation set failed, stop interaction
+	}
+
+	if (State == EInteractWithActorState::MovingToTarget)
+	{
+		MoveToLocationStop();
+	}
+
+	CurrentInteractActor->CurrWorkers += 1;
+
+	FRotator LookAtRot = UKismetMathLibrary::FindLookAtRotation(
+		GetActorLocation(),
+		CurrentInteractActor->GetActorLocation()
+	);
+	LookAtRot.Pitch = 0;
+	LookAtRot.Roll = 0;
+	SetActorRotation(LookAtRot);
+
+	return false;
+}
+
+void AOrionChara::InteractWithActorStop(EInteractWithActorState& State)
+{
+	if (State == EInteractWithActorState::Interacting)
+	{
+		if (CurrentInteractActor)
+		{
+			CurrentInteractActor->CurrWorkers -= 1;
+		}
+
+		if (InteractAnimationKind == EInteractCategory::Mining)
+		{
+			RemoveAxeOnChara();
+		}
+		else if (InteractAnimationKind == EInteractCategory::CraftingBullets)
+		{
+			RemoveHammerOnChara();
+		}
+	}
+	else if (State == EInteractWithActorState::MovingToTarget)
+	{
+		MoveToLocationStop();
+	}
+
+	State = EInteractWithActorState::Unavailable;
+	CurrentInteractActor = nullptr;
+	InteractAnimationKind = EInteractCategory::Unavailable;
+}
 
 bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
 {
@@ -1372,7 +1387,7 @@ void AOrionChara::RemoveAllActions(const FString& Except)
 
 		if (OngoingActionName.Contains("ForceInteractWithActor") || OngoingActionName.Contains("InteractWithActor"))
 		{
-			InteractWithActorStop();
+			InteractWithActorStop(InteractWithActorState);
 		}
 
 		CurrentAction = nullptr;
@@ -1577,7 +1592,7 @@ void AOrionChara::ReorderProceduralAction(int32 DraggedIndex, int32 DropIndex)
 		return;
 	}
 
-	OrionAction ActionRef = MoveTemp(CharaProcQueueActionsRef[DraggedIndex]);
+	FOrionAction ActionRef = MoveTemp(CharaProcQueueActionsRef[DraggedIndex]);
 	CharaProcQueueActionsRef.RemoveAt(DraggedIndex);
 
 	int32 NewIndex = DropIndex;

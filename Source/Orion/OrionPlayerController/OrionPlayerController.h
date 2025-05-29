@@ -47,8 +47,8 @@ public:
 	TSubclassOf<AActor> DoubleWallBP = nullptr;
 
 	virtual void SetupInputComponent() override;
-	void QuickSave();
-	void QuickLoad();
+	/*void QuickSave();
+	void QuickLoad();*/
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
