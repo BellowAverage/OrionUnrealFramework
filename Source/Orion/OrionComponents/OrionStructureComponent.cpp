@@ -2,6 +2,28 @@
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionGlobals/EOrionStructure.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
+#include "Components/ArrowComponent.h"
+#include "Components/BoxComponent.h"
+class UPrimitiveComponent;
+
+
+#define STRUCTURE_THICKNESS_BASE 10.f
+#define STRUCTURE_LENGTH_BASE 50.f * 1.25f
+#define STRUCTURE_HEIGHT_BASE 150.f
+
+const TMap<EOrionStructure, FVector> UOrionStructureComponent::StructureBoundMap =
+{
+	// ---------- X (half) Y (half) Z (half) -------------
+	{EOrionStructure::BasicSquareFoundation, {STRUCTURE_LENGTH_BASE, STRUCTURE_LENGTH_BASE, STRUCTURE_THICKNESS_BASE}},
+	{
+		EOrionStructure::BasicTriangleFoundation,
+		{STRUCTURE_LENGTH_BASE * (FMath::Sqrt(3.f) / 2), STRUCTURE_LENGTH_BASE, STRUCTURE_THICKNESS_BASE}
+	},
+	{EOrionStructure::Wall, {STRUCTURE_THICKNESS_BASE, STRUCTURE_LENGTH_BASE, STRUCTURE_HEIGHT_BASE}},
+	{EOrionStructure::DoubleWall, {STRUCTURE_THICKNESS_BASE, 2.f * STRUCTURE_LENGTH_BASE, STRUCTURE_HEIGHT_BASE}},
+	{EOrionStructure::BasicRoof, {STRUCTURE_LENGTH_BASE,STRUCTURE_LENGTH_BASE, STRUCTURE_LENGTH_BASE}},
+};
+
 
 // Sets default values for this component's properties
 UOrionStructureComponent::UOrionStructureComponent()
@@ -13,6 +35,7 @@ UOrionStructureComponent::UOrionStructureComponent()
 
 	// ...
 }
+
 
 void UOrionStructureComponent::BeginPlay()
 {
@@ -64,7 +87,7 @@ void UOrionStructureComponent::BeginPlay()
 
 void UOrionStructureComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (BuildingManager)
+	if (EndPlayReason == EEndPlayReason::Destroyed && BuildingManager)
 	{
 		if (UOrionBuildingManager* SafeInitializedBuildingManager =
 			GetOwner()->GetGameInstance()->GetSubsystem<UOrionBuildingManager>())
@@ -84,6 +107,364 @@ void UOrionStructureComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 	// ...
 }
 
+void UOrionStructureComponent::RegisterSquareFoundationSockets(const FVector& StructureLocation,
+                                                               const FRotator& StructureRotation) const
+{
+	const FVector SquareFoundationBound = GetStructureBounds(EOrionStructure::BasicSquareFoundation);
+	const FVector WallBound = GetStructureBounds(EOrionStructure::Wall);
+
+	BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::BasicSquareFoundation,
+	                                true, GetWorld(), GetOwner());
+
+	/* SquareFoundation -> SquareFoundation */
+	static const FVector SquareFoundation2SquareFoundationLocationOffset[4] = {
+		{SquareFoundationBound.X * 2, 0.f, 0.f},
+		{0.f, -SquareFoundationBound.Y * 2, 0.f},
+		{-SquareFoundationBound.X * 2, 0.f, 0.f},
+		{0.f, SquareFoundationBound.Y * 2, 0.f}
+	};
+	for (const FVector& Offset : SquareFoundation2SquareFoundationLocationOffset)
+	{
+		BuildingManager->RegisterSocket(StructureLocation + StructureRotation.RotateVector(Offset), StructureRotation,
+		                                EOrionStructure::BasicSquareFoundation, false, GetWorld(), GetOwner());
+	}
+
+	/* SquareFoundation -> TriangleFoundation */
+	{
+		static const FVector SquareFoundation2TriFoundationLocationOffset[4] = {
+			{SquareFoundationBound.X + SquareFoundationBound.X * (1 / FMath::Sqrt(3.f)), 0.f, 0.f},
+			{-SquareFoundationBound.X - SquareFoundationBound.X * (1 / FMath::Sqrt(3.f)), 0.f, 0.f},
+			{0.f, SquareFoundationBound.Y + SquareFoundationBound.Y * (1 / FMath::Sqrt(3.f)), 0.f},
+			{0.f, -SquareFoundationBound.Y - SquareFoundationBound.Y * (1 / FMath::Sqrt(3.f)), 0.f}
+		};
+		static constexpr float SquareFoundation2TriFoundationRotationOffset[4] = {180.f, 0.f, 270.f, 90.f};
+
+		for (int32 i = 0; i < 4; ++i)
+		{
+			BuildingManager->RegisterSocket(
+				StructureLocation + StructureRotation.RotateVector(SquareFoundation2TriFoundationLocationOffset[i]),
+				StructureRotation + FRotator(0.f, SquareFoundation2TriFoundationRotationOffset[i], 0.f),
+				EOrionStructure::BasicTriangleFoundation,
+				/*bOccupied=*/false, GetWorld(), GetOwner());
+		}
+	}
+
+	/* SquareFoundation -> Wall */
+	static const FVector SquareFoundation2WallLocationOffset[4] = {
+		{SquareFoundationBound.X, 0.f, SquareFoundationBound.Z + WallBound.Z},
+		{0.f, SquareFoundationBound.Y, SquareFoundationBound.Z + WallBound.Z},
+		{-SquareFoundationBound.X, 0.f, SquareFoundationBound.Z + WallBound.Z},
+		{0.f, -SquareFoundationBound.Y, SquareFoundationBound.Z + WallBound.Z}
+	};
+	static const FRotator SquareFoundation2WallRotationOffset[4] = {
+		{0, 0, 0},
+		{0, 90, 0},
+		{0, 180, 0},
+		{0, 270, 0}
+	};
+	for (int32 i = 0; i < 4; ++i)
+	{
+		BuildingManager->RegisterSocket(
+			StructureLocation + StructureRotation.RotateVector(SquareFoundation2WallLocationOffset[i]),
+			StructureRotation + SquareFoundation2WallRotationOffset[i],
+			EOrionStructure::Wall, false, GetWorld(), GetOwner());
+	}
+}
+
+void UOrionStructureComponent::RegisterTriangleFoundationSockets(const FVector& StructureLocation,
+                                                                 const FRotator& StructureRotation) const
+{
+	const float TriEdgeLength = 2.f * GetStructureBounds(EOrionStructure::BasicTriangleFoundation).Y;
+	const FVector TriFoundationBound = GetStructureBounds(EOrionStructure::BasicTriangleFoundation);
+	const FVector WallBound = GetStructureBounds(EOrionStructure::Wall);
+
+	BuildingManager->RegisterSocket(
+		StructureLocation, StructureRotation,
+		EOrionStructure::BasicTriangleFoundation,
+		/*bOccupied=*/true, GetWorld(), GetOwner());
+
+	/* TriangleFoundation -> TriangleFoundation */
+	const FVector TriFoundation2TriFoundationLocationOffset[3] = {
+		{TriEdgeLength / FMath::Sqrt(3.0f), 0.f, 0.f},
+		{-TriEdgeLength / (2.f * FMath::Sqrt(3.0f)), TriEdgeLength * 0.5f, 0.f},
+		{-TriEdgeLength / (2.f * FMath::Sqrt(3.0f)), -TriEdgeLength * 0.5f, 0.f}
+	};
+
+	for (int32 i = 0; i < 3; ++i)
+	{
+		constexpr float TriFoundation2TriFoundationRotationOffset[3] = {180.f, 180.f, 180.f};
+		const FVector EachTF2TFLocationOffset = StructureLocation + StructureRotation.RotateVector(
+			TriFoundation2TriFoundationLocationOffset[i]);
+
+
+		BuildingManager->RegisterSocket(
+			EachTF2TFLocationOffset,
+			StructureRotation + FRotator(0.f, TriFoundation2TriFoundationRotationOffset[i], 0.f),
+			EOrionStructure::BasicTriangleFoundation,
+			/*bOccupied=*/false, GetWorld(), GetOwner());
+	}
+
+	/* TriangleFoundation -> SquareFoundation */
+	const FVector TriFoundation2SquareFoundationLocationOffset[3] = {
+		{(FMath::Sqrt(3.0f) + 1.f) / (2.f * FMath::Sqrt(3.0f)) * TriEdgeLength, 0.f, 0.f},
+		{
+			-(0.25f + FMath::Sqrt(3.0f) / 12.f) * TriEdgeLength,
+			-(0.25f + FMath::Sqrt(3.0f) / 4.f) * TriEdgeLength, 0.f
+		},
+
+		{
+			-(0.25f + FMath::Sqrt(3.0f) / 12.f) * TriEdgeLength,
+			(0.25f + FMath::Sqrt(3.0f) / 4.f) * TriEdgeLength, 0.f
+		},
+
+	};
+
+	for (int32 i = 0; i < 3; ++i)
+	{
+		const FVector EachTF2SFLocationOffset = StructureLocation + StructureRotation.RotateVector(
+			TriFoundation2SquareFoundationLocationOffset[i]);
+
+		constexpr float TriFoundation2SquareFoundationRotationOffset[3] = {0.f, 60.f, 120.f};
+		BuildingManager->RegisterSocket(
+			EachTF2SFLocationOffset,
+			StructureRotation + FRotator(0.f, TriFoundation2SquareFoundationRotationOffset[i], 0.f),
+			EOrionStructure::BasicSquareFoundation,
+			/*bOccupied=*/false, GetWorld(), GetOwner());
+	}
+
+	const FVector TriangleEdgeMidpoints[3] = {
+		{TriEdgeLength * (1.f / (4.f * (FMath::Sqrt(3.0f) / 2.f))), 0.f, 0.f},
+		{-1.f / (4.f * FMath::Sqrt(3.0f)) * TriEdgeLength, 0.25f * TriEdgeLength, 0.f},
+		{-1.f / (4.f * FMath::Sqrt(3.0f)) * TriEdgeLength, -0.25f * TriEdgeLength, 0.f},
+
+	};
+
+	/* TriangleFoundation -> Wall */
+	for (int32 i = 0; i < 3; ++i)
+	{
+		const FVector TriFoundation2WallLocationOffset =
+			StructureLocation + StructureRotation.RotateVector(
+				TriangleEdgeMidpoints[i] + FVector(0.f, 0.f, TriFoundationBound.Z + WallBound.Z));
+		constexpr float TriFoundation2WallRotationOffset[3] = {180.f, 300.f, 60.f};
+
+		BuildingManager->RegisterSocket(
+			TriFoundation2WallLocationOffset,
+			StructureRotation + FRotator(0.f, TriFoundation2WallRotationOffset[i], 0.f),
+			EOrionStructure::Wall,
+			/*bOccupied=*/false, GetWorld(), GetOwner());
+	}
+}
+
+void UOrionStructureComponent::RegisterWallSockets(const FVector& StructureLocation,
+                                                   const FRotator& StructureRotation) const
+{
+	const FVector WallBound = GetStructureBounds(EOrionStructure::Wall);
+	const FVector TriangleFoundationBound = GetStructureBounds(EOrionStructure::BasicTriangleFoundation);
+	const float TriEdgeLength = 2.f * GetStructureBounds(EOrionStructure::BasicTriangleFoundation).Y;
+
+	BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::Wall,
+	                                true, GetWorld(), GetOwner());
+
+	/* Wall -> Wall */
+	const FVector Wall2WallLocationOffset = StructureLocation + FVector(0.f, 0.f, WallBound.Z * 2.f);
+
+	BuildingManager->RegisterSocket(Wall2WallLocationOffset, StructureRotation, EOrionStructure::Wall,
+	                                false, GetWorld(), GetOwner());
+
+	/* Wall -> Floor (SquareFoundation) */
+	const FTransform ParentTM(StructureRotation, StructureLocation);
+
+	const FVector FrontLocal(-WallBound.Y, 0.f, WallBound.Z);
+	const FVector RearLocal(WallBound.Y, 0.f, WallBound.Z);
+
+	const FVector FrontWorld = ParentTM.TransformPositionNoScale(FrontLocal);
+	const FVector RearWorld = ParentTM.TransformPositionNoScale(RearLocal);
+
+	BuildingManager->RegisterSocket(
+		FrontWorld, StructureRotation,
+		EOrionStructure::BasicSquareFoundation,
+		false, GetWorld(), GetOwner());
+
+	BuildingManager->RegisterSocket(
+		RearWorld, StructureRotation,
+		EOrionStructure::BasicSquareFoundation,
+		false, GetWorld(), GetOwner());
+
+	/* Wall -> TriangleFloor (TriangleFoundation) */
+	const FVector FrontLocalTri(TriEdgeLength / (2.0 * FMath::Sqrt(3.f)), 0.f, WallBound.Z);
+	const FVector RearLocalTri(-TriEdgeLength / (2.0 * FMath::Sqrt(3.f)), 0.f, WallBound.Z);
+
+	const FVector FrontWorldTri = ParentTM.TransformPositionNoScale(FrontLocalTri);
+	const FVector RearWorldTri = ParentTM.TransformPositionNoScale(RearLocalTri);
+
+	BuildingManager->RegisterSocket(
+		FrontWorldTri, StructureRotation + FRotator(0.f, 180.f, 0.f),
+		EOrionStructure::BasicTriangleFoundation,
+		false, GetWorld(), GetOwner());
+
+	BuildingManager->RegisterSocket(
+		RearWorldTri, StructureRotation,
+		EOrionStructure::BasicTriangleFoundation,
+		false, GetWorld(), GetOwner());
+}
+
+
+void UOrionStructureComponent::RegisterDoubleWallSockets(const FVector& StructureLocation,
+                                                         const FRotator& StructureRotation) const
+{
+	{
+		const FVector DoubleWallBound = GetStructureBounds(EOrionStructure::DoubleWall);
+		const FVector SquareFoundationBound = GetStructureBounds(EOrionStructure::BasicSquareFoundation);
+
+		/* DoubleWall -> Wall */
+		const FVector DoubleWall2WallLocationOffset[2] = {
+			StructureLocation + FVector(0.f, 0.f, DoubleWallBound.Z * 2.f),
+			StructureLocation + FVector(0.f, DoubleWallBound.Y, DoubleWallBound.Z * 2.f)
+		};
+
+		for (int32 i = 0; i < 2; ++i)
+		{
+			BuildingManager->RegisterSocket(
+				DoubleWall2WallLocationOffset[i],
+				StructureRotation,
+				EOrionStructure::Wall,
+				false,
+				GetWorld(),
+				GetOwner()
+			);
+		}
+
+		/* DoubleWall -> SquareRoof (SquareFoundation) */
+		const FVector DoubleWall2SquareFoundationOffset[4] = {
+			StructureLocation + FVector(SquareFoundationBound.X, 0.f, DoubleWallBound.Z),
+			StructureLocation + FVector(-SquareFoundationBound.X, 0.f, DoubleWallBound.Z),
+			StructureLocation + FVector(SquareFoundationBound.X, DoubleWallBound.Y, DoubleWallBound.Z),
+			StructureLocation + FVector(-SquareFoundationBound.X, DoubleWallBound.Y, DoubleWallBound.Z),
+		};
+
+		for (int32 i = 0; i < 4; ++i)
+		{
+			BuildingManager->RegisterSocket(
+				DoubleWall2SquareFoundationOffset[i],
+				StructureRotation,
+				EOrionStructure::BasicSquareFoundation,
+				false,
+				GetWorld(),
+				GetOwner()
+			);
+		}
+	}
+}
+
+void UOrionStructureComponent::RegisterAdjustableStructure
+(
+	const FVector& /*InLocation*/,
+	const FRotator& /*InRotation*/
+) const
+{
+	AActor* Owner = GetOwner();
+	if (!Owner) { return; }
+
+	TArray<UArrowComponent*> Arrows;
+	Owner->GetComponents<UArrowComponent>(Arrows);
+
+	for (UArrowComponent* Arrow : Arrows)
+	{
+		if (!Arrow) { continue; }
+
+		const EOrionAxis Axis = ResolveDirection(Arrow->GetForwardVector());
+
+		if (ClickBoxMapping.FindKey(Axis))
+		{
+			continue; // 已经有同一方向的 ClickBox 了
+		}
+
+		// 1) 把箭头和 Box 设为绝对缩放，这样将来 Actor 变形也不受影响
+		Arrow->SetUsingAbsoluteScale(true);
+
+		UBoxComponent* ClickBox = NewObject<UBoxComponent>(Owner, NAME_None, RF_Transient);
+		if (!ClickBox) { continue; }
+		ClickBox->SetUsingAbsoluteScale(true);
+
+		ClickBox->AttachToComponent(Arrow,
+		                            FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+
+		ClickBox->SetBoxExtent(FVector(15.f));
+		ClickBox->SetRelativeLocation(FVector(40.f, 0.f, 0.f));
+
+		ClickBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		ClickBox->SetCollisionObjectType(ECC_WorldDynamic);
+		ClickBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		ClickBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+		ClickBox->SetHiddenInGame(true);
+
+		ClickBox->RegisterComponent();
+
+		ClickBox->OnClicked.AddUniqueDynamic(
+			const_cast<UOrionStructureComponent*>(this),
+			&UOrionStructureComponent::OnArrowClicked);
+
+		const_cast<UOrionStructureComponent*>(this)->ClickBoxMapping.Add(ClickBox, Axis);
+
+		UE_LOG(LogTemp, Warning,
+		       TEXT("[StructureComponent] ClickBox created for arrow %s -> %d"),
+		       *Arrow->GetName(), static_cast<int32>(Axis));
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  箭头方向解析                                                      */
+/* ------------------------------------------------------------------ */
+EOrionAxis UOrionStructureComponent::ResolveDirection(const FVector& Forward)
+{
+	static const FVector AxisVec[6] =
+	{
+		FVector(0, 1, 0), // East  (+Y)
+		FVector(1, 0, 0), // South (+X)
+		FVector(0, -1, 0), // West  (-Y)
+		FVector(-1, 0, 0), // North (-X)
+		FVector(0, 0, 1), // Up    (+Z)
+		FVector(0, 0, -1) // Down  (-Z)
+	};
+
+	float BestDot = -1.f;
+	int32 BestIdx = 0;
+	const FVector FwdN = Forward.GetSafeNormal();
+	for (int32 i = 0; i < 6; ++i)
+	{
+		const float Dot = FVector::DotProduct(FwdN, AxisVec[i]);
+		if (Dot > BestDot)
+		{
+			BestDot = Dot;
+			BestIdx = i;
+		}
+	}
+	return static_cast<EOrionAxis>(BestIdx);
+}
+
+/* ------------------------------------------------------------------ */
+/*  点击回调：只打印方向                                               */
+/* ------------------------------------------------------------------ */
+void UOrionStructureComponent::OnArrowClicked(UPrimitiveComponent* ClickedComp, FKey)
+{
+	if (!ClickedComp) { return; }
+
+	if (EOrionAxis* AxisPtr = ClickBoxMapping.Find(ClickedComp))
+	{
+		static const TCHAR* AxisName[6] =
+		{
+			TEXT("East"), TEXT("South"), TEXT("West"),
+			TEXT("North"), TEXT("Up"), TEXT("Down")
+		};
+
+		UE_LOG(LogTemp, Warning,
+		       TEXT("[StructureComponent] Arrow clicked: %s  Direction=%s"),
+		       *ClickedComp->GetName(),
+		       AxisName[static_cast<int32>(*AxisPtr)]);
+	}
+}
+
+
 void UOrionStructureComponent::RegisterAllSockets() const
 {
 	if (!StructureMesh || !BuildingManager) { return; }
@@ -91,201 +472,28 @@ void UOrionStructureComponent::RegisterAllSockets() const
 	const FVector StructureLocation = StructureMesh->GetComponentLocation();
 	const FRotator StructureRotation = StructureMesh->GetComponentRotation();
 
-	/*========= Square Foundation =========*/
-	if (OrionStructureType == EOrionStructure::BasicSquareFoundation)
+	switch (OrionStructureType)
 	{
-		const FVector StructureBound = FVector(50.f, 50.f, 10.f);
-
-		// ─ 自身（占用）
-		BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::BasicSquareFoundation,
-		                                true, GetWorld(), GetOwner());
-
-		// ─ 地基-对-地基（空闲）
-		static const FVector Offsets[4] = {
-			{StructureBound.X * 2, 0.f, 0.f},
-			{0.f, -StructureBound.Y * 2, 0.f},
-			{-StructureBound.X * 2, 0.f, 0.f},
-			{0.f, StructureBound.Y * 2, 0.f}
-		};
-		for (const FVector& Off : Offsets)
-		{
-			BuildingManager->RegisterSocket(StructureLocation + StructureRotation.RotateVector(Off), StructureRotation,
-			                                EOrionStructure::BasicSquareFoundation, false, GetWorld(), GetOwner());
-		}
-
-		// ─ 地基-对-墙（空闲）
-		static const FVector WallPosOff[4] = {
-			{StructureBound.X, 0.f, StructureBound.Z + 150.f},
-			{0.f, StructureBound.Y, StructureBound.Z + 150.f},
-			{-StructureBound.X, 0.f, StructureBound.Z + 150.f},
-			{0.f, -StructureBound.Y, StructureBound.Z + 150.f}
-		};
-		static const FRotator WallRotOff[4] = {
-			{0, 0, 0},
-			{0, 90, 0},
-			{0, 180, 0},
-			{0, 270, 0}
-		};
-		for (int32 i = 0; i < 4; ++i)
-		{
-			BuildingManager->RegisterSocket(
-				StructureLocation + StructureRotation.RotateVector(WallPosOff[i]), StructureRotation + WallRotOff[i],
-				EOrionStructure::Wall, false, GetWorld(), GetOwner());
-		}
-
-		// Square Foundation - 对 - Triangle Foundation
-		{
-			static const FVector TriPosOff[4] = {
-				{StructureBound.X + StructureBound.X * 0.866 / 2 + 7.5f, 0.f, 0.f}, // +X 边中点
-				{-StructureBound.X - StructureBound.X * 0.866 / 2 - 7.5f, 0.f, 0.f}, // -X
-				{0.f, StructureBound.Y + StructureBound.Y * 0.866 / 2 + 7.5f, 0.f}, // +Y
-				{0.f, -StructureBound.Y - StructureBound.Y * 0.866 / 2 - 7.5f, 0.f} // -Y
-			};
-			static constexpr float TriYaw[4] = {180.f, 0.f, 270.f, 90.f}; // 让三角边法线指向方形
-
-			for (int32 i = 0; i < 4; ++i)
-			{
-				BuildingManager->RegisterSocket(
-					StructureLocation + StructureRotation.RotateVector(TriPosOff[i]),
-					StructureRotation + FRotator(0.f, TriYaw[i], 0.f),
-					EOrionStructure::BasicTriangleFoundation,
-					/*bOccupied=*/false, GetWorld(), GetOwner());
-			}
-		}
+	case EOrionStructure::BasicSquareFoundation: RegisterSquareFoundationSockets(StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::BasicTriangleFoundation: RegisterTriangleFoundationSockets(
+			StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::Wall: RegisterWallSockets(StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::DoubleWall: RegisterDoubleWallSockets(StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::BasicRoof: RegisterAdjustableStructure(StructureLocation, StructureRotation);
+		break;
+	default: break;
 	}
+}
 
-	/*========= Triangle Foundation =========*/
-	else if (OrionStructureType == EOrionStructure::BasicTriangleFoundation)
+FVector UOrionStructureComponent::GetStructureBounds(const EOrionStructure Type)
+{
+	if (const FVector* BoundVector = StructureBoundMap.Find(Type))
 	{
-		const float HalfSquareRootThree = FMath::Sqrt(3.f) / 2.f;
-		const float HalfSquareRootTwo = FMath::Sqrt(3.f) / 2.f;
-		const FVector StructureBound = FVector(50.f * 2.f * HalfSquareRootThree, 50.f, 10.f);
-		//const float EdgeLength = StructureBound.Y * 2.f; // 等边三角形的边长
-		constexpr float EdgeLength = 100.f; // 等边三角形的边长
-		const float HalfMeshHeight = StructureBound.Z;
-
-
-		const FVector AdjTriangleOffset[3] = {
-			{EdgeLength / (HalfSquareRootThree * 2.f), 0.f, 0.f},
-			{-EdgeLength / (4.f * HalfSquareRootThree), EdgeLength * 0.5f, 0.f},
-			{-EdgeLength / (4.f * HalfSquareRootThree), -EdgeLength * 0.5f, 0.f}
-		};
-
-		const FVector AdjSquareOffset[3] = {
-			{(HalfSquareRootThree * 2.f + 1.f) / (2.f * 2.f * HalfSquareRootThree) * EdgeLength, 0.f, 0.f},
-			{
-				-(0.25f + HalfSquareRootThree * 2.f / 12.f) * EdgeLength,
-				-(0.25f + HalfSquareRootThree * 2.f / 4.f) * EdgeLength, 0.f
-			},
-
-			{
-				-(0.25f + HalfSquareRootThree * 2.f / 12.f) * EdgeLength,
-				(0.25f + HalfSquareRootThree * 2.f / 4.f) * EdgeLength, 0.f
-			},
-
-		};
-
-		/*── 1) 自身（占用） ─────────────────────────────────────*/
-		BuildingManager->RegisterSocket(
-			StructureLocation, StructureRotation,
-			EOrionStructure::BasicTriangleFoundation,
-			/*bOccupied=*/true, GetWorld(), GetOwner());
-
-		/*── 2) 三角 ↔ 三角 / ↔ 方形（空闲） ─────────────────────*/
-		for (int32 i = 0; i < 3; ++i)
-		{
-			const FVector WorldTrianglePos = StructureLocation + StructureRotation.RotateVector(AdjTriangleOffset[i]);
-			//const FVector WorldTrianglePos = StructureLocation + AdjTriangleOffset[i];
-
-			// （a）同类三角
-			constexpr float TriangleRotationOffset[3] = {180.f, 180.f, 180.f};
-			BuildingManager->RegisterSocket(
-				WorldTrianglePos,
-				StructureRotation + FRotator(0.f, TriangleRotationOffset[i], 0.f),
-				EOrionStructure::BasicTriangleFoundation,
-				/*bOccupied=*/false, GetWorld(), GetOwner());
-
-			const FVector WorldSquarePos = StructureLocation + StructureRotation.RotateVector(AdjSquareOffset[i]);
-
-			// （b）邻接方形
-			constexpr float SquareRotationOffset[3] = {0.f, 60.f, 120.f};
-			BuildingManager->RegisterSocket(
-				WorldSquarePos,
-				StructureRotation + FRotator(0.f, SquareRotationOffset[i], 0.f),
-				EOrionStructure::BasicSquareFoundation,
-				/*bOccupied=*/false, GetWorld(), GetOwner());
-		}
-
-		const FVector TriangleEdgeMidpoints[3] = {
-			{EdgeLength * (1.f / (4.f * HalfSquareRootThree)), 0.f, 0.f},
-			{-1.f / (4.f * HalfSquareRootThree * 2.f) * EdgeLength, 0.25f * EdgeLength, 0.f},
-			{-1.f / (4.f * HalfSquareRootThree * 2.f) * EdgeLength, -0.25f * EdgeLength, 0.f},
-
-		};
-
-		/*── 3) Triangle → Wall（Z ↑150，空闲） ──────────────────*/
-		for (int32 i = 0; i < 3; ++i)
-		{
-			constexpr float TriangleEdgeWallRotation[3] = {180.f, 300.f, 60.f};
-			const FVector WorldPos =
-				StructureLocation + StructureRotation.RotateVector(
-					TriangleEdgeMidpoints[i] + FVector(0.f, 0.f, HalfMeshHeight + 150.f));
-
-			BuildingManager->RegisterSocket(
-				WorldPos,
-				StructureRotation + FRotator(0.f, TriangleEdgeWallRotation[i], 0.f),
-				EOrionStructure::Wall,
-				/*bOccupied=*/false, GetWorld(), GetOwner());
-		}
+		return *BoundVector;
 	}
-
-	/*========= Wall =========*/
-
-	else if (OrionStructureType == EOrionStructure::Wall)
-	{
-		const FVector StructureBound = FVector(10.f, 50.f, 150.f);
-
-
-		// ─ 自身（占用）
-		BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::Wall,
-		                                true, GetWorld(), GetOwner());
-
-		// ─ 向上延伸（空闲）
-		FVector Up = StructureLocation;
-		Up.Z += StructureBound.Z * 2.f;
-		BuildingManager->RegisterSocket(Up, StructureRotation, EOrionStructure::Wall,
-		                                false, GetWorld(), GetOwner());
-	}
-
-	/*========= DoubleWall =========*/
-	else if (OrionStructureType == EOrionStructure::DoubleWall)
-	{
-		const FVector StructureBound = FVector(10.f, 50.f * 2, 150.f); // 高度翻倍
-
-		// ─ 自身（占用）由管理器自动注册，不需组件主动注册
-
-		// 上方插槽
-		FVector Up1 = StructureLocation;
-		Up1.Z += 300.f;
-		BuildingManager->RegisterSocket(
-			Up1,
-			StructureRotation,
-			EOrionStructure::Wall,
-			false,
-			GetWorld(),
-			GetOwner()
-		);
-
-		FVector Up2 = StructureLocation;
-		Up2.Z += 300.f;
-		Up2.Y += 100.f;
-		BuildingManager->RegisterSocket(
-			Up2,
-			StructureRotation,
-			EOrionStructure::Wall,
-			false,
-			GetWorld(),
-			GetOwner()
-		);
-	}
+	return FVector::ZeroVector;
 }

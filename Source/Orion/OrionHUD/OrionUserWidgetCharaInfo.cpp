@@ -191,7 +191,7 @@ void UOrionUserWidgetCharaInfo::UpdateProcActionQueue(AOrionChara* InChara)
 	const auto& Q = InChara->CharacterProcActionQueue.Actions;
 	for (int32 i = 0; i < Q.Num(); ++i)
 	{
-		const OrionAction& Act = Q[i];
+		const FOrionAction& Act = Q[i];
 		auto* Item = CreateWidget<UOrionUserWidgetProceduralAction>(
 			this, ProceduralActionItemClass);
 		Item->SetupActionItem(Act.Name, i);
@@ -260,6 +260,11 @@ void UOrionUserWidgetCharaInfo::OnDeleteClicked()
 	if (SelectedIndex >= 0 &&
 		SelectedIndex < CharaRef->CharacterProcActionQueue.Actions.Num())
 	{
+		if (SelectedIndex == 0)
+		{
+			CharaRef->CurrentProcAction = nullptr;
+		}
+
 		CharaRef->RemoveProceduralActionAt(SelectedIndex);
 		UpdateProcActionQueue(CharaRef);
 	}
@@ -538,7 +543,8 @@ void UOrionUserWidgetCharaInfo::BroadcastOnInteractWithInventory(AOrionActor* Or
 		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
 		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
 		{
-			if (CharaRef && CharaRef->InventoryComp)
+			if (CharaRef && CharaRef->InventoryComp && InventoryInteractActorRef && InventoryInteractActorRef->
+				InventoryComp)
 			{
 				W->InitCargoItemPanelParams(InventoryInteractActorRef->InventoryComp, CharaRef->InventoryComp);
 			}

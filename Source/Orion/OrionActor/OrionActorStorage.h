@@ -33,6 +33,6 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	EStorageCategory StorageCategory;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	EStorageCategory StorageCategory = EStorageCategory::None;
 };

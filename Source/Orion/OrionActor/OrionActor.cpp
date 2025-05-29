@@ -6,7 +6,7 @@
 
 AOrionActor::AOrionActor()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	/*PrimaryActorTick.bCanEverTick = true;*/
 
 	/*
 
@@ -19,7 +19,7 @@ AOrionActor::AOrionActor()
 	*/
 
 
-	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
+	/*InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
 
 
 	MaxHealth = 30;
@@ -27,12 +27,31 @@ AOrionActor::AOrionActor()
 
 	this->SetCanBeDamaged(true);
 
-	ActorStatus = EActorStatus::Interactable;
+	ActorStatus = EActorStatus::Interactable;*/
+
+
+	PrimaryActorTick.bCanEverTick = true;
+
+	/* 主体 Mesh*/
+	RootStaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
+	RootComponent = RootStaticMeshComp;
+
+	/* 碰撞球 */
+	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
+	CollisionSphere->SetupAttachment(RootComponent);
+
+	/* 库存组件 */
+	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
+
+	/* 允许伤害 */
+	SetCanBeDamaged(true);
 }
 
 void AOrionActor::BeginPlay()
 {
 	Super::BeginPlay();
+
+	/*InitSerializable(ActorSerializable);
 
 	InventoryComp = FindComponentByClass<UOrionInventoryComponent>();
 
@@ -48,18 +67,38 @@ void AOrionActor::BeginPlay()
 		UE_LOG(LogTemp, Error, TEXT("%s missing UOrionInventoryComponent!"), *GetName());
 	}
 
-	InventoryComp->ModifyItemQuantity(2, +2);
+	InventoryComp->ModifyItemQuantity(2, +2);*/
+
+	InitSerializable(ActorSerializable);
+
+	/* 加载后 AvailableInventoryMap 会被反序列化覆盖 */
+	if (InventoryComp)
+	{
+		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
+		InventoryComp->ModifyItemQuantity(2, +2); // 示例逻辑
+	}
 }
+
+void AOrionActor::InitSerializable(const FSerializable& /*In*/)
+{
+	if (!ActorSerializable.GameId.IsValid())
+	{
+		ActorSerializable.GameId = FGuid::NewGuid();
+	}
+}
+
 
 void AOrionActor::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 }
 
-float AOrionActor::TakeDamage(float DamageAmount, const FDamageEvent& DamageEvent, AController* EventInstigator,
-                              AActor* DamageCauser)
+float AOrionActor::TakeDamage(float DamageAmount,
+                              const FDamageEvent& /*Event*/,
+                              AController* /*Instigator*/,
+                              AActor* /*Causer*/)
 {
-	CurrHealth -= DamageAmount;
+	CurrHealth -= FMath::RoundToInt(DamageAmount);
 	if (CurrHealth <= 0)
 	{
 		Die();
@@ -69,62 +108,48 @@ float AOrionActor::TakeDamage(float DamageAmount, const FDamageEvent& DamageEven
 
 void AOrionActor::Die()
 {
-	// Handle death logic here
-	UE_LOG(LogTemp, Log, TEXT("AOrionActor has died."));
+	UE_LOG(LogTemp, Log, TEXT("%s died."), *GetName());
 
-	this->ActorStatus = EActorStatus::NotInteractable;
-
+	ActorStatus = EActorStatus::NotInteractable;
 	SpawnDeathEffect(GetActorLocation());
 }
 
-void AOrionActor::SpawnDeathEffect_Implementation(FVector DeathLocation)
+
+void AOrionActor::SpawnDeathEffect_Implementation(FVector Location)
 {
-	if (DeathEffectClass)
+	if (!DeathEffectClass)
 	{
-		if (UWorld* World = GetWorld())
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		World->SpawnActor<AActor>(DeathEffectClass, Location, FRotator::ZeroRotator, P);
+	}
+
+	/* 让 Mesh 落地 */
+	TArray<UStaticMeshComponent*> Meshes;
+	GetComponents<UStaticMeshComponent>(Meshes);
+	for (auto* M : Meshes)
+	{
+		if (M)
 		{
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.Owner = this;
-			SpawnParams.Instigator = nullptr;
-			SpawnParams.SpawnCollisionHandlingOverride =
-				ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-			AActor* DeathEffect = World->SpawnActor<AActor>(DeathEffectClass, DeathLocation, FRotator::ZeroRotator,
-			                                                SpawnParams);
-			if (DeathEffect)
-			{
-				UE_LOG(LogTemp, Log, TEXT("Death effect spawned at location: %s"), *DeathLocation.ToString());
-			}
+			M->SetSimulatePhysics(true);
+			M->SetEnableGravity(true);
 		}
 	}
 
-	TArray<UStaticMeshComponent*> MeshComps;
-	GetComponents<UStaticMeshComponent>(MeshComps);
-	for (UStaticMeshComponent* MeshComp : MeshComps)
-	{
-		if (!MeshComp)
-		{
-			continue;
-		}
-
-		MeshComp->SetEnableGravity(true);
-		MeshComp->SetSimulatePhysics(true);
-	}
-
-	// 3) Call HandleDelayedDestroy() after 5 seconds to destroy itself
-	GetWorldTimerManager()
-		.SetTimer(DeathDestroyTimerHandle,
-		          this,
-		          &AOrionActor::HandleDelayedDestroy,
-		          5.0f,
-		          false);
+	/* 5 秒后自毁 */
+	GetWorldTimerManager().SetTimer(DeathDestroyTimerHandle,
+	                                this,
+	                                &AOrionActor::HandleDelayedDestroy,
+	                                5.f,
+	                                false);
 }
 
 void AOrionActor::HandleDelayedDestroy()
 {
 	Destroy();
-}
-
-FString AOrionActor::GetInteractType()
-{
-	return InteractType;
 }

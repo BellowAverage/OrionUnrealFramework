@@ -51,8 +51,8 @@ void AOrionPlayerController::SetupInputComponent()
 		InputComponent->BindAction("Key7Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey7Pressed);
 		InputComponent->BindAction("Key8Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey8Pressed);
 
-		InputComponent->BindAction("QuickSave", IE_Pressed, this, &AOrionPlayerController::QuickSave);
-		InputComponent->BindAction("QuickLoad", IE_Pressed, this, &AOrionPlayerController::QuickLoad);
+		/*InputComponent->BindAction("QuickSave", IE_Pressed, this, &AOrionPlayerController::QuickSave);
+		InputComponent->BindAction("QuickLoad", IE_Pressed, this, &AOrionPlayerController::QuickLoad);*/
 
 		InputComponent->BindAction("RightMouseClick", IE_Released, this, &AOrionPlayerController::OnRightMouseUp);
 		InputComponent->BindAction("ShiftPress", IE_Pressed, this, &AOrionPlayerController::OnShiftPressed);
@@ -60,11 +60,11 @@ void AOrionPlayerController::SetupInputComponent()
 	}
 }
 
-void AOrionPlayerController::QuickSave()
+/*void AOrionPlayerController::QuickSave()
 {
 	if (auto* GI = GetGameInstance<UOrionGameInstance>())
 	{
-		GI->SaveGame();
+		GI->SaveGame("Developer");
 	}
 }
 
@@ -72,9 +72,9 @@ void AOrionPlayerController::QuickLoad()
 {
 	if (auto* GI = GetGameInstance<UOrionGameInstance>())
 	{
-		GI->LoadGame();
+		GI->LoadGame("Developer");
 	}
-}
+}*/
 
 void AOrionPlayerController::BeginPlay()
 {
@@ -322,7 +322,8 @@ void AOrionPlayerController::UpdateBasicPlayerControllerParams()
 	FVector HitLocation = FVector::ZeroVector;
 
 	{
-		if (const float Denom = WorldDirection.Z; !FMath::IsNearlyZero(Denom)) // Ray is not parallel to horizontal plane
+		if (const float Denom = WorldDirection.Z; !FMath::IsNearlyZero(Denom))
+		// Ray is not parallel to horizontal plane
 		{
 			if (const float T = (GroundZOffset - WorldOrigin.Z) / Denom; T > 0.f) // As long as it's moving forward
 			{
@@ -411,13 +412,13 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 		DesiredLocation.Z += 20.f;
 	}
 
-	if (IsInputKeyDown(EKeys::Up))
+	if (IsInputKeyDown(EKeys::U))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Up key is pressed"));
 		PreviewStructure->AddActorLocalRotation(FRotator(0.f, 1.0f, 0.f));
 	}
 
-	if (IsInputKeyDown(EKeys::Down))
+	if (IsInputKeyDown(EKeys::I))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Down key is pressed"));
 		PreviewStructure->AddActorLocalRotation(FRotator(0.f, -1.0f, 0.f));
@@ -895,7 +896,7 @@ void AOrionPlayerController::OnRightMouseUp()
 					{
 						FString ActionName = FString::Printf(
 							TEXT("CollectingCargo_%s"), *StorageActorInstance->GetName());
-						OrionAction AddingAction = IActionable->
+						FOrionAction AddingAction = IActionable->
 							InitActionCollectCargo(ActionName, StorageActorInstance);
 						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
 					}
@@ -921,7 +922,7 @@ void AOrionPlayerController::OnRightMouseUp()
 
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
-						OrionAction AddingAction = IActionable->InitActionInteractWithProduction(
+						FOrionAction AddingAction = IActionable->InitActionInteractWithProduction(
 							ActionName, ProductionActorInstance);
 						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 					}
@@ -935,7 +936,7 @@ void AOrionPlayerController::OnRightMouseUp()
 					{
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
-						OrionAction AddingAction = IActionable->InitActionInteractWithProduction(
+						FOrionAction AddingAction = IActionable->InitActionInteractWithProduction(
 							ActionName, ProductionActorInstance);
 						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
 					}
@@ -959,7 +960,7 @@ void AOrionPlayerController::OnRightMouseUp()
 
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
-						OrionAction AddingAction = IActionable->InitActionInteractWithActor(
+						FOrionAction AddingAction = IActionable->InitActionInteractWithActor(
 							ActionName, OreActorInstance);
 						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 					}
@@ -974,7 +975,7 @@ void AOrionPlayerController::OnRightMouseUp()
 					{
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
-						OrionAction AddingAction = IActionable->InitActionInteractWithActor(
+						FOrionAction AddingAction = IActionable->InitActionInteractWithActor(
 							ActionName, OreActorInstance);
 						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
 					}
@@ -1110,7 +1111,7 @@ void AOrionPlayerController::OnRightMouseDown()
 
 						IActionable->RemoveAllActions();
 
-						OrionAction AddingAction = IActionable->InitActionMoveToLocation(
+						FOrionAction AddingAction = IActionable->InitActionMoveToLocation(
 							TEXT("MoveToLocation"), HitResult.Location);
 						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 					}
@@ -1124,7 +1125,7 @@ void AOrionPlayerController::OnRightMouseDown()
 			{
 				if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
 				{
-					OrionAction AddingAction = IActionable->InitActionMoveToLocation(
+					FOrionAction AddingAction = IActionable->InitActionMoveToLocation(
 						TEXT("MoveToLocation"), HitResult.Location);
 					IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 				}
@@ -1169,7 +1170,7 @@ void AOrionPlayerController::OnRightMouseDown()
 
 							IActionable->RemoveAllActions();
 
-							OrionAction AddingAction = IActionable->InitActionAttackOnChara(
+							FOrionAction AddingAction = IActionable->InitActionAttackOnChara(
 								ActionName, HitActor, HitOffset);
 							IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 						}
@@ -1188,7 +1189,7 @@ void AOrionPlayerController::OnRightMouseDown()
 					{
 						if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
 						{
-							OrionAction AddingAction = IActionable->InitActionAttackOnChara(
+							FOrionAction AddingAction = IActionable->InitActionAttackOnChara(
 								ActionName, HitActor, HitOffset);
 							IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 						}
@@ -1285,7 +1286,7 @@ void AOrionPlayerController::RequestAttackOnOrionActor(FVector HitOffset, Comman
 
 				IActionable->RemoveAllActions();
 
-				OrionAction AddingAction = IActionable->InitActionAttackOnChara(
+				FOrionAction AddingAction = IActionable->InitActionAttackOnChara(
 					ActionName, CachedActionObjects, HitOffset);
 				IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 			}
@@ -1313,7 +1314,7 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 		{
 			FString ActionName = FString::Printf(
 				TEXT("InteractWithInventory%s"), *CachedActionObjects->GetName());
-			OrionCharaSelection[0]->CharacterActionQueue.Actions.Add(OrionAction(
+			OrionCharaSelection[0]->CharacterActionQueue.Actions.Add(FOrionAction(
 				ActionName,
 				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](
 				float DeltaTime) -> bool

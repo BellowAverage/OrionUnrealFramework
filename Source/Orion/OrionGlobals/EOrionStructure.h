@@ -12,4 +12,5 @@ enum class EOrionStructure : uint8
 	BasicTriangleFoundation,
 	Wall,
 	DoubleWall,
+	BasicRoof,
 };

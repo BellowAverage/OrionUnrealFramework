@@ -17,6 +17,14 @@ AOrionGameMode::AOrionGameMode()
 	PrimaryActorTick.bCanEverTick = true;
 }
 
+void AOrionGameMode::OnTestKey3Pressed()
+{
+}
+
+void AOrionGameMode::OnTestKey4Pressed()
+{
+}
+
 void AOrionGameMode::BeginPlay()
 {
 	Super::BeginPlay();
@@ -27,6 +35,8 @@ void AOrionGameMode::BeginPlay()
 		InputComponent->RegisterComponent();
 		InputComponent->BindAction("TestKey1", IE_Pressed, this, &AOrionGameMode::OnTestKey1Pressed);
 		InputComponent->BindAction("TestKey2", IE_Pressed, this, &AOrionGameMode::OnTestKey2Pressed);
+		InputComponent->BindAction("TestKey3", IE_Pressed, this, &AOrionGameMode::OnTestKey3Pressed);
+		InputComponent->BindAction("TestKey4", IE_Pressed, this, &AOrionGameMode::OnTestKey4Pressed);
 
 
 		PlayerController->PushInputComponent(InputComponent);
@@ -143,14 +153,12 @@ void AOrionGameMode::OnTestKey1Pressed()
 	}
 }
 
-void AOrionGameMode::OnTestKey2Pressed()
+bool AOrionGameMode::GenerateExplosionSimulation()
 {
-	UE_LOG(LogTemp, Log, TEXT("TestKey2 Pressed!"));
-
 	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 	if (!PC)
 	{
-		return;
+		return true;
 	}
 
 	FHitResult HitResult;
@@ -233,6 +241,21 @@ void AOrionGameMode::OnTestKey2Pressed()
 				SpawnParams
 			);
 		}
+	}
+	return false;
+}
+
+void AOrionGameMode::OnTestKey2Pressed()
+{
+	UE_LOG(LogTemp, Log, TEXT("TestKey2 Pressed!"));
+
+	/*if (GenerateExplosionSimulation()) return;*/
+
+	UOrionCharaManager* CharaManager = GetGameInstance()->GetSubsystem<UOrionCharaManager>();
+
+	if (CharaManager)
+	{
+		CharaManager->LoadAllCharacters(GetWorld(), CharaManager->TestCharactersSet);
 	}
 }
 

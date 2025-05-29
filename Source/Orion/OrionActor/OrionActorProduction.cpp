@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "OrionActorProduction.h"
@@ -13,17 +13,15 @@ void AOrionActorProduction::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (InventoryComp)
+	if (!InventoryComp)
 	{
-		//InventoryComp->ModifyItemQuantity(2, 10);
+		return;
+	}
 
-		if (ProductionCategory == EProductionCategory::Bullets)
-		{
-			InventoryComp->AvailableInventoryMap.Add(2, 100);
-			InventoryComp->AvailableInventoryMap.Add(3, 2000);
-			UE_LOG(LogTemp, Log,
-			       TEXT("[Production] Set capacity for Bullets: Item2=100, Item3=10"));
-		}
+	if (ProductionCategory == EProductionCategory::Bullets)
+	{
+		AvailableInventoryMap = {{2, 100}, {3, 2000}}; // 原料 2，上限 100；成品 3，上限 2000
+		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
 	}
 }
 
@@ -34,7 +32,8 @@ void AOrionActorProduction::Tick(float DeltaTime)
 
 	ProductionProgressUpdate(DeltaTime);
 
-	if (ProductionCategory == EProductionCategory::Bullets && InventoryComp->FullInventoryStatus.FindRef(3))
+	if (ProductionCategory == EProductionCategory::Bullets &&
+		InventoryComp && InventoryComp->FullInventoryStatus.FindRef(3))
 	{
 		ActorStatus = EActorStatus::NotInteractable;
 	}
@@ -47,10 +46,7 @@ void AOrionActorProduction::Tick(float DeltaTime)
 void AOrionActorProduction::ProductionProgressUpdate(float DeltaTime)
 {
 	// Only update production if there's at least one worker.
-	if (CurrWorkers < 1)
-	{
-		return;
-	}
+	if (CurrWorkers < 1 || !InventoryComp) { return; }
 
 	// Calculate the progress increment.
 	// For one worker, the progress rate is 100 / ProductionTimeCost per second.

@@ -10,20 +10,39 @@ TArray<FOrionDataItem> UOrionInventoryComponent::ItemInfoTable = {
 UOrionInventoryComponent::UOrionInventoryComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
+
+	/* 设定一个“安全默认值”，至少保证 Find 不会崩溃 */
+	AvailableInventoryMap = {
+		{1, 20}, // Log
+		{2, 20}, // Stone Ore
+		{3, 300}, // Bullet
+		{4, 300}, // 预留
+	};
 }
 
 void UOrionInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (GetOwner() && (GetOwner()->GetName().Contains("OrionChara") || GetOwner()->GetName().Contains("OrionCChara")))
+	/*/* 默认上限 #1#
+	AvailableInventoryMap = {
+		{1, 20}, // Log
+		{2, 20}, // Stone Ore
+		{3, 300}, // Bullet
+		{4, 300}, // 预留
+	};
+
+	/* 如果持有者是角色，再覆盖成角色专属容量 #1#
+	const FString Name = GetOwner() ? GetOwner()->GetName() : TEXT("");
+	if (Name.Contains(TEXT("OrionChara")))
 	{
 		AvailableInventoryMap = {
-			{1, 10}, // Log
-			{2, 10}, // Stone Ore
-			{3, 300}, // Stone Ore
+			{1, 10},
+			{2, 10},
+			{3, 300},
+			{4, 300},
 		};
-	}
+	}*/
 }
 
 void UOrionInventoryComponent::RefreshInventoryText()
@@ -82,14 +101,13 @@ bool UOrionInventoryComponent::ModifyItemQuantity(int32 ItemId, int32 Quantity)
 		return true;
 	}
 
-	// 1) 检查是否允许存/取，以及最大容量
-	int32* MaxAllowedPtr = AvailableInventoryMap.Find(ItemId);
-	if (!MaxAllowedPtr)
+	/* --------- 安全检查 --------- */
+	if (!AvailableInventoryMap.Contains(ItemId))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ItemId %d not allowed here"), ItemId);
+		UE_LOG(LogTemp, Warning, TEXT("[Inventory] ItemId %d not in AvailableInventoryMap"), ItemId);
 		return false;
 	}
-	int32 MaxAllowed = *MaxAllowedPtr;
+	const int32 MaxAllowed = AvailableInventoryMap[ItemId];
 
 	// 2) 计算新数量并检查范围
 	int32& CurrQ = InventoryMap.FindOrAdd(ItemId);

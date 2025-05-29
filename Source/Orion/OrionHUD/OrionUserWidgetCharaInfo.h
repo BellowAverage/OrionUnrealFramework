@@ -108,6 +108,7 @@ public:
 
 	bool bCharaDetailShow = false;
 
+	UPROPERTY()
 	AOrionActor* InventoryInteractActorRef = nullptr;
 
 	/* Call Back */

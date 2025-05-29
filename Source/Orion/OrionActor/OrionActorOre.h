@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -29,18 +29,19 @@ public:
 	AOrionActorOre();
 
 	virtual void BeginPlay() override;
-
 	virtual void Tick(float DeltaTime) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	EOreCategory OreCategory;
+	/* --- 配置 --- */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	EOreCategory OreCategory = EOreCategory::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	int ProductionTimeCost;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	int32 ProductionTimeCost = 20; // 秒
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	float ProductionProgress;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	float ProductionProgress = 0.f; // 0-100
 
+	/* --- 逻辑 --- */
 	UFUNCTION(BlueprintCallable, Category = "Basics")
 	void ProductionProgressUpdate(float DeltaTime);
 };

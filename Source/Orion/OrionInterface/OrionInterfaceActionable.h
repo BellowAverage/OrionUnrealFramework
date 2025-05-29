@@ -10,7 +10,7 @@ class AOrionActorStorage;
 class AOrionActorProduction;
 class AOrionActor;
 enum class EActionExecution : uint8;
-class OrionAction;
+class FOrionAction;
 class AOrionChara;
 
 
@@ -32,32 +32,32 @@ class ORION_API IOrionInterfaceActionable
 
 public:
 	virtual void InsertOrionActionToQueue(
-		const OrionAction& OrionActionInstance,
+		const FOrionAction& OrionActionInstance,
 		const EActionExecution ActionExecutionType,
 		const int32 Index = INDEX_NONE) = 0;
 
-	virtual OrionAction InitActionMoveToLocation(
+	virtual FOrionAction InitActionMoveToLocation(
 		const FString& ActionName,
 		const FVector& TargetLocation) = 0;
 
-	virtual OrionAction InitActionAttackOnChara(
+	virtual FOrionAction InitActionAttackOnChara(
 		const FString& ActionName,
 		AActor* TargetChara,
 		const FVector& HitOffset) = 0;
 
-	virtual OrionAction InitActionInteractWithActor(
+	virtual FOrionAction InitActionInteractWithActor(
 		const FString& ActionName,
 		AOrionActor* TargetActor) = 0;
 
-	virtual OrionAction InitActionInteractWithProduction(
+	virtual FOrionAction InitActionInteractWithProduction(
 		const FString& ActionName,
 		AOrionActorProduction* TargetActor) = 0;
 
-	virtual OrionAction InitActionCollectCargo(
+	virtual FOrionAction InitActionCollectCargo(
 		const FString& ActionName,
 		AOrionActorStorage* TargetActor) = 0;
 
-	virtual OrionAction InitActionCollectBullets(
+	virtual FOrionAction InitActionCollectBullets(
 		const FString& ActionName) = 0;
 
 	virtual bool GetIsCharaProcedural() = 0;

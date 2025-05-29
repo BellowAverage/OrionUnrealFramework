@@ -10,13 +10,6 @@
  * 
  */
 
-UENUM(Blueprintable)
-enum class EOrionFoundationType : uint8
-{
-	BasicSquare,
-	BasicTriangle,
-};
-
 
 UCLASS()
 class ORION_API AOrionStructureFoundation : public AOrionStructure
@@ -28,7 +21,4 @@ public:
 	//virtual void OnConstruction(const FTransform& Transform) override;
 
 	virtual void BeginPlay() override;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	EOrionFoundationType FoundationType = EOrionFoundationType::BasicSquare;
 };
