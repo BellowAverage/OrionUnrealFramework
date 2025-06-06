@@ -28,11 +28,21 @@ void AOrionStructure::BeginPlay()
 	Super::BeginPlay();
 
 
-	if (const auto* PC = Cast<AOrionPlayerController>(GetWorld()->GetFirstPlayerController()))
+	/*const_cast<AOrionPlayerController*>(PC)->bIsSpawnPreviewStructure = false;*/
+
+	/* Preview Structure */
+
+	if (StructureComponent && StructureComponent->BIsPreviewStructure)
 	{
-		if (PC->bIsSpawnPreviewStructure)
+		TArray<UPrimitiveComponent*> PrimComps;
+		GetComponents<UPrimitiveComponent>(PrimComps);
+
+		for (UPrimitiveComponent* Prim : PrimComps)
 		{
-			const_cast<AOrionPlayerController*>(PC)->bIsSpawnPreviewStructure = false;
+			if (!Prim) { continue; }
+
+			Prim->SetGenerateOverlapEvents(false);
+			Prim->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 完全禁用碰撞（可选）
 		}
 	}
 }

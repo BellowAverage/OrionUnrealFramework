@@ -7,6 +7,7 @@
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
 #include "Orion/OrionComponents/OrionInventoryComponent.h"
+#include "Orion/OrionGlobals/OrionDataItem.h"
 #include "OrionUserWidgetCargoItem.generated.h"
 
 /**
@@ -23,7 +24,7 @@ class ORION_API UOrionUserWidgetCargoItem : public UUserWidget
 public:
 	FOnCargoItemClicked OnCargoItemClicked;
 
-	TMap<int32, TSoftObjectPtr<UTexture2D>> ItemIDToTextureMap = {
+	/*TMap<int32, TSoftObjectPtr<UTexture2D>> ItemIDToTextureMap = {
 		{
 			1,
 			TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTLogIcon.GPTLogIcon")))
@@ -33,7 +34,7 @@ public:
 			TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTStoneOreIcon.GPTStoneOreIcon")))
 		},
 		{3, TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTBullet.GPTBullet")))},
-	};
+	};*/
 
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* CargoName = nullptr;

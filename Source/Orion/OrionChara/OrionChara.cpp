@@ -392,8 +392,8 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 		bSelfDeliveryDone = true;
 	}
 
-	// 3) Each time bIsTrading==false, reselect next source and start new transport segment
-	if (!bIsTrading)
+	// 3) Each time BIsTrading==false, reselect next source and start new transport segment
+	if (!BIsTrading)
 	{
 		// 3.1) All available ore on site + (excluding self, self inventory already delivered here)
 		TArray<AOrionActor*> Sources =
@@ -425,7 +425,7 @@ bool AOrionChara::CollectingCargo(AOrionActorStorage* StorageActor)
 		return false;
 	}
 
-	// 4) bIsTrading is true, meaning the previous segment is executing → continue advancing
+	// 4) BIsTrading is true, meaning the previous segment is executing → continue advancing
 	TradingCargo(TMap<AActor*, TMap<int32, int32>>());
 	return false;
 }
@@ -440,12 +440,12 @@ void AOrionChara::CollectingCargoStop()
 	}
 
 	// 2) Reset TradingCargo state machine
-	bIsTrading = false;
-	bPickupAnimPlaying = false;
-	bDropoffAnimPlaying = false;
+	BIsTrading = false;
+	BIsPickupAnimPlaying = false;
+	BIsDropoffAnimPlaying = false;
 	TradeSegments.Empty();
 	CurrentSegIndex = 0;
-	TradeStep = ETradeStep::ToSource;
+	TradeStep = ETradingCargoState::ToSource;
 
 	// 3) Reset "first deliver self inventory" mark
 	//bSelfDeliveryDone = false;
@@ -738,16 +738,15 @@ void AOrionChara::OnBulletPickupFinished()
 }
 
 bool AOrionChara::InteractWithProduction(float DeltaTime,
-                                         AOrionActorProduction* InTarget)
+                                         AOrionActorProduction* InTargetProduction, bool bPreferStorageFirst)
 {
 	// === Configuration: true = First check Storage, then check Ore; false = First check Ore, then check Storage ===
-	constexpr bool bPreferStorageFirst = true;
 
 	bPreparingInteractProd = true;
 
-	// ① Invalid or uninteractable when stopped
-	if (!IsValid(InTarget) ||
-		InTarget->ActorStatus == EActorStatus::NotInteractable)
+	// ① Invalid or un interactable when stopped
+	if (!IsValid(InTargetProduction) ||
+		InTargetProduction->ActorStatus == EActorStatus::NotInteractable)
 	{
 		if (bPreparingInteractProd) { InteractWithProductionStop(); }
 		if (bIsInteractProd)
@@ -762,7 +761,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 	constexpr int32 RawItemId = 2;
 	constexpr int32 NeedPerCycle = 2;
 
-	UOrionInventoryComponent* ProdInv = InTarget->InventoryComp;
+	UOrionInventoryComponent* ProdInv = InTargetProduction->InventoryComp;
 	int32 HaveProd = ProdInv ? ProdInv->GetItemQuantity(RawItemId) : 0;
 
 	// ③ Raw material insufficient triggers transport
@@ -776,7 +775,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 
 			TMap<AActor*, TMap<int32, int32>> Route;
 			Route.Add(this, {{RawItemId, NeedPerCycle}});
-			Route.Add(InTarget, {{}});
+			Route.Add(InTargetProduction, {{}});
 			if (!TradingCargo(Route))
 			{
 				return false; // Transport not completed, continue this Action
@@ -806,7 +805,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 					continue;
 				}
 				float d2 = FVector::DistSquared(S->GetActorLocation(),
-				                                InTarget->GetActorLocation());
+				                                InTargetProduction->GetActorLocation());
 				if (d2 < BestStoreDist)
 				{
 					BestStoreDist = d2;
@@ -829,7 +828,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 						continue;
 					}
 					float d2 = FVector::DistSquared(O->GetActorLocation(),
-					                                InTarget->GetActorLocation());
+					                                InTargetProduction->GetActorLocation());
 					if (d2 < BestOreDist)
 					{
 						BestOreDist = d2;
@@ -853,7 +852,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 					continue;
 				}
 				float d2 = FVector::DistSquared(O->GetActorLocation(),
-				                                InTarget->GetActorLocation());
+				                                InTargetProduction->GetActorLocation());
 				if (d2 < BestOreDist)
 				{
 					BestOreDist = d2;
@@ -875,7 +874,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 						continue;
 					}
 					float d2 = FVector::DistSquared(S->GetActorLocation(),
-					                                InTarget->GetActorLocation());
+					                                InTargetProduction->GetActorLocation());
 					if (d2 < BestStoreDist)
 					{
 						BestStoreDist = d2;
@@ -906,7 +905,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 
 		TMap<AActor*, TMap<int32, int32>> Route;
 		Route.Add(ChosenSource, {{RawItemId, ToMove}});
-		Route.Add(InTarget, {{}});
+		Route.Add(InTargetProduction, {{}});
 		if (!TradingCargo(Route))
 		{
 			return false;
@@ -915,7 +914,7 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 
 	// ④ Raw material preparation complete, start production interaction
 	bIsInteractProd = true;
-	return InteractWithActor(DeltaTime, InTarget);
+	return InteractWithActor(DeltaTime, InTargetProduction);
 }
 
 void AOrionChara::InteractWithProductionStop()
@@ -1050,6 +1049,7 @@ bool AOrionChara::InteractWithActorStart(const EInteractWithActorState& State)
 	/* Set Interacting Animation */
 	if (bool SetInteractingAnimationFailed = SetInteractingAnimation())
 	{
+		InteractWithActorStop(InteractWithActorState);
 		return true; // Animation set failed, stop interaction
 	}
 
@@ -1101,24 +1101,25 @@ void AOrionChara::InteractWithActorStop(EInteractWithActorState& State)
 
 bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute)
 {
-	/*--------------------------------------------------------------------
-	 * 0) "一次性" initialization at the beginning of state machine
-	 *------------------------------------------------------------------*/
-	if (!bIsTrading)
+	/* First time to enter the state machine (Not trading -> trading) */
+
+	if (!BIsTrading)
 	{
+		/* Init state machine */
 		TradeSegments.Empty();
 		CurrentSegIndex = 0;
-		TradeStep = ETradeStep::ToSource;
-		bIsTrading = true;
-		bPickupAnimPlaying = false;
-		bDropoffAnimPlaying = false;
+		TradeStep = ETradingCargoState::ToSource;
+		BIsTrading = true;
+		BIsPickupAnimPlaying = false;
+		BIsDropoffAnimPlaying = false;
 
-		// Generate TradeSegments
+		/* Init trade segment that describes one run of trade */
 		TArray<AActor*> Nodes;
 		TradeRoute.GetKeys(Nodes);
+
 		if (Nodes.Num() < 2)
 		{
-			bIsTrading = false;
+			BIsTrading = false;
 			return true;
 		}
 
@@ -1129,13 +1130,13 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 
 			for (auto& CargoMap : TradeRoute[Source])
 			{
-				FTradeSeg Seg;
-				Seg.Source = Source;
-				Seg.Destination = Destination;
-				Seg.ItemId = CargoMap.Key;
-				Seg.Quantity = CargoMap.Value;
-				Seg.Moved = 0;
-				TradeSegments.Add(Seg);
+				FTradeSeg TradeSegment;
+				TradeSegment.Source = Source;
+				TradeSegment.Destination = Destination;
+				TradeSegment.ItemId = CargoMap.Key;
+				TradeSegment.Quantity = CargoMap.Value;
+				TradeSegment.Moved = 0;
+				TradeSegments.Add(TradeSegment);
 			}
 		}
 	}
@@ -1145,7 +1146,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	 *------------------------------------------------------------------*/
 	if (CurrentSegIndex >= TradeSegments.Num())
 	{
-		bIsTrading = false;
+		BIsTrading = false;
 		return true;
 	}
 
@@ -1153,7 +1154,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	if (!IsValid(Seg.Source) || !IsValid(Seg.Destination))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("TradingCargo: invalid actor, abort"));
-		bIsTrading = false;
+		BIsTrading = false;
 		return true;
 	}
 
@@ -1165,18 +1166,18 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	bool bDestIsSelf = (Seg.Destination == this);
 
 	USphereComponent* Sphere = nullptr;
-	if (TradeStep == ETradeStep::ToDest && !bDestIsSelf)
+	if (TradeStep == ETradingCargoState::ToDestination && !bDestIsSelf)
 	{
 		Sphere = Seg.Destination->FindComponentByClass<USphereComponent>();
 	}
-	else if (TradeStep == ETradeStep::ToSource && !bSourceIsSelf)
+	else if (TradeStep == ETradingCargoState::ToSource && !bSourceIsSelf)
 	{
 		Sphere = Seg.Source->FindComponentByClass<USphereComponent>();
 	}
 
 	bool bAtNode = (Sphere && Sphere->IsOverlappingActor(this))
-		|| (TradeStep == ETradeStep::ToSource && bSourceIsSelf)
-		|| (TradeStep == ETradeStep::ToDest && bDestIsSelf);
+		|| (TradeStep == ETradingCargoState::ToSource && bSourceIsSelf)
+		|| (TradeStep == ETradingCargoState::ToDestination && bDestIsSelf);
 
 	/*--------------------------------------------------------------------
 	 * 3) State machine
@@ -1186,11 +1187,11 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	/*==============================================================
 	 * → Source
 	 *============================================================*/
-	case ETradeStep::ToSource:
+	case ETradingCargoState::ToSource:
 		if (bAtNode)
 		{
 			MoveToLocationStop(); // Already arrived (or it's self), stop pathfinding
-			TradeStep = ETradeStep::Pickup;
+			TradeStep = ETradingCargoState::Pickup;
 			if (AIController)
 			{
 				AIController->StopMovement();
@@ -1205,9 +1206,9 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	/*==============================================================
 	 *  Pick‑up
 	 *============================================================*/
-	case ETradeStep::Pickup:
+	case ETradingCargoState::Pickup:
 		{
-			/* If Source is self: directly record quantity, no animation, immediately enter ToDest */
+			/* If Source is self: directly record quantity, no animation, immediately enter ToDestination */
 			if (bSourceIsSelf)
 			{
 				// Already in self backpack, just record actual quantity to move
@@ -1219,18 +1220,18 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 				}
 
 				// Skip animation, directly next step
-				TradeStep = ETradeStep::ToDest;
-				bPickupAnimPlaying = false;
+				TradeStep = ETradingCargoState::ToDestination;
+				BIsPickupAnimPlaying = false;
 				return false;
 			}
 
 			// ---------- OLD Old logic ----------
-			// if (!bPickupAnimPlaying) { … Play animation and pickup … }
+			// if (!BIsPickupAnimPlaying) { … Play animation and pickup … }
 			// --------------------------------
 
-			if (!bPickupAnimPlaying)
+			if (!BIsPickupAnimPlaying)
 			{
-				bPickupAnimPlaying = true;
+				BIsPickupAnimPlaying = true;
 
 				if (auto* SrcInv = Seg.Source->FindComponentByClass<UOrionInventoryComponent>())
 				{
@@ -1246,7 +1247,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 					else
 					{
 						UE_LOG(LogTemp, Warning, TEXT("TradingCargo: nothing to pickup"));
-						bIsTrading = false;
+						BIsTrading = false;
 						return true;
 					}
 				}
@@ -1268,11 +1269,11 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	/*==============================================================
 	 * → Destination
 	 *============================================================*/
-	case ETradeStep::ToDest:
+	case ETradingCargoState::ToDestination:
 		if (bAtNode)
 		{
 			MoveToLocationStop();
-			TradeStep = ETradeStep::DropOff;
+			TradeStep = ETradingCargoState::DropOff;
 			if (AIController)
 			{
 				AIController->StopMovement();
@@ -1287,7 +1288,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 	/*==============================================================
 	 *  Drop‑off
 	 *============================================================*/
-	case ETradeStep::DropOff:
+	case ETradingCargoState::DropOff:
 		{
 			/* If Destination is self: directly deduct backpack, no animation, immediately next segment */
 			if (bDestIsSelf)
@@ -1298,14 +1299,14 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 				}
 
 				CurrentSegIndex++;
-				TradeStep = ETradeStep::ToSource;
-				bDropoffAnimPlaying = false;
+				TradeStep = ETradingCargoState::ToSource;
+				BIsDropoffAnimPlaying = false;
 				return false;
 			}
 
-			if (!bDropoffAnimPlaying)
+			if (!BIsDropoffAnimPlaying)
 			{
-				bDropoffAnimPlaying = true;
+				BIsDropoffAnimPlaying = true;
 
 				if (auto* DstInv = Seg.Destination->FindComponentByClass<UOrionInventoryComponent>())
 				{
@@ -1324,7 +1325,7 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 				}
 				GetWorld()->GetTimerManager().SetTimer(
 					TimerHandle_Dropoff,
-					this, &AOrionChara::OnDropoffAnimFinished,
+					this, &AOrionChara::OnDropOffAnimFinished,
 					DropoffDuration, false);
 			}
 			return false;
@@ -1336,11 +1337,11 @@ bool AOrionChara::TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRou
 
 void AOrionChara::OnPickupAnimFinished()
 {
-	TradeStep = ETradeStep::ToDest;
-	bPickupAnimPlaying = false;
+	TradeStep = ETradingCargoState::ToDestination;
+	BIsPickupAnimPlaying = false;
 }
 
-void AOrionChara::OnDropoffAnimFinished()
+void AOrionChara::OnDropOffAnimFinished()
 {
 	FTradeSeg& TradeSegment = TradeSegments[CurrentSegIndex];
 	if (InventoryComp)
@@ -1349,8 +1350,8 @@ void AOrionChara::OnDropoffAnimFinished()
 	}
 
 	CurrentSegIndex++;
-	TradeStep = ETradeStep::ToSource;
-	bDropoffAnimPlaying = false;
+	TradeStep = ETradingCargoState::ToSource;
+	BIsDropoffAnimPlaying = false;
 }
 
 void AOrionChara::RemoveAllActions(const FString& Except)

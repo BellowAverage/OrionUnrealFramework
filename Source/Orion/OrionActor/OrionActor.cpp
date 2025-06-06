@@ -3,6 +3,7 @@
 
 #include "OrionActor.h"
 #include "Orion/OrionComponents/OrionInventoryComponent.h"
+#include "Orion/OrionComponents/OrionStructureComponent.h"
 
 AOrionActor::AOrionActor()
 {
@@ -32,18 +33,22 @@ AOrionActor::AOrionActor()
 
 	PrimaryActorTick.bCanEverTick = true;
 
-	/* 主体 Mesh*/
+
 	RootStaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
+	RootStaticMeshComp->ComponentTags.Add(FName(TEXT("StructureMesh")));
+
 	RootComponent = RootStaticMeshComp;
 
-	/* 碰撞球 */
+
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
 	CollisionSphere->SetupAttachment(RootComponent);
 
-	/* 库存组件 */
+
 	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
 
-	/* 允许伤害 */
+	StructureComponent = CreateDefaultSubobject<UOrionStructureComponent>(TEXT("StructureComponent"));
+
+
 	SetCanBeDamaged(true);
 }
 

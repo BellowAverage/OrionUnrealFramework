@@ -41,11 +41,11 @@ void UOrionStructureComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (OrionStructureType == EOrionStructure::None)
+	/*if (OrionStructureType == EOrionStructure::None)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[StructureComponent] StructureType is None!"));
+		UE_LOG(LogTemp, Log, TEXT("[StructureComponent] StructureType is None!"));
 		return;
-	}
+	}*/
 
 	BuildingManager = GetWorld()->GetGameInstance()
 		                  ? GetWorld()->GetGameInstance()->GetSubsystem<UOrionBuildingManager>()
@@ -73,11 +73,11 @@ void UOrionStructureComponent::BeginPlay()
 	AOrionPlayerController* OrionPC =
 		Cast<AOrionPlayerController>(GetWorld()->GetFirstPlayerController());
 
-	if (OrionPC && OrionPC->bIsSpawnPreviewStructure)
+	/*if (OrionPC && OrionPC->bPlacingStructure)
 	{
-		OrionPC->bIsSpawnPreviewStructure = false;
+		OrionPC->bPlacingStructure = false;
 		return;
-	}
+	}*/
 
 	if (bAutoRegisterSockets && BuildingManager)
 	{
@@ -162,12 +162,19 @@ void UOrionStructureComponent::RegisterSquareFoundationSockets(const FVector& St
 		{0, 180, 0},
 		{0, 270, 0}
 	};
+	static const FVector SquareFoundation2WallScaleOffset[4] = {
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+		{1.0f, 1.0f, 1.0f},
+
+	};
 	for (int32 i = 0; i < 4; ++i)
 	{
 		BuildingManager->RegisterSocket(
 			StructureLocation + StructureRotation.RotateVector(SquareFoundation2WallLocationOffset[i]),
 			StructureRotation + SquareFoundation2WallRotationOffset[i],
-			EOrionStructure::Wall, false, GetWorld(), GetOwner());
+			EOrionStructure::Wall, false, GetWorld(), GetOwner(), SquareFoundation2WallScaleOffset[i]);
 	}
 }
 

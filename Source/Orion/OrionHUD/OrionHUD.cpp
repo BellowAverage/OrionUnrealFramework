@@ -43,6 +43,24 @@ const TArray<FOrionDataBuilding> AOrionHUD::BuildingMenuOptions = {
 		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureBasicRoof.BP_OrionStructureBasicRoof_C")),
 		EOrionStructure::BasicRoof
 	},
+	{
+		6, FName(TEXT("OrionActorOre")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorOreSnapshot.OrionActorOreSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorOre.BP_OrionActorOre_C")),
+		EOrionStructure::None
+	},
+	{
+		7, FName(TEXT("OrionActorProduction")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorProductionSnapshot.OrionActorProductionSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorProduction.BP_OrionActorProduction_C")),
+		EOrionStructure::None
+	},
+	{
+		8, FName(TEXT("OrionActorStorage")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorStorageSnapshot.OrionActorStorageSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorStorage.BP_OrionActorStorage_C")),
+		EOrionStructure::None
+	},
 };
 
 const TMap<int32, FOrionDataBuilding> AOrionHUD::BuildingMenuOptionsMap = []()
@@ -259,8 +277,8 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				//FStringView(*CombinedText), // <- Pass FString instead of FStringView
-				CombinedText,
+				FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				//CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -311,8 +329,8 @@ void AOrionHUD::DrawHUD()
 		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			//FStringView(*Line), // <- 这里直接传 FString
-			Line,
+			FStringView(*Line), // <- 这里直接传 FString
+			//Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,

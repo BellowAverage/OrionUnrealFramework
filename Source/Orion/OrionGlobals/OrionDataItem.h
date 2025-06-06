@@ -31,3 +31,15 @@ struct FOrionDataItem
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Item")
 	float ProductionTimeCostSTD = 0.f;
 };
+
+inline TMap<int32, TSoftObjectPtr<UTexture2D>> ItemIDToTextureMap = {
+	{
+		1,
+		TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTLogIcon.GPTLogIcon")))
+	},
+	{
+		2,
+		TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTStoneOreIcon.GPTStoneOreIcon")))
+	},
+	{3, TSoftObjectPtr<UTexture2D>(FSoftObjectPath(TEXT("/Game/_Orion/UI/Images/GPTBullet.GPTBullet")))},
+};

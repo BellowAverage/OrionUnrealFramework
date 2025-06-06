@@ -29,7 +29,7 @@ enum class EOrionInputMode : uint8
 
 
 UENUM(BlueprintType)
-enum class CommandType : uint8
+enum class ECommandType : uint8
 {
 	Force UMETA(DisplayName = "Clear ActionQueue and Add"),
 	Append UMETA(DisplayName = "Push Action into ActionQueue"),
@@ -65,6 +65,7 @@ public:
 
 	/* Basic Player Controller Params & Acquisition */
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	EOrionInputMode CurrentInputMode = EOrionInputMode::Default;
 
 	FVector WorldOrigin = FVector(), WorldDirection = FVector();
@@ -87,7 +88,14 @@ public:
 	/* 1. Orion Chara Selection List */
 	TObservableArray<AOrionChara*> OrionCharaSelection;
 	void OnOrionCharaSelectionChanged(FName OperationName);
+
 	void EmptyOrionCharaSelection(TObservableArray<AOrionChara*>& OrionCharaSelection);
+
+	UFUNCTION(BlueprintCallable, Category = "OrionChara Selection")
+	void BPEmptyOrionCharaSelection()
+	{
+		EmptyOrionCharaSelection(OrionCharaSelection);
+	}
 
 	UPROPERTY()
 	TArray<AOrionChara*> CachedOrionCharaSelectionInBuilding = {};
@@ -119,12 +127,20 @@ public:
 
 	/* Building */
 
+
+	FVector GetAutoPlacementLocation(const FVector& GroundImpactPointLocation,
+	                                 const UOrionStructureComponent* StructComp) const;
+	bool FindPlacementSurface(const FVector& StartLocation, FVector& OutSurfaceLocation,
+	                          FVector& OutSurfaceNormal) const;
+
 	void SwitchFromPlacingStructures(int32 InBuildingId, bool bIsChecked);
 
+	static const TMap<EOrionStructure, FVector> StructureOriginalScaleMap;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
-	float SnapInDist = 150.f;
+	float SnapInDist = 200.f;
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
-	float SnapOutDist = 180.f;
+	float SnapOutDist = 220.f;
 
 	const float SnapInDistSqr = SnapInDist * SnapInDist;
 
@@ -134,15 +150,13 @@ public:
 
 	FVector SnappedSocketLoc = FVector();
 	FRotator SnappedSocketRot = FRotator();
-	FVector SnappedSocketScale = FVector();
+	FVector SnappedSocketScale = FVector(1.0f, 1.0f, 1.0f);
 
 
 	/* Place Structure */
 
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManager = nullptr;
-
-	bool bIsSpawnPreviewStructure = false;
 
 	bool bPlacingStructure = false;
 	bool bStructureSnapped = false;
@@ -198,7 +212,7 @@ public:
 	/* Input Interaction Functions*/
 
 
-	void ConfirmPlaceStructure(TSubclassOf<AActor> BPClass, AActor*& PreviewPtr);
+	void ConfirmPlaceStructure(const TSubclassOf<AActor>& BPClass, AActor*& PreviewPtr);
 	void OnLeftMouseDown();
 	void OnLeftMouseUp();
 	void SingleSelectionUnderCursor();
@@ -227,7 +241,7 @@ public:
 	TArray<FString> CachedRequestCaseNames;
 
 	UFUNCTION(BlueprintCallable, Category = "Server Action Request")
-	void RequestAttackOnOrionActor(FVector HitOffset, CommandType inCommandType);
+	void RequestAttackOnOrionActor(FVector HitOffset, ECommandType inCommandType);
 
 
 	UFUNCTION(BlueprintCallable, Category = "Server Action Request")

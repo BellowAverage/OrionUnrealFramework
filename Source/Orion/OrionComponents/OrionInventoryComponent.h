@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Orion/OrionGlobals/OrionDataItem.h"
+#include "Orion/OrionHUD/OrionUserWidgetResourceFloat.h"
 #include "OrionInventoryComponent.generated.h"
 
 
@@ -77,8 +78,8 @@ public:
 	/** Add item */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool ModifyItemQuantity(int32 ItemId, int32 DeltaQuantity);
+	void SpawnNewResourceFloatUI(const int32 ItemId, const int32 Quantity) const;
 
-	void SpawnFloatingText(const FString& InText);
 
 	/** Get current quantity of a specific item */
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -102,6 +103,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	void RefreshInventoryText();
+	void SpawnResourceFloatUI(int32 ItemId, int32 Quantity) const;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Inventory")
+	TSubclassOf<UOrionUserWidgetResourceFloat> FloatWidgetClass;
 
 
 	virtual void BeginPlay() override;

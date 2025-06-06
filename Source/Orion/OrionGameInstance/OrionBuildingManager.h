@@ -23,12 +23,19 @@ struct FOrionGlobalSocket
 
 	UPROPERTY()
 	FVector Location;
+
 	UPROPERTY()
 	FRotator Rotation;
+
+	UPROPERTY()
+	FVector Scale;
+
 	UPROPERTY()
 	EOrionStructure Kind;
+
 	UPROPERTY()
 	bool bOccupied = false;
+
 	UPROPERTY()
 	TWeakObjectPtr<AActor> Owner;
 
@@ -38,9 +45,10 @@ struct FOrionGlobalSocket
 	                   const FRotator& InRot,
 	                   const EOrionStructure InKind,
 	                   const bool bInOccupied,
-	                   AActor* InOwner)
+	                   AActor* InOwner, const FVector& Scale = FVector(1.0f, 1.0f, 1.0f))
 		: Location(InLoc)
 		  , Rotation(InRot)
+		  , Scale(Scale)
 		  , Kind(InKind)
 		  , bOccupied(bInOccupied)
 		  , Owner(InOwner)
@@ -111,6 +119,8 @@ public:
 
 	/* ========== ② Completely reset Socket pool (called before loading) ========== */
 	void ResetAllSockets(const UWorld* World);
+	static bool DelaySpawnNewStructure(TSubclassOf<AActor> BPClass, UWorld* World, FTransform TargetTransform,
+	                                   bool& bValue);
 
 	static constexpr float MergeTolSqr = 5.f * 5.f;
 
@@ -143,7 +153,7 @@ public:
 	                    const EOrionStructure Kind,
 	                    bool bOccupied,
 	                    const UWorld* World,
-	                    AActor* Owner);
+	                    AActor* Owner, const FVector& Scale = FVector(1.0f, 1.0f, 1.0f));
 
 
 	void RebuildUniqueForKind(EOrionStructure Kind);

@@ -8,7 +8,10 @@
 #include "Orion/OrionComponents/OrionInventoryComponent.h"
 #include "Orion/OrionInterface/OrionInterfaceSerializable.h"
 #include "Misc/Guid.h"
+/*#include "Orion/OrionComponents/OrionStructureComponent.h"*/
 #include "OrionActor.generated.h"
+
+class UOrionStructureComponent;
 
 USTRUCT(BlueprintType)
 struct FOrionActorFullRecord
@@ -53,6 +56,9 @@ class ORION_API AOrionActor : public AActor, public IOrionInterfaceSerializable
 
 public:
 	AOrionActor();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	UOrionStructureComponent* StructureComponent = nullptr;
 
 	/* --- 序列化接口 --- */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Basics")

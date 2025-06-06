@@ -1,5 +1,7 @@
 #include "OrionInventoryComponent.h"
 #include "Components/TextRenderComponent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Orion/OrionGlobals/OrionDataItem.h"
 
 TArray<FOrionDataItem> UOrionInventoryComponent::ItemInfoTable = {
 	{1, FName("Log"), FText::FromString("Log"), FText::FromString(TEXT("原木")), 1.f, 30.f},
@@ -18,6 +20,10 @@ UOrionInventoryComponent::UOrionInventoryComponent()
 		{3, 300}, // Bullet
 		{4, 300}, // 预留
 	};
+
+	static const FString Path = TEXT("/Game/_Orion/UI/UI_ResourceFloat/WB_ResourceFloat.WB_ResourceFloat_C");
+	FloatWidgetClass = LoadClass<UOrionUserWidgetResourceFloat>(nullptr, *Path);
+	checkf(FloatWidgetClass, TEXT("Cannot load resource floating ui from %s"), *Path);
 }
 
 void UOrionInventoryComponent::BeginPlay()
@@ -94,7 +100,50 @@ void UOrionInventoryComponent::RefreshInventoryText()
 	}
 }
 
-bool UOrionInventoryComponent::ModifyItemQuantity(int32 ItemId, int32 Quantity)
+void UOrionInventoryComponent::SpawnResourceFloatUI(const int32 ItemId, const int32 Quantity) const
+{
+	const FOrionDataItem Info = GetItemInfo(ItemId);
+	const FString Name = Info.DisplayName.ToString();
+	const FString Prefix = (Quantity > 0 ? TEXT("+") : TEXT("-"));
+	const FString Text = FString::Printf(TEXT("%s%d %s"), *Prefix, FMath::Abs(Quantity), *Name);
+
+	TArray<UTextRenderComponent*> Comps;
+	if (const AActor* Owner = GetOwner())
+	{
+		// 1) 先拿到所有带 tag 的 UActorComponent*
+		auto Raw = Owner->GetComponentsByTag(
+			UTextRenderComponent::StaticClass(),
+			FName(TEXT("OrionInventoryChangeTextComp"))
+		);
+
+		// 2) 再把它们 cast 到 UTextRenderComponent*
+		TArray<UTextRenderComponent*> InventoryChangeTextComp;
+		for (UActorComponent* C : Raw)
+		{
+			if (auto* Tr = Cast<UTextRenderComponent>(C))
+			{
+				InventoryChangeTextComp.Add(Tr);
+			}
+		}
+
+		if (InventoryChangeTextComp.Num() > 0)
+		{
+			UTextRenderComponent* ChangeComp = InventoryChangeTextComp[0];
+			ChangeComp->SetText(FText::FromString(Text));
+			ChangeComp->SetHiddenInGame(false);
+
+			// 延迟隐藏
+			constexpr float Duration = 1.0f;
+			FTimerHandle Handle;
+			GetWorld()->GetTimerManager().SetTimer(Handle, [ChangeComp]()
+			{
+				ChangeComp->SetHiddenInGame(true);
+			}, Duration, false);
+		}
+	}
+}
+
+bool UOrionInventoryComponent::ModifyItemQuantity(const int32 ItemId, const int32 Quantity)
 {
 	if (Quantity == 0)
 	{
@@ -111,7 +160,7 @@ bool UOrionInventoryComponent::ModifyItemQuantity(int32 ItemId, int32 Quantity)
 
 	// 2) 计算新数量并检查范围
 	int32& CurrQ = InventoryMap.FindOrAdd(ItemId);
-	int32 NewQ = CurrQ + Quantity;
+	const int32 NewQ = CurrQ + Quantity;
 	if (NewQ < 0 || NewQ > MaxAllowed)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ModifyItemQuantity out of range for ItemId %d (new=%d)"), ItemId, NewQ);
@@ -125,75 +174,70 @@ bool UOrionInventoryComponent::ModifyItemQuantity(int32 ItemId, int32 Quantity)
 		InventoryMap.Remove(ItemId);
 	}
 
-	FOrionDataItem Info = GetItemInfo(ItemId);
-	FString Name = Info.DisplayName.ToString();
-	FString Prefix = (Quantity > 0 ? TEXT("+") : TEXT("-"));
-	FString Text = FString::Printf(TEXT("%s%d %s"), *Prefix, FMath::Abs(Quantity), *Name);
+	/*SpawnResourceFloatUI(ItemId, Quantity);*/
+	SpawnNewResourceFloatUI(ItemId, Quantity);
 
-	TArray<UTextRenderComponent*> Comps;
-	if (AActor* Owner = GetOwner())
-	{
-		// 1) 先拿到所有带 tag 的 UActorComponent*
-		auto Raw = Owner->GetComponentsByTag(
-			UTextRenderComponent::StaticClass(),
-			FName(TEXT("OrionInventoryChangeTextComp"))
-		);
-
-		// 2) 再把它们 cast 到 UTextRenderComponent*
-		TArray<UTextRenderComponent*> InventoryChangeTextComp;
-		for (UActorComponent* C : Raw)
-		{
-			if (auto* TR = Cast<UTextRenderComponent>(C))
-			{
-				InventoryChangeTextComp.Add(TR);
-			}
-		}
-
-		if (InventoryChangeTextComp.Num() > 0)
-		{
-			UTextRenderComponent* ChangeComp = InventoryChangeTextComp[0];
-			ChangeComp->SetText(FText::FromString(Text));
-			ChangeComp->SetHiddenInGame(false);
-
-			// 延迟隐藏
-			float Duration = 1.0f;
-			FTimerHandle Handle;
-			GetWorld()->GetTimerManager().SetTimer(Handle, [ChangeComp]()
-			{
-				ChangeComp->SetHiddenInGame(true);
-			}, Duration, false);
-		}
-	}
-
-	// 触发外部事件
 	OnInventoryChange();
 
 	return true;
 }
 
-void UOrionInventoryComponent::SpawnFloatingText(const FString& InText)
+void UOrionInventoryComponent::SpawnNewResourceFloatUI(const int32 ItemId, const int32 Quantity) const
 {
-	if (AActor* Owner = GetOwner())
+	if (!FloatWidgetClass)
 	{
-		// 动态创建一个 TextRenderComponent
-		UTextRenderComponent* TR = NewObject<UTextRenderComponent>(Owner);
-		TR->RegisterComponent();
-		TR->SetText(FText::FromString(InText));
-		TR->SetHorizontalAlignment(EHTA_Center);
-		TR->SetWorldSize(50.f);
-		FVector Pos = Owner->GetActorLocation() + FVector(0, 0, 200);
-		TR->SetWorldLocation(Pos);
-
-		// 1 秒后自动销毁
-		FTimerHandle Handle;
-		Owner->GetWorldTimerManager().SetTimer(Handle, [TR]()
-		{
-			if (TR->IsValidLowLevel())
-			{
-				TR->DestroyComponent();
-			}
-		}, 1.0f, false);
+		return;
 	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+	if (!PC)
+	{
+		return;
+	}
+
+	UOrionUserWidgetResourceFloat* W = CreateWidget<UOrionUserWidgetResourceFloat>(PC, FloatWidgetClass);
+	if (!W)
+	{
+		return;
+	}
+
+	if (const TSoftObjectPtr<UTexture2D>* TexturePtr = ItemIDToTextureMap.Find(ItemId))
+	{
+		W->SetIcon(TexturePtr->LoadSynchronous());
+	}
+	W->DeltaText->SetText(FText::FromString(FString::Printf(TEXT("%s%d %s"), (Quantity > 0 ? TEXT("+") : TEXT("-")),
+	                                                        FMath::Abs(Quantity),
+	                                                        *GetItemInfo(ItemId).DisplayName.ToString())));
+
+	// 计算世界坐标到屏幕坐标
+	FVector Origin, BoxExtent;
+	GetOwner()->GetActorBounds(true, Origin, BoxExtent);
+
+	const FVector WorldPos = Origin + FVector(0.f, 0.f, BoxExtent.Z + 100.f);
+	FVector2D ScreenPos;
+
+
+	PC->ProjectWorldLocationToScreen(WorldPos, ScreenPos);
+
+
+	W->AddToViewport();
+	W->SetPositionInViewport(ScreenPos, true);
+
+	W->PlayFloat();
+	/*FWidgetAnimationDynamicEvent EndEvent; // ① 声明委托实例
+	EndEvent.BindLambda( // ② 绑定 Lambda
+		[W](UUserWidget*, const UWidgetAnimation*)
+		{
+			W->RemoveFromParent();
+		});
+
+	W->BindToAnimationFinished(W->FloatUp, EndEvent);*/
 }
 
 int32 UOrionInventoryComponent::GetItemQuantity(int32 ItemId) const

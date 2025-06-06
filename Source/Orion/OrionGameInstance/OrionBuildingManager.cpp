@@ -12,16 +12,14 @@ void UOrionBuildingManager::ResetAllSockets(const UWorld* World)
 	UKismetSystemLibrary::FlushPersistentDebugLines(World);
 }
 
+
 bool UOrionBuildingManager::ConfirmPlaceStructure(
 	TSubclassOf<AActor> BPClass,
 	AActor*& PreviewPtr,
 	bool& bSnapped,
 	const FTransform& SnapTransform)
 {
-	if (!PreviewPtr || !BPClass)
-	{
-		return false;
-	}
+	if (!PreviewPtr || !BPClass) { return false; }
 
 	/* ① 预览体必须带结构组件 */
 	if (UOrionStructureComponent* Comp =
@@ -46,35 +44,71 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 	if (!World) { return false; }
 
 	/* ② 计算最终放置的目标变换 */
-	const FTransform TargetXform =
+	const FTransform TargetTransform =
 		bSnapped
 			? SnapTransform
-			: FTransform(PreviewPtr->GetActorRotation(),
-			             PreviewPtr->GetActorLocation(),
-			             PreviewPtr->GetActorScale3D());
+			: FTransform(
+				PreviewPtr->GetActorRotation(),
+				PreviewPtr->GetActorLocation(),
+				PreviewPtr->GetActorScale3D());
 
-	/* ③ 先做一次“占位体”碰撞检测 ------------------------------ */
+	/*const FVector PreviewScale = PreviewPtr->GetActorScale3D();
+	UE_LOG(LogTemp, Log, TEXT("[Building] PreviewPtr->GetActorScale3D() = (%.3f, %.3f, %.3f)"), PreviewScale.X,
+	       PreviewScale.Y, PreviewScale.Z);
+	const FVector SnapLoc = SnapTransform.GetLocation();
+	const FRotator SnapRot = SnapTransform.GetRotation().Rotator();
+	const FVector SnapScale = SnapTransform.GetScale3D();
+	UE_LOG(LogTemp, Log,
+	       TEXT("[Building] SnapTransform: Loc=(%.3f, %.3f, %.3f) Rot=(%.3f, %.3f, %.3f) Scale=(%.3f, %.3f, %.3f)"),
+	       SnapLoc.X, SnapLoc.Y, SnapLoc.Z,
+	       SnapRot.Pitch, SnapRot.Yaw, SnapRot.Roll,
+	       SnapScale.X, SnapScale.Y, SnapScale.Z);*/
+
+
+	/* ③ 占位体碰撞检测（含容忍度 + 调试绘制） ------------------ */
 	bool bBlocked = false;
 
 	if (const UPrimitiveComponent* RootPrim =
 		Cast<UPrimitiveComponent>(PreviewPtr->GetRootComponent()))
 	{
-		// 取预览体包围盒作为检测体积
-		const FBoxSphereBounds Bounds = RootPrim->CalcBounds(TargetXform);
-		const FVector Extent = Bounds.BoxExtent; // 半尺寸
+		const FBoxSphereBounds Bounds = RootPrim->CalcBounds(TargetTransform);
+		const FVector ExtentFull = Bounds.BoxExtent;
 		const FVector Center = Bounds.Origin;
 
-		const FCollisionShape Shape = FCollisionShape::MakeBox(Extent);
+		/* —— 3-A. 轻度容忍：给盒子收缩 2 cm ——————————— */
+		constexpr float ToleranceCm = 100.f; // ← 容忍度
+		const FVector ExtentLoose = (ExtentFull - FVector(ToleranceCm))
+			.ComponentMax(FVector(1.f)); // 防负值
 
-		FCollisionQueryParams QP(SCENE_QUERY_STAT(PlacementTest), /*TraceComplex=*/false);
-		QP.AddIgnoredActor(PreviewPtr); // 忽略自己（预览体关闭碰撞亦可再保险）
+		/* —— 3-B. 先严格检测，再用容忍盒复检 ——————————— */
+		FCollisionShape ShapeStrict = FCollisionShape::MakeBox(ExtentFull);
+		FCollisionShape ShapeLoose = FCollisionShape::MakeBox(ExtentLoose);
 
-		bBlocked = World->OverlapBlockingTestByChannel(
-			Center,
-			TargetXform.GetRotation(),
-			ECC_WorldStatic, // 也可换成 ECC_GameTraceChannel1 等
-			Shape,
-			QP);
+		FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(PlacementTest), /*TraceComplex=*/false);
+		QueryParams.AddIgnoredActor(PreviewPtr);
+
+		const bool bBlockedStrict = World->OverlapBlockingTestByChannel(
+			Center, TargetTransform.GetRotation(), ECC_WorldStatic, ShapeStrict, QueryParams);
+
+		const bool bBlockedLoose = World->OverlapBlockingTestByChannel(
+			Center, TargetTransform.GetRotation(), ECC_WorldStatic, ShapeLoose, QueryParams);
+
+		/* —— 3-C. 只有“严格阻挡”且“宽松也阻挡”才认定真阻挡 —— */
+		bBlocked = bBlockedStrict && bBlockedLoose;
+
+		/* —— 3-D. 调试输出 ———————————————————————————— */
+		UE_LOG(LogTemp, Verbose,
+		       TEXT(
+			       "[Building][Debug] Center=(%.1f,%.1f,%.1f)  ExtentFull=(%.1f,%.1f,%.1f)  BlockedStrict=%d  BlockedLoose=%d"
+		       ),
+		       Center.X, Center.Y, Center.Z,
+		       ExtentFull.X, ExtentFull.Y, ExtentFull.Z,
+		       bBlockedStrict, bBlockedLoose);
+
+		DrawDebugBox(World, Center, ExtentFull,
+		             TargetTransform.GetRotation(),
+		             bBlocked ? FColor::Red : FColor::Green,
+		             /*PersistentLines=*/false, /*LifeTime=*/2.f);
 	}
 
 	if (bBlocked)
@@ -84,24 +118,67 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 		return false;
 	}
 
-	/* ④ 正式生成 Actor --------------------------------------- */
-	FActorSpawnParameters P;
-	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-	AActor* NewAct = World->SpawnActor<AActor>(BPClass, TargetXform, P);
-	if (!NewAct)
-	{
-		UE_LOG(LogTemp, Error,
-		       TEXT("[Building] SpawnActor failed (class: %s)."), *BPClass->GetName());
-		return false;
-	}
-
-	/* ⑤ 销毁预览体并复位状态 ---------------------------------- */
+	/* ⑤ 销毁预览体并复位状态 ------------------------------ */
 	PreviewPtr->Destroy();
 	PreviewPtr = nullptr;
 	bSnapped = false;
 
+	if (bool DelaySpawnNewStructureRes; DelaySpawnNewStructure(BPClass, World, TargetTransform,
+	                                                           DelaySpawnNewStructureRes))
+	{
+		return DelaySpawnNewStructureRes;
+	}
+
 	return true;
+}
+
+
+bool UOrionBuildingManager::DelaySpawnNewStructure(TSubclassOf<AActor> BPClass, UWorld* World,
+                                                   const FTransform TargetTransform, bool& bValue)
+{
+	/* ④ 正式生成 Actor --------------------------------------- */
+	FActorSpawnParameters P;
+	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	if (AActor* NewlySpawnedActor = World->SpawnActor<AActor>(BPClass, TargetTransform, P); !NewlySpawnedActor)
+	{
+		UE_LOG(LogTemp, Error,
+		       TEXT("[Building] SpawnActor failed (class: %s)."), *BPClass->GetName());
+		bValue = false;
+		return true;
+	}
+	else
+	{
+		/* Here the actor has done spawning, which means transforms made bellow won't affect socket registration */
+		NewlySpawnedActor->SetActorScale3D(TargetTransform.GetScale3D());
+
+
+		if (UOrionStructureComponent* SC = NewlySpawnedActor->FindComponentByClass<UOrionStructureComponent>())
+		{
+			SC->BIsPreviewStructure = false;
+
+			/*if (SC->OrionStructureType == EOrionStructure::Wall)
+			{
+				const FVector WallBound = UOrionStructureComponent::GetStructureBounds(EOrionStructure::Wall);
+				const float HalfLen = WallBound.Y;
+				const float HalfThick = WallBound.X;
+
+				FVector NewActorScale = NewlySpawnedActor->GetActorScale3D();
+
+				// 1) 让长度缩短一个“厚度”：
+				//    (2·HalfLen → 2·HalfLen − 2·HalfThick) ⇒ 比例 = (HalfLen − HalfThick)/HalfLen
+				const float ShrinkRatio = (HalfLen - HalfThick) / HalfLen;
+				NewActorScale.Y *= ShrinkRatio;
+				NewlySpawnedActor->SetActorScale3D(NewActorScale);
+
+				// 2) 沿本地 +Y 平移一个“厚度”，避免与邻墙重叠
+				const float FullThick = HalfThick * 2.f;
+				const FVector Offset = NewlySpawnedActor->GetActorRightVector() * FullThick;
+				NewlySpawnedActor->AddActorWorldOffset(Offset);
+			}*/
+		}
+	}
+	return false;
 }
 
 const TArray<FOrionGlobalSocket>& UOrionBuildingManager::GetSnapSocketsByKind(const EOrionStructure Kind) const
@@ -127,7 +204,7 @@ bool UOrionBuildingManager::IsSocketFree(const FVector& Loc, const EOrionStructu
 }
 
 void UOrionBuildingManager::RegisterSocket(const FVector& Loc, const FRotator& Rot, const EOrionStructure Kind,
-                                           bool bOccupied, const UWorld* World, AActor* Owner)
+                                           bool bOccupied, const UWorld* World, AActor* Owner, const FVector& Scale)
 {
 	if (!World)
 	{
@@ -136,8 +213,8 @@ void UOrionBuildingManager::RegisterSocket(const FVector& Loc, const FRotator& R
 
 	if (Kind == EOrionStructure::Wall)
 	{
-		SocketsRaw.Emplace(Loc, Rot, EOrionStructure::DoubleWall, bOccupied, Owner);
-		const FOrionGlobalSocket New(Loc, Rot, EOrionStructure::DoubleWall, bOccupied, Owner);
+		SocketsRaw.Emplace(Loc, Rot, EOrionStructure::DoubleWall, bOccupied, Owner, Scale);
+		const FOrionGlobalSocket New(Loc, Rot, EOrionStructure::DoubleWall, bOccupied, Owner, Scale);
 
 		SocketsRaw.Add(New);
 		AddUniqueSocket(New);
@@ -146,14 +223,14 @@ void UOrionBuildingManager::RegisterSocket(const FVector& Loc, const FRotator& R
 
 	else if (Kind == EOrionStructure::BasicSquareFoundation)
 	{
-		SocketsRaw.Emplace(Loc, Rot, EOrionStructure::BasicRoof, bOccupied, Owner);
-		const FOrionGlobalSocket New(Loc, Rot, EOrionStructure::BasicRoof, bOccupied, Owner);
+		SocketsRaw.Emplace(Loc, Rot, EOrionStructure::BasicRoof, bOccupied, Owner, Scale);
+		const FOrionGlobalSocket New(Loc, Rot, EOrionStructure::BasicRoof, bOccupied, Owner, Scale);
 		SocketsRaw.Add(New);
 		AddUniqueSocket(New);
 		RefreshDebug(World);
 	}
 
-	const FOrionGlobalSocket New(Loc, Rot, Kind, bOccupied, Owner);
+	const FOrionGlobalSocket New(Loc, Rot, Kind, bOccupied, Owner, Scale);
 
 	SocketsRaw.Add(New);
 	AddUniqueSocket(New);

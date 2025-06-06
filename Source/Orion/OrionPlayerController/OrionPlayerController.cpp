@@ -22,6 +22,14 @@
 #include "Orion/OrionGameInstance/OrionGameInstance.h"
 #include "Orion/OrionStructure/OrionStructureFoundation.h"
 
+const TMap<EOrionStructure, FVector> AOrionPlayerController::StructureOriginalScaleMap = {
+	{EOrionStructure::BasicSquareFoundation, FVector(1.25f, 1.25f, 1.0f)},
+	{EOrionStructure::BasicTriangleFoundation, FVector(1.25f, 1.25f, 1.25f)},
+	{EOrionStructure::Wall, FVector(1.0f, 1.25f, 1.0f)},
+	{EOrionStructure::DoubleWall, FVector(1.0f, 1.25f, 1.0f)},
+	{EOrionStructure::BasicRoof, FVector(1.25f, 1.25f, 1.0f)},
+};
+
 
 AOrionPlayerController::AOrionPlayerController()
 {
@@ -150,6 +158,15 @@ void AOrionPlayerController::SwitchFromPlacingStructures(int32 InBuildingId, boo
 			return;
 		}
 
+		// Exit demolish mode if it was active
+		if (bDemolishingMode)
+		{
+			if (OrionHUD && OrionHUD->BuildingMenu)
+			{
+				OrionHUD->BuildingMenu->CheckBoxDemolish->SetCheckedState(ECheckBoxState::Unchecked);
+			}
+		}
+
 		// Deselect → Destroy existing preview and exit placement mode
 		if (!bIsChecked)
 		{
@@ -190,7 +207,6 @@ void AOrionPlayerController::SwitchFromPlacingStructures(int32 InBuildingId, boo
 	}
 }
 
-
 void AOrionPlayerController::OnKey4Pressed()
 {
 	UE_LOG(LogTemp, Log, TEXT("Key 4 Pressed"));
@@ -224,7 +240,6 @@ void AOrionPlayerController::OnKey8Pressed()
 	//BuildBP = DoubleWallBP;
 	//TogglePlacingStructure(BuildBP, PreviewStructure);
 }
-
 
 void AOrionPlayerController::OnKey6Pressed()
 {
@@ -375,6 +390,143 @@ void AOrionPlayerController::DetectDraggingControl()
 	}
 }
 
+FVector AOrionPlayerController::GetAutoPlacementLocation(const FVector& GroundImpactPointLocation,
+                                                         const UOrionStructureComponent* StructComp) const
+{
+	if (!StructComp || !PreviewStructure)
+	{
+		return GroundImpactPointLocation;
+	}
+
+	const EOrionStructure StructureType = StructComp->OrionStructureType;
+
+
+	float PreviewHalfHeight = 0.f;
+
+	if (StructureType != EOrionStructure::None)
+	{
+		const FVector StructureBounds = UOrionStructureComponent::GetStructureBounds(StructureType);
+		PreviewHalfHeight = StructureBounds.Z;
+	}
+	else
+	{
+		PreviewHalfHeight = PreviewStructure->GetComponentsBoundingBox().GetSize().Z / 2.0f + 0.2f;
+	}
+
+	// 设置射线起始高度
+	constexpr float RayStartHeightOffset = 500.f;
+	constexpr float MaxRayDistance = 1000.0f;
+
+	FVector RayStart = GroundImpactPointLocation;
+	RayStart.Z += RayStartHeightOffset;
+
+	FVector RayEnd = RayStart;
+	RayEnd.Z -= MaxRayDistance;
+
+	// 执行射线检测
+	FHitResult StructureHitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(PreviewStructure);
+	QueryParams.bTraceComplex = true;
+
+	// 首先检测建筑物（Visibility通道）
+	const bool bHitStructure = GetWorld()->LineTraceSingleByChannel(
+		StructureHitResult,
+		RayStart,
+		RayEnd,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	FVector PlacementLocation = GroundImpactPointLocation;
+
+	if (bHitStructure)
+	{
+		PlacementLocation = StructureHitResult.ImpactPoint;
+		PlacementLocation.Z += PreviewHalfHeight + 0.2f;
+
+		// 根据击中的物体类型进行不同的处理
+		/*if (const AActor* HitActor = StructureHitResult.GetActor())
+		{
+			if (const UOrionStructureComponent* HitStructComp = HitActor->FindComponentByClass<
+				UOrionStructureComponent>())
+			{
+				const EOrionStructure HitStructType = HitStructComp->OrionStructureType;
+				const FVector HitStructBounds = UOrionStructureComponent::GetStructureBounds(HitStructType);
+
+				// 根据不同的组合情况调整高度
+				/*switch (StructureType)
+				{
+				case EOrionStructure::Wall:
+					PlacementLocation.Z = 150.f + 0.2f;
+					break;
+				case EOrionStructure::DoubleWall:
+					PlacementLocation.Z = 150.f + 0.2f;
+					break;
+
+				default:
+					break;
+				}#1#
+			}
+			else
+			{
+				// 击中的不是结构物（可能是地形），根据预览结构类型调整
+				PlacementLocation.Z += PreviewHalfHeight + 0.1f;
+			}
+		}
+		else
+		{
+			// 没有击中Actor（不应该发生，但作为保险）
+			PlacementLocation.Z += PreviewHalfHeight + 0.1f;
+		}*/
+	}
+	else
+	{
+		PlacementLocation.Z = GroundImpactPointLocation.Z + PreviewHalfHeight;
+	}
+
+	// 保持X和Y坐标不变
+	PlacementLocation.X = GroundImpactPointLocation.X;
+	PlacementLocation.Y = GroundImpactPointLocation.Y;
+
+	return PlacementLocation;
+}
+
+bool AOrionPlayerController::FindPlacementSurface(const FVector& StartLocation, FVector& OutSurfaceLocation,
+                                                  FVector& OutSurfaceNormal) const
+{
+	constexpr float RayStartHeightOffset = 500.0f;
+	constexpr float MaxRayDistance = 1000.0f;
+
+	FVector RayStart = StartLocation;
+	RayStart.Z += RayStartHeightOffset;
+
+	FVector RayEnd = RayStart;
+	RayEnd.Z -= MaxRayDistance;
+
+	FHitResult HitResult;
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(PreviewStructure);
+	QueryParams.bTraceComplex = true;
+
+	const bool bHit = GetWorld()->LineTraceSingleByChannel(
+		HitResult,
+		RayStart,
+		RayEnd,
+		ECC_Visibility,
+		QueryParams
+	);
+
+	if (bHit)
+	{
+		OutSurfaceLocation = HitResult.ImpactPoint;
+		OutSurfaceNormal = HitResult.ImpactNormal;
+		return true;
+	}
+
+	return false;
+}
+
 void AOrionPlayerController::UpdateBuildingControl()
 {
 	if (bPlacingStructure && PreviewStructure)
@@ -392,7 +544,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 	}
 
 	/* ---------- ① Component pointer ---------- */
-	UOrionStructureComponent* StructComp =
+	const UOrionStructureComponent* StructComp =
 		Preview->FindComponentByClass<UOrionStructureComponent>();
 	if (!StructComp)
 	{
@@ -401,7 +553,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 
 	const EOrionStructure Kind = StructComp->OrionStructureType;
 
-	FVector DesiredLocation = GroundHit.ImpactPoint;
+	/*FVector DesiredLocation = GroundHit.ImpactPoint;
 	if (Kind == EOrionStructure::Wall || Kind == EOrionStructure::DoubleWall)
 	{
 		DesiredLocation.Z += 150.f;
@@ -411,6 +563,15 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 		UE_LOG(LogTemp, Log, TEXT("UpdatePlacingStructure: %s"), *Preview->GetName());
 		DesiredLocation.Z += 20.f;
 	}
+	else if (Kind == EOrionStructure::None)
+	{
+		DesiredLocation.Z += 2.f;
+	}*/
+
+
+	const FVector DesiredLocation = GroundHit.ImpactPoint;
+	const FVector AutoPlacedLocation = GetAutoPlacementLocation(DesiredLocation, StructComp);
+
 
 	if (IsInputKeyDown(EKeys::U))
 	{
@@ -436,8 +597,14 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 			continue;
 		}
 
-		const float D2 = FVector::DistSquared(DesiredLocation, S.Location);
-		if (D2 < BestDistSqr)
+		/*UE_LOG(LogTemp, Warning, TEXT("Socket Location: %s, Desired Location: %s"),
+		       *S.Location.ToString(), *DesiredLocation.ToString());*/
+
+
+		// 记录 DesiredLocation 和 S.Location 之间的距离
+		/*float Distance = FVector::Dist(DesiredLocation, S.Location);
+		UE_LOG(LogTemp, Warning, TEXT("Distance between DesiredLocation and Socket: %.2f"), Distance);*/
+		if (const float D2 = FVector::DistSquared(DesiredLocation, S.Location); D2 < BestDistSqr)
 		{
 			BestDistSqr = D2;
 			BestSocket = S;
@@ -451,9 +618,18 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 		bStructureSnapped = true;
 		SnappedSocketLoc = BestSocket.Location;
 		SnappedSocketRot = BestSocket.Rotation;
+		SnappedSocketScale = BestSocket.Scale;
 
 		Preview->SetActorLocation(SnappedSocketLoc);
 		Preview->SetActorRotation(SnappedSocketRot);
+
+		/*UE_LOG(LogTemp, Log, TEXT("SnappedSocketScale: %s, Preview->GetActorScale3D(): %s"),
+		       *SnappedSocketScale.ToString(),
+		       *Preview->GetActorScale3D().ToString());*/
+
+		/*UOrionStructureComponent::StructureBoundMap[Kind]*/
+		/*Preview->SetActorScale3D(SnappedSocketScale * Preview->GetActorScale3D());*/
+		Preview->SetActorScale3D(SnappedSocketScale * StructureOriginalScaleMap[Kind]);
 	}
 	else
 	{
@@ -464,9 +640,61 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 		}
 		if (!bStructureSnapped)
 		{
-			Preview->SetActorLocation(DesiredLocation);
+			Preview->SetActorLocation(AutoPlacedLocation);
+			/*Preview->SetActorLocation(DesiredLocation);*/
 		}
 	}
+}
+
+void AOrionPlayerController::ConfirmPlaceStructure(const TSubclassOf<AActor>& BPClass,
+                                                   AActor*& PreviewPtr)
+{
+	if (!bPlacingStructure || !PreviewPtr)
+	{
+		return;
+	}
+
+	/* ---------- ① Component pointer ---------- */
+	const UOrionStructureComponent* StructComp =
+		PreviewPtr->FindComponentByClass<UOrionStructureComponent>();
+	if (!StructComp)
+	{
+		return; // Preview has no structure component → Direct free placement
+	}
+
+	const EOrionStructure Kind = StructComp->OrionStructureType;
+
+	const FTransform SpawnTransform = bStructureSnapped
+		                                  ? FTransform(SnappedSocketRot, SnappedSocketLoc,
+		                                               SnappedSocketScale * StructureOriginalScaleMap[Kind])
+		                                  : PreviewPtr->GetTransform();
+
+	/*const FTransform PreviewTransform = PreviewPtr->GetTransform();
+	UE_LOG(LogTemp, Log,
+	       TEXT("[ConfirmPlaceStructure] PreviewPtr->GetTransform(): Location=(%s), Rotation=(%s), Scale=(%s)"),
+	       *PreviewTransform.GetLocation().ToString(),
+	       *PreviewTransform.GetRotation().Rotator().ToString(),
+	       *PreviewTransform.GetScale3D().ToString()
+	);*/
+
+
+	if (!BuildingManager->ConfirmPlaceStructure(BPClass, PreviewPtr,
+	                                            bStructureSnapped, SpawnTransform))
+	{
+		UE_LOG(LogTemp, Warning,
+		       TEXT("[Building] Failed to place structure. Snapped: %s"),
+		       bStructureSnapped ? TEXT("true") : TEXT("false"));
+		return;
+	}
+
+	// Keep placement mode
+	GetWorld()->GetTimerManager().SetTimerForNextTick(
+		FTimerDelegate::CreateLambda([this, BPClass]()
+		{
+			SpawnPreviewStructure(BPClass, PreviewStructure);
+		}));
+
+	bStructureSnapped = false;
 }
 
 void AOrionPlayerController::SpawnPreviewStructure(TSubclassOf<AActor> BPClass,
@@ -480,7 +708,6 @@ void AOrionPlayerController::SpawnPreviewStructure(TSubclassOf<AActor> BPClass,
 
 	FActorSpawnParameters P;
 	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	bIsSpawnPreviewStructure = true;
 
 	OutPtr = World->SpawnActor<AActor>(BPClass, FVector::ZeroVector, FRotator::ZeroRotator, P);
 	if (OutPtr)
@@ -488,32 +715,6 @@ void AOrionPlayerController::SpawnPreviewStructure(TSubclassOf<AActor> BPClass,
 		OutPtr->SetActorEnableCollision(false);
 		bPlacingStructure = true;
 	}
-}
-
-void AOrionPlayerController::ConfirmPlaceStructure(TSubclassOf<AActor> BPClass,
-                                                   AActor*& PreviewPtr)
-{
-	if (!bPlacingStructure || !PreviewPtr)
-	{
-		return;
-	}
-
-	FTransform SpawnXform = bStructureSnapped
-		                        ? FTransform(SnappedSocketRot, SnappedSocketLoc, SnappedSocketScale)
-		                        : PreviewPtr->GetTransform();
-
-	if (!BuildingManager->ConfirmPlaceStructure(BPClass, PreviewPtr,
-	                                            bStructureSnapped, SpawnXform))
-	{
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[Building] Failed to place structure. Snapped: %s"),
-		       bStructureSnapped ? TEXT("true") : TEXT("false"));
-		return;
-	}
-
-	// Keep placement mode
-	SpawnPreviewStructure(BPClass, PreviewPtr);
-	bStructureSnapped = false;
 }
 
 void AOrionPlayerController::OnToggleDemolishingMode(const bool bIsChecked)
@@ -533,7 +734,7 @@ void AOrionPlayerController::OnToggleDemolishingMode(const bool bIsChecked)
 		BuildBP = nullptr;
 		bPlacingStructure = false;
 		bStructureSnapped = false;
-		return;
+		/*return;*/
 	}
 
 	bDemolishingMode = bIsChecked;
@@ -873,6 +1074,11 @@ void AOrionPlayerController::BoxSelectionUnderCursor(const FVector2D& StartPos, 
 
 void AOrionPlayerController::OnRightMouseUp()
 {
+	if (CurrentInputMode != EOrionInputMode::Default)
+	{
+		return; // Right click only works in Default mode
+	}
+
 	const float PressDuration = GetWorld()->GetTimeSeconds() - RightMouseDownTime;
 
 	if (OrionCharaSelection.IsEmpty() || !CachedRightClickedOrionActor)
@@ -1027,6 +1233,12 @@ void AOrionPlayerController::OnRightMouseUp()
 
 void AOrionPlayerController::OnRightMouseDown()
 {
+	if (CurrentInputMode != EOrionInputMode::Default)
+	{
+		return; // Right click only works in Default mode
+	}
+
+
 	RightMouseDownTime = GetWorld()->GetTimeSeconds();
 
 	CachedRightClickedOrionActor = nullptr;
@@ -1089,14 +1301,14 @@ void AOrionPlayerController::OnRightMouseDown()
 			/* Invoke Debug Menu */
 			if (OrionCharaSelection.IsEmpty())
 			{
-				if (OrionHUD)
+				/*if (OrionHUD)
 				{
 					TArray<FString> ArrOptionNames;
 					ArrOptionNames.Add("SpawnHostileOrionCharacterHere");
 					ArrOptionNames.Add("Operation2");
 					ArrOptionNames.Add("Operation3");
 					OrionHUD->ShowPlayerOperationMenu(MouseX, MouseY, HitResult, ArrOptionNames);
-				}
+				}*/
 			}
 			else /* OrionCharaSelection is not empty. */
 			{
@@ -1256,7 +1468,7 @@ void AOrionPlayerController::OnShiftReleased()
 	bIsShiftPressed = false;
 }
 
-void AOrionPlayerController::RequestAttackOnOrionActor(FVector HitOffset, CommandType inCommandType)
+void AOrionPlayerController::RequestAttackOnOrionActor(FVector HitOffset, ECommandType inCommandType)
 {
 	if (!CachedActionSubjects.IsEmpty() && !CachedActionObjects && !OrionCharaSelection.IsEmpty())
 	{
@@ -1305,7 +1517,7 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 
 	if (CallBackRequest == CachedRequestCaseNames[0])
 	{
-		RequestAttackOnOrionActor(FVector::ZeroVector, CommandType::Force);
+		RequestAttackOnOrionActor(FVector::ZeroVector, ECommandType::Force);
 	}
 
 	else if (CallBackRequest == CachedRequestCaseNames[1])

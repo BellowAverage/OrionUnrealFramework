@@ -63,6 +63,23 @@ enum class EInteractWithActorState : uint8
 	Interacting UMETA(DisplayName = "Interacting"),
 };
 
+UENUM(BlueprintType)
+enum class ETradingCargoState : uint8
+{
+	ToSource UMETA(DisplayName = "To Source"),
+	Pickup UMETA(DisplayName = "Pickup"),
+	ToDestination UMETA(DisplayName = "To Destination"),
+	DropOff UMETA(DisplayName = "Dropoff")
+};
+
+/*UENUM(BlueprintType)
+enum class EInteractWithProductionState : uint8
+{
+	Unavailable UMETA(DisplayName = "Unavailable"),
+	MovingToTarget UMETA(DisplayName = "MovingToTarget"),
+	Interacting UMETA(DisplayName = "Interacting"),
+};*/
+
 
 class FOrionAction
 {
@@ -106,14 +123,6 @@ public:
 
 // Add this declaration to the AOrionChara class in OrionChara.h
 
-UENUM(BlueprintType)
-enum class ETradeStep : uint8
-{
-	ToSource UMETA(DisplayName = "To Source"),
-	Pickup UMETA(DisplayName = "Pickup"),
-	ToDest UMETA(DisplayName = "To Destination"),
-	DropOff UMETA(DisplayName = "Dropoff")
-};
 
 UCLASS()
 class ORION_API AOrionChara : public ACharacter, public IOrionInterfaceSelectable, public IOrionInterfaceActionable,
@@ -458,13 +467,13 @@ public:
 	/* Trading Cargo */
 	bool TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute);
 
-	//enum class ETradeStep : uint8 { ToSource, Pickup, ToDest, Dropoff };
+	//enum class ETradingCargoState : uint8 { ToSource, Pickup, ToDestination, Dropoff };
 
 	AOrionActor* FindClosetAvailableCargoContainer(int32 ItemId) const;
 	TArray<AOrionActor*> FindAvailableCargoContainersByDistance(int32 ItemId) const;
 
-	bool bIsTrading = false;
-	ETradeStep TradeStep = ETradeStep::ToSource;
+	bool BIsTrading = false;
+	ETradingCargoState TradeStep = ETradingCargoState::ToSource;
 
 	struct FTradeSeg
 	{
@@ -491,16 +500,17 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Trading|Animation")
 	float DropoffDuration = 3.0f;
 
-	bool bPickupAnimPlaying = false;
-	bool bDropoffAnimPlaying = false;
+	bool BIsPickupAnimPlaying = false;
+	bool BIsDropoffAnimPlaying = false;
 	FTimerHandle TimerHandle_Pickup, TimerHandle_Dropoff;
 
 	void OnPickupAnimFinished();
-	void OnDropoffAnimFinished();
+	void OnDropOffAnimFinished();
 
 
 	/* Interact With Production */
-	bool InteractWithProduction(float DeltaTime, AOrionActorProduction* InTargetProduction);
+	bool InteractWithProduction(float DeltaTime, AOrionActorProduction* InTargetProduction,
+	                            bool bPreferStorageFirst = true);
 
 	FTimerHandle ProductionTimerHandle;
 	bool bIsInteractProd = false;

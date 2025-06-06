@@ -30,6 +30,10 @@ class ORION_API UOrionStructureComponent : public UActorComponent
 	GENERATED_BODY()
 
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	bool BIsPreviewStructure = true;
+
+
 	/** 刚开始时 Actor 的世界坐标，用来做偏移基准 */
 	FVector InitialActorLocation;
 
