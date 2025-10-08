@@ -8,20 +8,6 @@
 #include "Orion/OrionGlobals/EOrionStructure.h"
 #include "OrionStructureComponent.generated.h"
 
-UENUM()
-enum class EOrionAxis : uint8
-{
-	East, South, West, North,
-	Up, Down
-};
-
-
-USTRUCT()
-struct FRegisteredSocketHandle
-{
-	GENERATED_BODY()
-	int32 RawIndex = INDEX_NONE;
-};
 
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -32,13 +18,6 @@ class ORION_API UOrionStructureComponent : public UActorComponent
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	bool BIsPreviewStructure = true;
-
-
-	/** 刚开始时 Actor 的世界坐标，用来做偏移基准 */
-	FVector InitialActorLocation;
-
-	/** 第一次 RebuildGeometry 时记录位置 */
-	bool bInitialLocationStored = false;
 
 
 	UOrionStructureComponent();
@@ -77,6 +56,4 @@ public:
 private:
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManager = nullptr;
-	UPROPERTY()
-	TArray<FRegisteredSocketHandle> Handles;
 };

@@ -5,6 +5,8 @@
 .ignore
 Orion.code-workspace
 
+README_BY_AI.md
+
 # Compiled Object files
 *.slo
 *.lo
