@@ -117,7 +117,7 @@ void AOrionPlayerController::BeginPlay()
 			UE_LOG(LogTemp, Log, TEXT("View Level Up"));
 		});
 
-		OrionHUD->OnViewLevelDown.BindLambda([this]()
+		OrionHUD->OnViewLevelDown.BindLambda([this]() 
 		{
 			if (ViewLevel > 0)
 			{

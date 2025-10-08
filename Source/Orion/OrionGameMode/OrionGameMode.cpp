@@ -29,6 +29,8 @@ void AOrionGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
+	UE_LOG(LogTemp, Warning, TEXT("OrionGameMode: Now using VSCode Editor. "));
+
 	if (APlayerController* PlayerController = GetWorld()->GetFirstPlayerController())
 	{
 		InputComponent = NewObject<UInputComponent>(this);

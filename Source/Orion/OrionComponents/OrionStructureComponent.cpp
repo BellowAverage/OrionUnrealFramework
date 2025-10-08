@@ -363,115 +363,6 @@ void UOrionStructureComponent::RegisterDoubleWallSockets(const FVector& Structur
 	}
 }
 
-void UOrionStructureComponent::RegisterAdjustableStructure
-(
-	const FVector& /*InLocation*/,
-	const FRotator& /*InRotation*/
-) const
-{
-	AActor* Owner = GetOwner();
-	if (!Owner) { return; }
-
-	TArray<UArrowComponent*> Arrows;
-	Owner->GetComponents<UArrowComponent>(Arrows);
-
-	for (UArrowComponent* Arrow : Arrows)
-	{
-		if (!Arrow) { continue; }
-
-		const EOrionAxis Axis = ResolveDirection(Arrow->GetForwardVector());
-
-		if (ClickBoxMapping.FindKey(Axis))
-		{
-			continue; // 已经有同一方向的 ClickBox 了
-		}
-
-		// 1) 把箭头和 Box 设为绝对缩放，这样将来 Actor 变形也不受影响
-		Arrow->SetUsingAbsoluteScale(true);
-
-		UBoxComponent* ClickBox = NewObject<UBoxComponent>(Owner, NAME_None, RF_Transient);
-		if (!ClickBox) { continue; }
-		ClickBox->SetUsingAbsoluteScale(true);
-
-		ClickBox->AttachToComponent(Arrow,
-		                            FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-
-		ClickBox->SetBoxExtent(FVector(15.f));
-		ClickBox->SetRelativeLocation(FVector(40.f, 0.f, 0.f));
-
-		ClickBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		ClickBox->SetCollisionObjectType(ECC_WorldDynamic);
-		ClickBox->SetCollisionResponseToAllChannels(ECR_Ignore);
-		ClickBox->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
-		ClickBox->SetHiddenInGame(true);
-
-		ClickBox->RegisterComponent();
-
-		ClickBox->OnClicked.AddUniqueDynamic(
-			const_cast<UOrionStructureComponent*>(this),
-			&UOrionStructureComponent::OnArrowClicked);
-
-		const_cast<UOrionStructureComponent*>(this)->ClickBoxMapping.Add(ClickBox, Axis);
-
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[StructureComponent] ClickBox created for arrow %s -> %d"),
-		       *Arrow->GetName(), static_cast<int32>(Axis));
-	}
-}
-
-/* ------------------------------------------------------------------ */
-/*  箭头方向解析                                                      */
-/* ------------------------------------------------------------------ */
-EOrionAxis UOrionStructureComponent::ResolveDirection(const FVector& Forward)
-{
-	static const FVector AxisVec[6] =
-	{
-		FVector(0, 1, 0), // East  (+Y)
-		FVector(1, 0, 0), // South (+X)
-		FVector(0, -1, 0), // West  (-Y)
-		FVector(-1, 0, 0), // North (-X)
-		FVector(0, 0, 1), // Up    (+Z)
-		FVector(0, 0, -1) // Down  (-Z)
-	};
-
-	float BestDot = -1.f;
-	int32 BestIdx = 0;
-	const FVector FwdN = Forward.GetSafeNormal();
-	for (int32 i = 0; i < 6; ++i)
-	{
-		const float Dot = FVector::DotProduct(FwdN, AxisVec[i]);
-		if (Dot > BestDot)
-		{
-			BestDot = Dot;
-			BestIdx = i;
-		}
-	}
-	return static_cast<EOrionAxis>(BestIdx);
-}
-
-/* ------------------------------------------------------------------ */
-/*  点击回调：只打印方向                                               */
-/* ------------------------------------------------------------------ */
-void UOrionStructureComponent::OnArrowClicked(UPrimitiveComponent* ClickedComp, FKey)
-{
-	if (!ClickedComp) { return; }
-
-	if (EOrionAxis* AxisPtr = ClickBoxMapping.Find(ClickedComp))
-	{
-		static const TCHAR* AxisName[6] =
-		{
-			TEXT("East"), TEXT("South"), TEXT("West"),
-			TEXT("North"), TEXT("Up"), TEXT("Down")
-		};
-
-		UE_LOG(LogTemp, Warning,
-		       TEXT("[StructureComponent] Arrow clicked: %s  Direction=%s"),
-		       *ClickedComp->GetName(),
-		       AxisName[static_cast<int32>(*AxisPtr)]);
-	}
-}
-
-
 void UOrionStructureComponent::RegisterAllSockets() const
 {
 	if (!StructureMesh || !BuildingManager) { return; }
@@ -489,8 +380,6 @@ void UOrionStructureComponent::RegisterAllSockets() const
 	case EOrionStructure::Wall: RegisterWallSockets(StructureLocation, StructureRotation);
 		break;
 	case EOrionStructure::DoubleWall: RegisterDoubleWallSockets(StructureLocation, StructureRotation);
-		break;
-	case EOrionStructure::BasicRoof: RegisterAdjustableStructure(StructureLocation, StructureRotation);
 		break;
 	default: break;
 	}

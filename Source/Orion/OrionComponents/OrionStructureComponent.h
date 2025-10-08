@@ -40,25 +40,6 @@ public:
 	/** 第一次 RebuildGeometry 时记录位置 */
 	bool bInitialLocationStored = false;
 
-	UPROPERTY()
-	TMap<UPrimitiveComponent*, EOrionAxis> ClickBoxMapping; // key = UBoxComponent*
-
-	/*  CLICK callback registered on every arrow  */
-	UFUNCTION()
-	void OnArrowClicked(UPrimitiveComponent* ClickedComp, FKey Button);
-
-
-	/*  Helper that returns the enum that best matches a unit forward vector      */
-	static EOrionAxis ResolveDirection(const FVector& Forward);
-
-	/*  Runtime state ----------------------------------------------------------- */
-	/*  Which arrow controls which axis?                                         */
-	UPROPERTY()
-	TMap<UPrimitiveComponent*, EOrionAxis> ArrowMapping;
-
-	/*  Positive expansion amount on each axis, in centimetres                   */
-	float Expansion[6] = {0, 0, 0, 0, 0, 0}; // East,South,West,North,Up,Down
-
 
 	UOrionStructureComponent();
 	virtual void BeginPlay() override;
@@ -74,7 +55,6 @@ public:
 	void RegisterTriangleFoundationSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterWallSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterDoubleWallSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
-	void RegisterAdjustableStructure(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterAllSockets() const;
 
 	/* Orion Structure Rule Type */

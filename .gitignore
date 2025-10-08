@@ -1,5 +1,9 @@
 # Visual Studio 2015 user specific files
 .vs/
+.vscode/
+
+.ignore
+Orion.code-workspace
 
 # Compiled Object files
 *.slo
