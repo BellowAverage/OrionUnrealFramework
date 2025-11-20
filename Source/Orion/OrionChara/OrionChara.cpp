@@ -24,6 +24,8 @@
 #include <Components/SphereComponent.h>
 #include "Orion/OrionActor/OrionActorOre.h"
 
+class OrionActorStorage;
+
 /*
 #include "EngineUtils.h"
 #include "Engine/DamageEvents.h"

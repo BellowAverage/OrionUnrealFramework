@@ -29,6 +29,8 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void OnConstruction(const FTransform& Transform) override;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
 	EProductionCategory ProductionCategory = EProductionCategory::None;
 

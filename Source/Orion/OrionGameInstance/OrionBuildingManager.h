@@ -3,9 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Kismet/KismetSystemLibrary.h"
 #include "EngineUtils.h"
-#include "Orion/OrionGlobals/EOrionStructure.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Orion/OrionSaveGame/OrionSaveGame.h"
 
@@ -14,6 +12,33 @@ class AOrionStructure;
 class UOrionStructureComponent;
 
 #include "OrionBuildingManager.generated.h"
+
+UENUM()
+enum class EOrionStructure : uint8
+{
+	None,
+	BasicSquareFoundation,
+	BasicTriangleFoundation,
+	Wall,
+	DoubleWall,
+	BasicRoof,
+};
+
+USTRUCT(BlueprintType)
+struct FOrionDataBuilding
+{
+	GENERATED_BODY()
+
+	int32 BuildingId;
+
+	FName BuildingDisplayName;
+
+	FString BuildingImageReference;
+
+	FString BuildingBlueprintReference;
+
+	EOrionStructure BuildingPlacingRule = EOrionStructure::None;
+};
 
 
 USTRUCT()
@@ -65,6 +90,12 @@ class ORION_API UOrionBuildingManager : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	UOrionBuildingManager();
+
+	static const TArray<FOrionDataBuilding> OrionDataBuildings;
+	static const TMap<int32, FOrionDataBuilding> OrionDataBuildingsMap;
+
+
 	UPROPERTY()
 	TArray<FOrionGlobalSocket> SocketsRaw;
 

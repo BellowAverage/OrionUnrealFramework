@@ -4,6 +4,75 @@
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 
+const TArray<FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildings = {
+	{
+		1, FName(TEXT("SquareFoundation")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/SquareFoundationSnapshot.SquareFoundationSnapshot")),
+		FString(TEXT(
+			"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureSquareFoundation.BP_OrionStructureSquareFoundation_C")),
+		EOrionStructure::BasicSquareFoundation
+	},
+	{
+		2, FName(TEXT("TriangleFoundation")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/TriangleFoundationSnapshot.TriangleFoundationSnapshot")),
+		FString(TEXT(
+			"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureTriangleFoundation.BP_OrionStructureTriangleFoundation_C")),
+		EOrionStructure::BasicTriangleFoundation
+	},
+	{
+		3, FName(TEXT("Wall")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/WallSnapshot.WallSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureWall.BP_OrionStructureWall_C")),
+		EOrionStructure::Wall
+	},
+	{
+		4, FName(TEXT("DoubleWallDoor")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/DoubleWallSnapshot.DoubleWallSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureDoubleWall.BP_OrionStructureDoubleWall_C")),
+		EOrionStructure::DoubleWall
+	},
+	{
+		5, FName(TEXT("BasicRoof")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/BasicRoofSnapShot.BasicRoofSnapShot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureBasicRoof.BP_OrionStructureBasicRoof_C")),
+		EOrionStructure::BasicRoof
+	},
+	{
+		6, FName(TEXT("OrionActorOre")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorOreSnapshot.OrionActorOreSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorOre.BP_OrionActorOre_C")),
+		EOrionStructure::None
+	},
+	{
+		7, FName(TEXT("OrionActorProduction")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorProductionSnapshot.OrionActorProductionSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorProduction.BP_OrionActorProduction_C")),
+		EOrionStructure::None
+	},
+	{
+		8, FName(TEXT("OrionActorStorage")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorStorageSnapshot.OrionActorStorageSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorStorage.BP_OrionActorStorage_C")),
+		EOrionStructure::None
+	},
+};
+
+const TMap<int32, FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildingsMap = []()
+{
+	TMap<int32, FOrionDataBuilding> Map;
+	for (const FOrionDataBuilding& Data : OrionDataBuildings)
+	{
+		Map.Add(Data.BuildingId, Data);
+	}
+	return Map;
+
+}();
+
+UOrionBuildingManager::UOrionBuildingManager()
+{
+
+}
+
 void UOrionBuildingManager::ResetAllSockets(const UWorld* World)
 {
 	SocketsRaw.Empty();

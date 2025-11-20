@@ -6,7 +6,6 @@
 #include "OrionUserWidgetBuildingOption.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/HorizontalBox.h"
-
 #include "OrionUserWidgetBuildingMenu.generated.h"
 
 struct FOrionDataBuilding;
@@ -26,9 +25,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	TSubclassOf<UOrionUserWidgetBuildingOption> BuildingOptionClass;
-
-	UPROPERTY()
-	TArray<UOrionUserWidgetBuildingOption*> CachedBuildingOptions;
+	static inline TArray<UOrionUserWidgetBuildingOption*> CachedBuildingOptions;
 
 	UPROPERTY(meta = (BindWidget))
 	UCheckBox* CheckBoxDemolish;
@@ -71,6 +68,8 @@ public:
 		{
 			return;
 		}
+
+		CachedBuildingOptions.Empty();
 
 		for (auto& EachBuildingOption : BuildingMenuOptions)
 		{

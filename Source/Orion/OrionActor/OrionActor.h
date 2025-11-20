@@ -3,6 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
+#include <vector>
+#include <algorithm>
+#include "Kismet/GameplayStatics.h"
+
 #include "Components/SphereComponent.h"
 #include "GameFramework/Actor.h"
 #include "Orion/OrionComponents/OrionInventoryComponent.h"

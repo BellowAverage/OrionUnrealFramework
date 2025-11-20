@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/CheckBox.h"
-#include "Orion/OrionGlobals/OrionDataBuilding.h"
+#include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "OrionUserWidgetBuildingOption.generated.h"
 
 

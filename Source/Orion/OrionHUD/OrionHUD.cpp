@@ -5,173 +5,114 @@
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
 #include "Orion/OrionGameInstance/OrionGameInstance.h"
-#include <vector>
-
+#include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
-
-
-const TArray<FOrionDataBuilding> AOrionHUD::BuildingMenuOptions = {
-	{
-		1, FName(TEXT("SquareFoundation")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/SquareFoundationSnapshot.SquareFoundationSnapshot")),
-		FString(TEXT(
-			"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureSquareFoundation.BP_OrionStructureSquareFoundation_C")),
-		EOrionStructure::BasicSquareFoundation
-	},
-	{
-		2, FName(TEXT("TriangleFoundation")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/TriangleFoundationSnapshot.TriangleFoundationSnapshot")),
-		FString(TEXT(
-			"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureTriangleFoundation.BP_OrionStructureTriangleFoundation_C")),
-		EOrionStructure::BasicTriangleFoundation
-	},
-	{
-		3, FName(TEXT("Wall")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/WallSnapshot.WallSnapshot")),
-		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureWall.BP_OrionStructureWall_C")),
-		EOrionStructure::Wall
-	},
-	{
-		4, FName(TEXT("DoubleWallDoor")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/DoubleWallSnapshot.DoubleWallSnapshot")),
-		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureDoubleWall.BP_OrionStructureDoubleWall_C")),
-		EOrionStructure::DoubleWall
-	},
-	{
-		5, FName(TEXT("BasicRoof")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/BasicRoofSnapShot.BasicRoofSnapShot")),
-		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureBasicRoof.BP_OrionStructureBasicRoof_C")),
-		EOrionStructure::BasicRoof
-	},
-	{
-		6, FName(TEXT("OrionActorOre")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorOreSnapshot.OrionActorOreSnapshot")),
-		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorOre.BP_OrionActorOre_C")),
-		EOrionStructure::None
-	},
-	{
-		7, FName(TEXT("OrionActorProduction")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorProductionSnapshot.OrionActorProductionSnapshot")),
-		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorProduction.BP_OrionActorProduction_C")),
-		EOrionStructure::None
-	},
-	{
-		8, FName(TEXT("OrionActorStorage")),
-		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorStorageSnapshot.OrionActorStorageSnapshot")),
-		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorStorage.BP_OrionActorStorage_C")),
-		EOrionStructure::None
-	},
-};
-
-const TMap<int32, FOrionDataBuilding> AOrionHUD::BuildingMenuOptionsMap = []()
-{
-	TMap<int32, FOrionDataBuilding> Map;
-	for (const FOrionDataBuilding& Data : BuildingMenuOptions)
-	{
-		Map.Add(Data.BuildingId, Data);
-	}
-	return Map;
-}();
-
 
 void AOrionHUD::BeginPlay()
 {
 	Super::BeginPlay();
 
+	/* Acquire External Game Resources Addresses */
+
+	BuildingManagerInstance = GetGameInstance()->GetSubsystem<UOrionBuildingManager>();
+	checkf(BuildingManagerInstance, TEXT("OrionHUD::BeginPlay: Unable to acquire OrionBuildingManager Subsystem."));
+
+	OrionPlayerControllerInstance = Cast<AOrionPlayerController>(GetOwningPlayerController());
+	checkf(OrionPlayerControllerInstance, TEXT("OrionHUD::BeginPlay: Unable to acquire OrionPlayerController."));
+
+	/* Init User Widgets Blueprints Instances */
+
+	/* 1. Developer Debug UI Layer */
 	if (WB_DeveloperUIBase)
 	{
 		UOrionUserWidgetUIBase* DeveloperUIBase = CreateWidget<UOrionUserWidgetUIBase>(GetWorld(), WB_DeveloperUIBase);
 
 		DeveloperUIBase->OnViewLevelUp.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("View Level Up"));
-			OnViewLevelUp.ExecuteIfBound();
+			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: View Level Up"));
+			OrionPlayerControllerInstance->ViewLevel++;
 		});
 
 		DeveloperUIBase->OnViewLevelDown.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("View Level Down"));
-			OnViewLevelDown.ExecuteIfBound();
+			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: View Level Down"));
+			if (OrionPlayerControllerInstance->ViewLevel > 0) OrionPlayerControllerInstance->ViewLevel--;
 		});
 
 		DeveloperUIBase->OnSaveGame.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("Save Game"));
-			/*GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGameWithDialog();*/
+			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: Save Game"));
 			GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGame("Developer");
 		});
 
 		DeveloperUIBase->OnLoadGame.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("Load Game"));
-			/*GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGameWithDialog();*/
+			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: Load Game"));
 			GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGame("Developer");
 		});
 
 		DeveloperUIBase->AddToViewport();
 	}
-
-	InitCharaInfoPanel();
-	HideCharaInfoPanel();
-
-	AOrionPlayerController* OrionPlayerController = Cast<AOrionPlayerController>(GetOwningPlayerController());
-	if (OrionPlayerController)
+	else
 	{
-		OrionPlayerController->OnToggleBuildingMode.BindLambda([this](bool bIsBuildingMode)
+		UE_LOG(LogTemp, Error, TEXT("OrionHUD::BeginPlay: WB_DeveloperUIBase has not been set in Editor."));
+	}
+
+	/* 2. Character Info UI Layer */
+
+	if (WB_CharaInfoPanel)
+	{
+		CharaInfoPanel = CreateWidget<UOrionUserWidgetCharaInfo>(GetWorld(), WB_CharaInfoPanel);
+		if (CharaInfoPanel)
 		{
-			if (bIsBuildingMode)
-			{
-				ShowBuildingMenu();
-			}
-			else
-			{
-				HideBuildingMenu();
-			}
-		});
+			CharaInfoPanel->AddToViewport();
+		}
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to get OrionPlayerController!"));
+		UE_LOG(LogTemp, Error, TEXT("OrionHUD::BeginPlay: WB_CharaInfoPanel has not been set in Editor."));
 	}
+
+	HideCharaInfoPanel();
 }
 
 void AOrionHUD::Tick(float DeltaTime)
 {
-	Super::Tick(DeltaTime); // ①
+	Super::Tick(DeltaTime);
 
-	// —— State switching —— //
-	// Regardless of whether InfoChara is empty, first check for changes in bShowCharaInfoPanel
-	if (bShowCharaInfoPanel != PreviousbShowCharaInfoPanel ||
-		(InfoChara && InfoChara->GetName() != PreviousInfoChara))
+	TickCharaInfoPanel();
+}
+
+void AOrionHUD::TickCharaInfoPanel()
+{
+	if (!CharaInfoPanel) return;
+
+	if (IsShowCharaInfoPanel != IsPreviousShowCharaInfoPanel ||
+		(InfoChara.IsValid() && InfoChara->GetName() != PreviousInfoChara))
 	{
-		if (bShowCharaInfoPanel && InfoChara)
+		if (IsShowCharaInfoPanel && InfoChara.IsValid())
 		{
-			UE_LOG(LogTemp, Log, TEXT("Show Chara Info Panel"));
-			if (CharaInfoPanel)
-			{
-				CharaInfoPanel->InitCharaInfoPanelParams(InfoChara);
-			}
+			CharaInfoPanel->InitCharaInfoPanelParams(InfoChara.Get());
 			ShowCharaInfoPanel();
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("Hide Chara Info Panel"));
+			UE_LOG(LogTemp, Log, TEXT("OrionHUD:Tick: Hide Chara Info Panel"));
 			HideCharaInfoPanel();
 		}
 
-		PreviousbShowCharaInfoPanel = bShowCharaInfoPanel;
-		PreviousInfoChara = InfoChara ? InfoChara->GetName() : TEXT("");
+		IsPreviousShowCharaInfoPanel = IsShowCharaInfoPanel;
+		PreviousInfoChara = InfoChara.IsValid() ? InfoChara->GetName() : TEXT("");
 	}
 
-	// —— Per-frame refresh —— //
-	if (CharaInfoPanel && bShowCharaInfoPanel && InfoChara)
+	if (IsShowCharaInfoPanel && InfoChara.IsValid())
 	{
-		UE_LOG(LogTemp, Verbose, TEXT("Update Chara Info Panel"));
-		CharaInfoPanel->UpdateCharaInfo(InfoChara);
+		CharaInfoPanel->UpdateCharaInfo(InfoChara.Get());
 	}
 }
 
-void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitResult& HitResult,
+
+void AOrionHUD::ShowPlayerOperationMenu(const float MouseX, const float MouseY, const FHitResult& HitResult,
                                         const TArray<FString>& ArrOptionNames)
 {
 	if (ArrOperationAvailable.Num() > 0)
@@ -179,21 +120,16 @@ void AOrionHUD::ShowPlayerOperationMenu(float MouseX, float MouseY, const FHitRe
 		ArrOperationAvailable.Empty();
 	}
 
-	PlayerOperationSpawnReference = FHitResult();
-
-	for (auto& each : ArrOptionNames)
+	for (auto& Each : ArrOptionNames)
 	{
-		FString OptionName = each;
+		FString OptionName = Each;
 		ArrOperationAvailable.Add(FName(*OptionName));
 	}
 
 	if (WB_PlayerOperationMenu)
 	{
-		UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu);
-		if (PlayerOperationMenu)
+		if (UUserWidget* PlayerOperationMenu = CreateWidget<UUserWidget>(GetWorld(), WB_PlayerOperationMenu))
 		{
-			PlayerOperationSpawnReference = HitResult;
-
 			PlayerOperationMenu->AddToViewport();
 			PlayerOperationMenu->SetPositionInViewport(FVector2D(MouseX, MouseY));
 		}
@@ -204,11 +140,14 @@ void AOrionHUD::DrawHUD()
 {
 	Super::DrawHUD();
 
-	APlayerController* PC = GetOwningPlayerController();
-	if (!PC || !Canvas)
-	{
-		return;
-	}
+	TickDrawOrionActorInfoInPlace();
+
+	TickShowInfoAtMouse();
+}
+
+void AOrionHUD::TickDrawOrionActorInfoInPlace() const
+{
+	if (!OrionPlayerControllerInstance || !Canvas) return;
 
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
@@ -252,15 +191,15 @@ void AOrionHUD::DrawHUD()
 
 		// 2) Convert OrionChara's world coordinates to screen coordinates
 		FVector2D ScreenPos;
-		bool bProjected = UGameplayStatics::ProjectWorldToScreen(
-			PC,
+		bool IsProjected = UGameplayStatics::ProjectWorldToScreen(
+			OrionPlayerControllerInstance,
 			// Can lift it up a bit to display text above the head
 			OrionChara->GetActorLocation() + FVector(0.f, 0.f, 100.f),
 			ScreenPos
 		);
 
 		// 3) Draw text on Canvas
-		if (bProjected)
+		if (IsProjected)
 		{
 			// Choose a font, UE has GetLargeFont() / GetMediumFont() etc. by default
 			UFont* RenderFont = GEngine->GetMediumFont();
@@ -277,8 +216,8 @@ void AOrionHUD::DrawHUD()
 
 			Canvas->DrawText(
 				RenderFont,
-				//FStringView(*CombinedText), // <- Pass FString instead of FStringView
-				CombinedText,
+				FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				//CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -289,48 +228,33 @@ void AOrionHUD::DrawHUD()
 			// If you need to change to another color, call SetDrawColor(...) again and then draw
 		}
 	}
+}
 
-	// ==========================================================
-
-	// 如果没有 PlayerOwner 或无法获得鼠标位置，就不绘制
-	if (!PlayerOwner)
-	{
-		return;
-	}
-
-	if (!bShowActorInfo)
-	{
-		return;
-	}
+void AOrionHUD::TickShowInfoAtMouse()
+{
+	if (!PlayerOwner || !bShowActorInfo) return;
 
 	float MouseX = 0.f, MouseY = 0.f;
-	bool bGotMouse = PlayerOwner->GetMousePosition(MouseX, MouseY);
 
-	if (!bGotMouse)
-	{
-		return;
-	}
+	if (const bool bGotMouse = PlayerOwner->GetMousePosition(MouseX, MouseY); !bGotMouse) return;
 
-	float XOffset = 15.f;
-	float YOffsetBetweenLines = 20.f;
-
-	UFont* RenderFont = GEngine->GetMediumFont();
+	const UFont* RenderFont = GEngine->GetMediumFont();
 
 	float CurrentY = MouseY;
 	for (const FString& Line : InfoLines)
 	{
+		constexpr float YOffsetBetweenLines = 20.f;
+		constexpr float XOffset = 15.f;
+
 		Canvas->SetDrawColor(FColor::Red);
 
-		// Canvas->DrawText 原型（UE5.5）：
-		// float DrawText(const UFont* Font, const FString& Text, float X, float Y, float ScaleX=1.f, float ScaleY=1.f, const FFontRenderInfo& RenderInfo=FFontRenderInfo());
 		FFontRenderInfo RenderInfo;
 		RenderInfo.bEnableShadow = true;
 
-		// 绘制
 		Canvas->DrawText(
 			RenderFont,
-			//FStringView(*Line), // <- 这里直接传 FString
-			Line,
+			FStringView(*Line),
+			//Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,
@@ -342,24 +266,22 @@ void AOrionHUD::DrawHUD()
 	}
 }
 
+
+// Called by PlayerController when Hovering over an Actor
 void AOrionHUD::ShowInfoAtMouse(const TArray<FString>& InLines)
 {
 	InfoLines = InLines;
 }
 
-void AOrionHUD::InitCharaInfoPanel()
+void AOrionHUD::ShowCharaInfoPanel() const
 {
-	if (WB_CharaInfoPanel)
+	if (CharaInfoPanel)
 	{
-		CharaInfoPanel = CreateWidget<UOrionUserWidgetCharaInfo>(GetWorld(), WB_CharaInfoPanel);
-		if (CharaInfoPanel)
-		{
-			CharaInfoPanel->AddToViewport();
-		}
+		CharaInfoPanel->SetVisibility(ESlateVisibility::Visible);
 	}
 }
 
-void AOrionHUD::HideCharaInfoPanel()
+void AOrionHUD::HideCharaInfoPanel() const
 {
 	if (CharaInfoPanel)
 	{
@@ -368,20 +290,13 @@ void AOrionHUD::HideCharaInfoPanel()
 	}
 }
 
-void AOrionHUD::ShowCharaInfoPanel()
-{
-	if (CharaInfoPanel)
-	{
-		CharaInfoPanel->SetVisibility(ESlateVisibility::Visible);
-	}
-}
+/* Building UI */
 
 void AOrionHUD::ShowBuildingMenu()
 {
-	UE_LOG(LogTemp, Log, TEXT("Show Building Menu"));
-
 	if (!WB_BuildingMenu)
 	{
+		UE_LOG(LogTemp, Error, TEXT("OrionHUD::ShowBuildingMenu: WB_BuildingMenu has not been set in Editor."));
 		return;
 	}
 
@@ -390,7 +305,7 @@ void AOrionHUD::ShowBuildingMenu()
 
 	if (BuildingMenu)
 	{
-		BuildingMenu->InitBuildingMenu(BuildingMenuOptions);
+		BuildingMenu->InitBuildingMenu(BuildingManagerInstance->OrionDataBuildings);
 
 		BuildingMenu->OnBuildingOptionSelected.BindLambda(
 			[&](int32 InBuildingId, bool bIsChecked)
@@ -414,8 +329,6 @@ void AOrionHUD::ShowBuildingMenu()
 
 void AOrionHUD::HideBuildingMenu()
 {
-	UE_LOG(LogTemp, Log, TEXT("Hide Building Menu"));
-
 	if (BuildingMenu)
 	{
 		BuildingMenu->RemoveFromParent();

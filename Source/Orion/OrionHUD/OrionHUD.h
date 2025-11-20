@@ -6,17 +6,14 @@
 #include "GameFramework/HUD.h"
 #include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
-#include "Orion/OrionGlobals/OrionDataBuilding.h"
 #include "OrionHUD.generated.h"
 
-DECLARE_DELEGATE(FOnViewLevelUp);
-DECLARE_DELEGATE(FOnViewLevelDown);
+class AOrionPlayerController;
+class UOrionBuildingManager;
 
 DECLARE_DELEGATE_TwoParams(FOnBuildingOptionSelected, int32, bool);
 DECLARE_DELEGATE_OneParam(FOnToggleDemolishMode, bool);
 
-//DECLARE_DELEGATE(FOnSaveGame);
-//DECLARE_DELEGATE(FOnLoadGame);
 
 UCLASS()
 class ORION_API AOrionHUD : public AHUD
@@ -27,14 +24,29 @@ public:
 	virtual void DrawHUD() override;
 
 	virtual void BeginPlay() override;
+	void TickCharaInfoPanel();
 
 	virtual void Tick(float DeltaTime) override;
 
-	/* Building Menu */
 
-	FOnBuildingOptionSelected OnBuildingOptionSelected;
-	FOnToggleDemolishMode OnToggleDemolishMode;
+	/* Reference to External Game Resources */
+	UPROPERTY()
+	UOrionBuildingManager* BuildingManagerInstance;
 
+	UPROPERTY()
+	AOrionPlayerController* OrionPlayerControllerInstance;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
+	TSubclassOf<UOrionUserWidgetUIBase> WB_DeveloperUIBase;// Developer UI Base
+
+	UPROPERTY(EditAnywhere, Category = "Config (Non-null)")
+	TSubclassOf<UOrionUserWidgetCharaInfo> WB_CharaInfoPanel;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null")
+	TSubclassOf<UUserWidget> WB_PlayerOperationMenu;
+
+	UPROPERTY(Transient)
+	UOrionUserWidgetCharaInfo* CharaInfoPanel = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
 	TSubclassOf<UOrionUserWidgetBuildingMenu> WB_BuildingMenu;
@@ -42,31 +54,12 @@ public:
 	UPROPERTY()
 	UOrionUserWidgetBuildingMenu* BuildingMenu = nullptr;;
 
-	static const TArray<FOrionDataBuilding> BuildingMenuOptions;
-
-	static const TMap<int32, FOrionDataBuilding> BuildingMenuOptionsMap;
-
-
-	/* Developer UI Base */
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-	TSubclassOf<UOrionUserWidgetUIBase> WB_DeveloperUIBase;
-
-	FOnViewLevelUp OnViewLevelUp;
-	FOnViewLevelUp OnViewLevelDown;
-	//FOnSaveGame OnSaveGame;
-	//FOnLoadGame OnLoadGame;
-
-
 	/* Player Operation Menu */
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
-	TSubclassOf<UUserWidget> WB_PlayerOperationMenu;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blueprint Use Only")
 	TArray<FName> ArrOperationAvailable;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Blueprint Use Only")
 	FHitResult PlayerOperationSpawnReference;
 
 	void ShowPlayerOperationMenu(
@@ -75,34 +68,36 @@ public:
 		const FHitResult& HitResult = FHitResult(),
 		const TArray<FString>& ArrOptionNames = TArray<FString>()
 	);
+	void TickDrawOrionActorInfoInPlace() const;
+	void TickShowInfoAtMouse();
 
-	/* Chara Info Dashboard */
+	/* Chara Info Panel */
 
-	UFUNCTION(BlueprintCallable, Category = "UI")
-	void InitCharaInfoPanel();
+	UFUNCTION(BlueprintCallable, Category = "Blueprint Use Only")
+	void ShowCharaInfoPanel() const;
 
-	UFUNCTION(BlueprintCallable, Category = "UI")
-	void ShowCharaInfoPanel();
-	void ShowBuildingMenu();
-	void HideBuildingMenu();
+	UFUNCTION(BlueprintCallable, Category = "Blueprint Use Only")
+	void HideCharaInfoPanel() const;
 
+	bool IsShowCharaInfoPanel = false;
+	bool IsPreviousShowCharaInfoPanel = false;
 
-	UFUNCTION(BlueprintCallable, Category = "UI")
-	void HideCharaInfoPanel();
-
-	UPROPERTY(EditAnywhere, Category = "UI")
-	TSubclassOf<UOrionUserWidgetCharaInfo> WB_CharaInfoPanel;
-
-	UPROPERTY(Transient)
-	UOrionUserWidgetCharaInfo* CharaInfoPanel = nullptr;
-
-	bool bShowCharaInfoPanel = false;
-	bool PreviousbShowCharaInfoPanel = false;
-	AOrionChara* InfoChara = nullptr;
+	UPROPERTY()
+	TWeakObjectPtr<AOrionChara> InfoChara = nullptr;
 	FString PreviousInfoChara = "";
 
-	/* OrionActor Hoving Info Panel */
+	/* OrionActor Hovering Info Panel */
 	TArray<FString> InfoLines;
-	bool bShowActorInfo;
+	bool bShowActorInfo = false;
 	void ShowInfoAtMouse(const TArray<FString>& InLines);
+
+
+	/* Building Menu */
+
+	FOnBuildingOptionSelected OnBuildingOptionSelected;
+	FOnToggleDemolishMode OnToggleDemolishMode;
+
+
+	void ShowBuildingMenu();
+	void HideBuildingMenu();
 };

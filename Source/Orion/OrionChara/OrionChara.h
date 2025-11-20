@@ -1,7 +1,7 @@
 ﻿#pragma once
 
 // OrionChara.h
-
+#include <vector>
 #include "AIController.h"
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
@@ -116,7 +116,7 @@ public:
 	{
 		if (!Actions.IsEmpty())
 		{
-			Actions.RemoveAt(0);
+			Actions.RemoveAt(0, 1, EAllowShrinking::Yes);
 		}
 	}
 };

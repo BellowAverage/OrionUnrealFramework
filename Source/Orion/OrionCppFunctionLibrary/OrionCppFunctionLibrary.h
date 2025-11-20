@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Containers/ContainersFwd.h"
 
 /**
  * 监听元素变动的 TArray 包装类
@@ -82,9 +83,9 @@ public:
 	}
 
 	/** Remove 系列 */
-	FORCEINLINE void RemoveAt(int32 Index, int32 Count = 1, bool bAllowShrink = true)
+	FORCEINLINE void RemoveAt(int32 Index, int32 Count = 1, EAllowShrinking AllowShrinking = EAllowShrinking::Yes)
 	{
-		Data.RemoveAt(Index, Count, bAllowShrink);
+		Data.RemoveAt(Index, Count, AllowShrinking);
 		Broadcast(TEXT("RemoveAt"));
 	}
 

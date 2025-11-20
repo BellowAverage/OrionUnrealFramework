@@ -54,18 +54,20 @@ public:
 			ButtonSelect->SetVisibility(ESlateVisibility::Visible);
 		}
 
-		bIsEnabled = true;
-		bIsFocusable = true;
+		SetIsEnabled(true);
+		SetIsFocusable(true);
 	}
 
 	void SetSelected(bool bSelected)
 	{
 		if (ButtonSelect)
 		{
-			ButtonSelect->WidgetStyle.Normal.TintColor =
+			FButtonStyle Style = ButtonSelect->GetStyle();
+			Style.Normal.TintColor =
 				bSelected
 					? FLinearColor(0, 0.5f, 1, 0.8f)
 					: FLinearColor::Transparent;
+			ButtonSelect->SetStyle(Style);
 		}
 	}
 

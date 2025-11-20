@@ -1,9 +1,9 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 #include "Orion/OrionComponents/OrionStructureComponent.h"
-#include "Orion/OrionGlobals/EOrionStructure.h"
+#include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
-#include "Components/ArrowComponent.h"
-#include "Components/BoxComponent.h"
+// #include "Components/ArrowComponent.h"
+// #include "Components/BoxComponent.h"
 class UPrimitiveComponent;
 
 

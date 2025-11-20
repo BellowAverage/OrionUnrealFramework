@@ -7,6 +7,22 @@
 AOrionActorProduction::AOrionActorProduction()
 {
 	PrimaryActorTick.bCanEverTick = true;
+
+}
+
+void AOrionActorProduction::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	if (!InventoryComp)
+	{
+		return;
+	}
+	if (ProductionCategory == EProductionCategory::Bullets)
+	{
+		AvailableInventoryMap = { {2, 100}, {3, 2000} }; // 原料 2，上限 100；成品 3，上限 2000
+		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
+		UE_LOG(LogTemp, Warning, TEXT("[OrionActorProduction] OnConstruction set AvailableInventoryMap for Bullets Production"));
+	}
 }
 
 void AOrionActorProduction::BeginPlay()
@@ -18,13 +34,7 @@ void AOrionActorProduction::BeginPlay()
 		return;
 	}
 
-	if (ProductionCategory == EProductionCategory::Bullets)
-	{
-		AvailableInventoryMap = {{2, 100}, {3, 2000}}; // 原料 2，上限 100；成品 3，上限 2000
-		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
-	}
 }
-
 
 void AOrionActorProduction::Tick(float DeltaTime)
 {

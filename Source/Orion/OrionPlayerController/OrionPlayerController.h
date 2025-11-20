@@ -16,8 +16,6 @@ class AOrionStructureFoundation;
 class AOrionStructureWall;
 class AOrionStructure;
 
-//DECLARE_DELEGATE_OneParam(FOnOrionActorSelectionChanged, AOrionActor*);
-DECLARE_DELEGATE_OneParam(FOnToggleBuildingMode, bool);
 
 UENUM(BlueprintType)
 enum class EOrionInputMode : uint8
@@ -52,11 +50,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
-
-	/* Delegation */
-
-	//FOnOrionActorSelectionChanged OnOrionActorSelectionChanged;
-	FOnToggleBuildingMode OnToggleBuildingMode;
 
 	/* Cached Cast Pointers */
 

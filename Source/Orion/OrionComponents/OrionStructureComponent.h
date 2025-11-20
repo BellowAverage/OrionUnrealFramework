@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
-#include "Orion/OrionGlobals/EOrionStructure.h"
 #include "OrionStructureComponent.generated.h"
 
 

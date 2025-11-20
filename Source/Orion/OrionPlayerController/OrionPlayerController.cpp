@@ -15,7 +15,6 @@
 #include "Orion/OrionHUD/OrionHUD.h"
 #include "Orion/OrionActor/OrionActor.h"
 #include "Orion/OrionGameMode/OrionGameMode.h"
-#include "Orion/OrionGlobals/OrionDataBuilding.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 
 // forward declared in .h
@@ -68,22 +67,6 @@ void AOrionPlayerController::SetupInputComponent()
 	}
 }
 
-/*void AOrionPlayerController::QuickSave()
-{
-	if (auto* GI = GetGameInstance<UOrionGameInstance>())
-	{
-		GI->SaveGame("Developer");
-	}
-}
-
-void AOrionPlayerController::QuickLoad()
-{
-	if (auto* GI = GetGameInstance<UOrionGameInstance>())
-	{
-		GI->LoadGame("Developer");
-	}
-}*/
-
 void AOrionPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -109,24 +92,6 @@ void AOrionPlayerController::BeginPlay()
 		UE_LOG(LogTemp, Error, TEXT("Failed to get OrionBuildingManager subsystem!"));
 	}
 
-	if (OrionHUD)
-	{
-		OrionHUD->OnViewLevelUp.BindLambda([this]()
-		{
-			++ViewLevel;
-			UE_LOG(LogTemp, Log, TEXT("View Level Up"));
-		});
-
-		OrionHUD->OnViewLevelDown.BindLambda([this]() 
-		{
-			if (ViewLevel > 0)
-			{
-				--ViewLevel;
-				UE_LOG(LogTemp, Log, TEXT("View Level Down"));
-			}
-		});
-	}
-
 	/* Bind Custom Events */
 
 	OrionCharaSelection.OnArrayChanged.AddUObject(this, &AOrionPlayerController::OnOrionCharaSelectionChanged);
@@ -140,7 +105,7 @@ void AOrionPlayerController::BeginPlay()
 
 void AOrionPlayerController::SwitchFromPlacingStructures(int32 InBuildingId, bool bIsChecked)
 {
-	if (const FOrionDataBuilding* FoundInfo = OrionHUD->BuildingMenuOptionsMap.Find(InBuildingId))
+	if (const FOrionDataBuilding* FoundInfo = BuildingManager->OrionDataBuildingsMap.Find(InBuildingId))
 	{
 		TSubclassOf<AActor> NewBP = LoadClass<AActor>(
 			nullptr,
@@ -257,7 +222,9 @@ void AOrionPlayerController::OnBPressed()
 		EmptyOrionCharaSelection(OrionCharaSelection);
 
 		CurrentInputMode = EOrionInputMode::Building;
-		OnToggleBuildingMode.ExecuteIfBound(true);
+
+		OrionHUD->ShowBuildingMenu();
+
 		if (StructureSelected)
 		{
 			StructureSelected = nullptr;
@@ -265,6 +232,16 @@ void AOrionPlayerController::OnBPressed()
 	}
 	else
 	{
+
+		if (PreviewStructure)
+		{
+			PreviewStructure->Destroy();
+			PreviewStructure = nullptr;
+		}
+		BuildBP = nullptr;
+		bPlacingStructure = false;
+		bStructureSnapped = false;
+
 		if (CachedOrionCharaSelectionInBuilding.Num() > 0)
 		{
 			for (auto& EachChara : CachedOrionCharaSelectionInBuilding)
@@ -274,9 +251,10 @@ void AOrionPlayerController::OnBPressed()
 
 			CachedOrionCharaSelectionInBuilding.Empty();
 		}
+		
 
 		CurrentInputMode = EOrionInputMode::Default;
-		OnToggleBuildingMode.ExecuteIfBound(false);
+		OrionHUD->HideBuildingMenu();
 	}
 }
 
@@ -297,12 +275,12 @@ void AOrionPlayerController::OnOrionCharaSelectionChanged(FName OperationName)
 
 	if (OrionCharaSelection.Num() == 1)
 	{
-		OrionHUD->bShowCharaInfoPanel = true;
+		OrionHUD->IsShowCharaInfoPanel = true;
 		OrionHUD->InfoChara = OrionCharaSelection[0];
 	}
 	else
 	{
-		OrionHUD->bShowCharaInfoPanel = false;
+		OrionHUD->IsShowCharaInfoPanel = false;
 		OrionHUD->InfoChara = nullptr;
 	}
 }
