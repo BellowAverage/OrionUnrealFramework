@@ -95,6 +95,8 @@ public:
 	static const TArray<FOrionDataBuilding> OrionDataBuildings;
 	static const TMap<int32, FOrionDataBuilding> OrionDataBuildingsMap;
 
+	static const TMap<EOrionStructure, FVector> StructureOriginalScaleMap;
+
 
 	UPROPERTY()
 	TArray<FOrionGlobalSocket> SocketsRaw;

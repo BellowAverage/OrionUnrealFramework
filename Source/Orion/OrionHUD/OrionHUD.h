@@ -11,10 +11,6 @@
 class AOrionPlayerController;
 class UOrionBuildingManager;
 
-DECLARE_DELEGATE_TwoParams(FOnBuildingOptionSelected, int32, bool);
-DECLARE_DELEGATE_OneParam(FOnToggleDemolishMode, bool);
-
-
 UCLASS()
 class ORION_API AOrionHUD : public AHUD
 {

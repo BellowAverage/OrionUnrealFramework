@@ -14,7 +14,7 @@ void AOrionChara::InitOrionCharaMovement()
 
 		// Configure character movement
 		MovementComponent->bOrientRotationToMovement = true;
-		MovementComponent->RotationRate = FRotator(0.f, 270.f, 0.f);
+		MovementComponent->RotationRate = FRotator(0.f, 270.f * 1.2f, 0.f);
 		MovementComponent->bConstrainToPlane = true;
 		MovementComponent->bSnapToPlaneAtStart = true;
 

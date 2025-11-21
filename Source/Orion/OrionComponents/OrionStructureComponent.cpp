@@ -32,6 +32,9 @@ UOrionStructureComponent::UOrionStructureComponent()
 	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = false;
 	StructureMesh = nullptr;
+	bAutoRegisterSockets = true;
+	BIsPreviewStructure = true;
+	bIsAdjustable = false;
 
 	// ...
 }
@@ -41,47 +44,45 @@ void UOrionStructureComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	/*if (OrionStructureType == EOrionStructure::None)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[StructureComponent] StructureType is None!"));
-		return;
-	}*/
+	BuildingManager = GetWorld()->GetGameInstance()->GetSubsystem<UOrionBuildingManager>();
 
-	BuildingManager = GetWorld()->GetGameInstance()
-		                  ? GetWorld()->GetGameInstance()->GetSubsystem<UOrionBuildingManager>()
-		                  : nullptr;
+	checkf(BuildingManager, TEXT("OrionStructureComponent::BeginPlay: Unable to find Building Manager Reference. "))
 
-	if (!BuildingManager)
+
+	if (TArray<UActorComponent*> StructureMeshActorComponents = GetOwner()->GetComponentsByTag(UStaticMeshComponent::StaticClass(), FName("StructureMesh")); StructureMeshActorComponents.Num() > 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[StructureComponent] BuildingManager not found!"));
-		return;
+		StructureMesh = Cast<UStaticMeshComponent>(StructureMeshActorComponents[0]);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("OrionStructureComponent::BeginPlay: Unable to get StructureMesh StaticMeshComponent. "));
 	}
 
-	if (!StructureMesh)
-	{
-		TArray<UActorComponent*> Tagged =
-			GetOwner()->GetComponentsByTag(UStaticMeshComponent::StaticClass(),
-			                               FName("StructureMesh"));
+	// AOrionPlayerController* OrionPC = Cast<AOrionPlayerController>(GetWorld()->GetFirstPlayerController());
 
-		if (Tagged.Num() > 0)
-		{
-			StructureMesh = Cast<UStaticMeshComponent>(Tagged[0]);
-		}
+	if (bAutoRegisterSockets)
+	{
+		SocketsRegistryHandler();
 	}
+}
 
+void UOrionStructureComponent::SocketsRegistryHandler() const
+{
+	const FVector StructureLocation = StructureMesh->GetComponentLocation();
+	const FRotator StructureRotation = StructureMesh->GetComponentRotation();
 
-	AOrionPlayerController* OrionPC =
-		Cast<AOrionPlayerController>(GetWorld()->GetFirstPlayerController());
-
-	/*if (OrionPC && OrionPC->bPlacingStructure)
+	switch (OrionStructureType)
 	{
-		OrionPC->bPlacingStructure = false;
-		return;
-	}*/
-
-	if (bAutoRegisterSockets && BuildingManager)
-	{
-		RegisterAllSockets();
+	case EOrionStructure::BasicSquareFoundation: RegisterSquareFoundationSockets(StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::BasicTriangleFoundation: RegisterTriangleFoundationSockets(
+		StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::Wall: RegisterWallSockets(StructureLocation, StructureRotation);
+		break;
+	case EOrionStructure::DoubleWall: RegisterDoubleWallSockets(StructureLocation, StructureRotation);
+		break;
+	default: break;
 	}
 }
 
@@ -360,28 +361,6 @@ void UOrionStructureComponent::RegisterDoubleWallSockets(const FVector& Structur
 				GetOwner()
 			);
 		}
-	}
-}
-
-void UOrionStructureComponent::RegisterAllSockets() const
-{
-	if (!StructureMesh || !BuildingManager) { return; }
-
-	const FVector StructureLocation = StructureMesh->GetComponentLocation();
-	const FRotator StructureRotation = StructureMesh->GetComponentRotation();
-
-	switch (OrionStructureType)
-	{
-	case EOrionStructure::BasicSquareFoundation: RegisterSquareFoundationSockets(StructureLocation, StructureRotation);
-		break;
-	case EOrionStructure::BasicTriangleFoundation: RegisterTriangleFoundationSockets(
-			StructureLocation, StructureRotation);
-		break;
-	case EOrionStructure::Wall: RegisterWallSockets(StructureLocation, StructureRotation);
-		break;
-	case EOrionStructure::DoubleWall: RegisterDoubleWallSockets(StructureLocation, StructureRotation);
-		break;
-	default: break;
 	}
 }
 

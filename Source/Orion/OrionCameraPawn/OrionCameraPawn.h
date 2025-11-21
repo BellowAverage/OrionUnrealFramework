@@ -77,7 +77,7 @@ private:
 
 	AActor* FollowTarget = nullptr;
 
-	bool bIsFollowing = false;
+	bool IsFollowing = false;
 
 	void ToggleFollow();
 	void StopFollowIfTargetInvalid();

@@ -68,6 +68,14 @@ const TMap<int32, FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildingsM
 
 }();
 
+const TMap<EOrionStructure, FVector> UOrionBuildingManager::StructureOriginalScaleMap = {
+	{EOrionStructure::BasicSquareFoundation, FVector(1.25f, 1.25f, 1.0f)},
+	{EOrionStructure::BasicTriangleFoundation, FVector(1.25f, 1.25f, 1.25f)},
+	{EOrionStructure::Wall, FVector(1.0f, 1.25f, 1.0f)},
+	{EOrionStructure::DoubleWall, FVector(1.0f, 1.25f, 1.0f)},
+	{EOrionStructure::BasicRoof, FVector(1.25f, 1.25f, 1.0f)},
+};
+
 UOrionBuildingManager::UOrionBuildingManager()
 {
 
@@ -301,8 +309,13 @@ void UOrionBuildingManager::RegisterSocket(const FVector& Loc, const FRotator& R
 
 	const FOrionGlobalSocket New(Loc, Rot, Kind, bOccupied, Owner, Scale);
 
+	// Add to raw list
 	SocketsRaw.Add(New);
+
+	// Add to unique list
 	AddUniqueSocket(New);
+
+
 	RefreshDebug(World);
 }
 

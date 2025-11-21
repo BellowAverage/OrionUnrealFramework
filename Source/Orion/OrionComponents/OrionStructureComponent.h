@@ -16,7 +16,7 @@ class ORION_API UOrionStructureComponent : public UActorComponent
 
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
-	bool BIsPreviewStructure = true;
+	bool BIsPreviewStructure;
 
 
 	UOrionStructureComponent();
@@ -26,8 +26,10 @@ public:
 	                           FActorComponentTickFunction* ThisTickFunction) override;
 
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	bool bAutoRegisterSockets = true;
+	UPROPERTY()
+	UStaticMeshComponent* StructureMesh;
+
+
 
 	void RegisterSquareFoundationSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterTriangleFoundationSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
@@ -36,21 +38,21 @@ public:
 	void RegisterAllSockets() const;
 
 	/* Orion Structure Rule Type */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
 	EOrionStructure OrionStructureType;
 
-	UPROPERTY()
-	UStaticMeshComponent* StructureMesh;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
 	bool bForceSnapOnGrid = false;
 
 	static const TMap<EOrionStructure, FVector> StructureBoundMap;
 
 	static FVector GetStructureBounds(const EOrionStructure Type);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
 	bool bIsAdjustable = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
+	bool bAutoRegisterSockets;
 
 private:
 	UPROPERTY()

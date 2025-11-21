@@ -16,19 +16,7 @@
 #include "Orion/OrionActor/OrionActor.h"
 #include "Orion/OrionGameMode/OrionGameMode.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
-
-// forward declared in .h
-#include "Orion/OrionGameInstance/OrionGameInstance.h"
 #include "Orion/OrionStructure/OrionStructureFoundation.h"
-
-const TMap<EOrionStructure, FVector> AOrionPlayerController::StructureOriginalScaleMap = {
-	{EOrionStructure::BasicSquareFoundation, FVector(1.25f, 1.25f, 1.0f)},
-	{EOrionStructure::BasicTriangleFoundation, FVector(1.25f, 1.25f, 1.25f)},
-	{EOrionStructure::Wall, FVector(1.0f, 1.25f, 1.0f)},
-	{EOrionStructure::DoubleWall, FVector(1.0f, 1.25f, 1.0f)},
-	{EOrionStructure::BasicRoof, FVector(1.25f, 1.25f, 1.0f)},
-};
-
 
 AOrionPlayerController::AOrionPlayerController()
 {
@@ -58,9 +46,6 @@ void AOrionPlayerController::SetupInputComponent()
 		InputComponent->BindAction("Key7Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey7Pressed);
 		InputComponent->BindAction("Key8Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey8Pressed);
 
-		/*InputComponent->BindAction("QuickSave", IE_Pressed, this, &AOrionPlayerController::QuickSave);
-		InputComponent->BindAction("QuickLoad", IE_Pressed, this, &AOrionPlayerController::QuickLoad);*/
-
 		InputComponent->BindAction("RightMouseClick", IE_Released, this, &AOrionPlayerController::OnRightMouseUp);
 		InputComponent->BindAction("ShiftPress", IE_Pressed, this, &AOrionPlayerController::OnShiftPressed);
 		InputComponent->BindAction("ShiftPress", IE_Released, this, &AOrionPlayerController::OnShiftReleased);
@@ -76,64 +61,48 @@ void AOrionPlayerController::BeginPlay()
 	FInputModeGameAndUI InputMode;
 	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
+	SetIgnoreLookInput(true);
 
-	/* Init Variables */
+	/* Acquire External Resources References */
 
 	OrionHUD = Cast<AOrionHUD>(GetHUD());
+	checkf(OrionHUD, TEXT("OrionPlayerController::BeginPlay: Unable to acquire OrionHUD reference. "));
 
-	if (OrionHUD == nullptr)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Cast to OrionHUD failed!"));
-	}
+	BuildingManager = GetGameInstance() ? GetGameInstance()->GetSubsystem<UOrionBuildingManager>() : nullptr;
+	checkf(BuildingManager, TEXT("OrionPlayerController::BeginPlay: Unable to acquire BuildingManager reference. "));
 
-	if (BuildingManager = GetGameInstance() ? GetGameInstance()->GetSubsystem<UOrionBuildingManager>() : nullptr;
-		!BuildingManager)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to get OrionBuildingManager subsystem!"));
-	}
 
 	/* Bind Custom Events */
 
 	OrionCharaSelection.OnArrayChanged.AddUObject(this, &AOrionPlayerController::OnOrionCharaSelectionChanged);
-
-	if (OrionHUD)
-	{
-		OrionHUD->OnBuildingOptionSelected.BindUObject(this, &AOrionPlayerController::SwitchFromPlacingStructures);
-		OrionHUD->OnToggleDemolishMode.BindUObject(this, &AOrionPlayerController::OnToggleDemolishingMode);
-	}
 }
 
-void AOrionPlayerController::SwitchFromPlacingStructures(int32 InBuildingId, bool bIsChecked)
+void AOrionPlayerController::SwitchFromPlacingStructures(const int32 InBuildingId, const bool IsChecked)
 {
+	if (!OrionHUD->BuildingMenu)
+	{
+		UE_LOG(LogTemp, Error, TEXT("OrionPlayerController::BeginPlay: OrionHUD BuildingMenu has not been initialized. "));
+		return;
+	}
+
 	if (const FOrionDataBuilding* FoundInfo = BuildingManager->OrionDataBuildingsMap.Find(InBuildingId))
 	{
-		TSubclassOf<AActor> NewBP = LoadClass<AActor>(
-			nullptr,
-			*FoundInfo->BuildingBlueprintReference
-		);
-		if (!NewBP)
-		{
-			UE_LOG(LogTemp, Error, TEXT("Failed to load Blueprint class: %s"), *FoundInfo->BuildingBlueprintReference);
-			return;
-		}
+		const TSubclassOf<AActor> StructureBlueprintSubclass = LoadClass<AActor>(nullptr, *FoundInfo->BuildingBlueprintReference);
 
-		UWorld* World = GetWorld();
-		if (!World)
+		if (!StructureBlueprintSubclass)
 		{
+			UE_LOG(LogTemp, Error, TEXT("OrionPlayerController::SwitchFromPlacingStructure: Failed to load Blueprint class: %s"), *FoundInfo->BuildingBlueprintReference);
 			return;
 		}
 
 		// Exit demolish mode if it was active
-		if (bDemolishingMode)
+		if (IsDemolishingMode)
 		{
-			if (OrionHUD && OrionHUD->BuildingMenu)
-			{
-				OrionHUD->BuildingMenu->CheckBoxDemolish->SetCheckedState(ECheckBoxState::Unchecked);
-			}
+			OrionHUD->BuildingMenu->CheckBoxDemolish->SetCheckedState(ECheckBoxState::Unchecked);
 		}
 
 		// Deselect → Destroy existing preview and exit placement mode
-		if (!bIsChecked)
+		if (!IsChecked)
 		{
 			if (PreviewStructure)
 			{
@@ -141,8 +110,8 @@ void AOrionPlayerController::SwitchFromPlacingStructures(int32 InBuildingId, boo
 				PreviewStructure = nullptr;
 			}
 			BuildBP = nullptr;
-			bPlacingStructure = false;
-			bStructureSnapped = false;
+			IsPlacingStructure = false;
+			IsStructureSnapped = false;
 			return;
 		}
 
@@ -154,20 +123,20 @@ void AOrionPlayerController::SwitchFromPlacingStructures(int32 InBuildingId, boo
 		}
 
 		// Enter placement mode: Generate new preview object
-		BuildBP = NewBP;
+		BuildBP = StructureBlueprintSubclass;
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		PreviewStructure = World->SpawnActor<AActor>(
-			BuildBP,
-			FVector::ZeroVector,
-			FRotator::ZeroRotator,
-			Params
-		);
+		PreviewStructure = GetWorld()->SpawnActor<AActor>(BuildBP, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+
 		if (PreviewStructure)
 		{
 			PreviewStructure->SetActorEnableCollision(false);
-			bPlacingStructure = true;
-			bStructureSnapped = false;
+			IsPlacingStructure = true;
+			IsStructureSnapped = false;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("OrionPlayerController::SwitchFromPlacingStructure: Failed to spawn preview structure actor."));
 		}
 	}
 }
@@ -213,11 +182,11 @@ void AOrionPlayerController::OnKey6Pressed()
 
 void AOrionPlayerController::OnBPressed()
 {
-	UE_LOG(LogTemp, Log, TEXT("B Pressed"));
+	UE_LOG(LogTemp, Log, TEXT("OrionPlayerController::OnBPressed: B Pressed. "));
 
 	if (CurrentInputMode != EOrionInputMode::Building)
 	{
-		CachedOrionCharaSelectionInBuilding = OrionCharaSelection;
+		CachedOrionCharaSelection = OrionCharaSelection;
 
 		EmptyOrionCharaSelection(OrionCharaSelection);
 
@@ -230,7 +199,7 @@ void AOrionPlayerController::OnBPressed()
 			StructureSelected = nullptr;
 		}
 	}
-	else
+	else // CurrentInputMode == EOrionInputMode::Building
 	{
 
 		if (PreviewStructure)
@@ -239,17 +208,17 @@ void AOrionPlayerController::OnBPressed()
 			PreviewStructure = nullptr;
 		}
 		BuildBP = nullptr;
-		bPlacingStructure = false;
-		bStructureSnapped = false;
+		IsPlacingStructure = false;
+		IsStructureSnapped = false;
 
-		if (CachedOrionCharaSelectionInBuilding.Num() > 0)
+		if (CachedOrionCharaSelection.Num() > 0) // Restore previous character selection before entering building mode
 		{
-			for (auto& EachChara : CachedOrionCharaSelectionInBuilding)
+			for (auto& EachChara : CachedOrionCharaSelection)
 			{
 				OrionCharaSelection.Add(EachChara);
 			}
 
-			CachedOrionCharaSelectionInBuilding.Empty();
+			CachedOrionCharaSelection.Empty();
 		}
 		
 
@@ -507,7 +476,7 @@ bool AOrionPlayerController::FindPlacementSurface(const FVector& StartLocation, 
 
 void AOrionPlayerController::UpdateBuildingControl()
 {
-	if (bPlacingStructure && PreviewStructure)
+	if (IsPlacingStructure && PreviewStructure)
 	{
 		UpdatePlacingStructure(BuildBP, PreviewStructure);
 	}
@@ -593,7 +562,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 	/* ---------- ③ Position / snap handling ---------- */
 	if (bFoundBest)
 	{
-		bStructureSnapped = true;
+		IsStructureSnapped = true;
 		SnappedSocketLoc = BestSocket.Location;
 		SnappedSocketRot = BestSocket.Rotation;
 		SnappedSocketScale = BestSocket.Scale;
@@ -607,16 +576,16 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 
 		/*UOrionStructureComponent::StructureBoundMap[Kind]*/
 		/*Preview->SetActorScale3D(SnappedSocketScale * Preview->GetActorScale3D());*/
-		Preview->SetActorScale3D(SnappedSocketScale * StructureOriginalScaleMap[Kind]);
+		Preview->SetActorScale3D(SnappedSocketScale * UOrionBuildingManager::StructureOriginalScaleMap[Kind]);
 	}
 	else
 	{
-		if (bStructureSnapped &&
+		if (IsStructureSnapped &&
 			FVector::DistSquared(DesiredLocation, SnappedSocketLoc) > SnapOutDist * SnapOutDist)
 		{
-			bStructureSnapped = false;
+			IsStructureSnapped = false;
 		}
-		if (!bStructureSnapped)
+		if (!IsStructureSnapped)
 		{
 			Preview->SetActorLocation(AutoPlacedLocation);
 			/*Preview->SetActorLocation(DesiredLocation);*/
@@ -627,7 +596,7 @@ void AOrionPlayerController::UpdatePlacingStructure(TSubclassOf<AActor> /*unused
 void AOrionPlayerController::ConfirmPlaceStructure(const TSubclassOf<AActor>& BPClass,
                                                    AActor*& PreviewPtr)
 {
-	if (!bPlacingStructure || !PreviewPtr)
+	if (!IsPlacingStructure || !PreviewPtr)
 	{
 		return;
 	}
@@ -642,9 +611,9 @@ void AOrionPlayerController::ConfirmPlaceStructure(const TSubclassOf<AActor>& BP
 
 	const EOrionStructure Kind = StructComp->OrionStructureType;
 
-	const FTransform SpawnTransform = bStructureSnapped
+	const FTransform SpawnTransform = IsStructureSnapped
 		                                  ? FTransform(SnappedSocketRot, SnappedSocketLoc,
-		                                               SnappedSocketScale * StructureOriginalScaleMap[Kind])
+		                                               SnappedSocketScale * UOrionBuildingManager::StructureOriginalScaleMap[Kind])
 		                                  : PreviewPtr->GetTransform();
 
 	/*const FTransform PreviewTransform = PreviewPtr->GetTransform();
@@ -657,11 +626,11 @@ void AOrionPlayerController::ConfirmPlaceStructure(const TSubclassOf<AActor>& BP
 
 
 	if (!BuildingManager->ConfirmPlaceStructure(BPClass, PreviewPtr,
-	                                            bStructureSnapped, SpawnTransform))
+	                                            IsStructureSnapped, SpawnTransform))
 	{
 		UE_LOG(LogTemp, Warning,
 		       TEXT("[Building] Failed to place structure. Snapped: %s"),
-		       bStructureSnapped ? TEXT("true") : TEXT("false"));
+		       IsStructureSnapped ? TEXT("true") : TEXT("false"));
 		return;
 	}
 
@@ -672,7 +641,7 @@ void AOrionPlayerController::ConfirmPlaceStructure(const TSubclassOf<AActor>& BP
 			SpawnPreviewStructure(BPClass, PreviewStructure);
 		}));
 
-	bStructureSnapped = false;
+	IsStructureSnapped = false;
 }
 
 void AOrionPlayerController::SpawnPreviewStructure(TSubclassOf<AActor> BPClass,
@@ -691,7 +660,7 @@ void AOrionPlayerController::SpawnPreviewStructure(TSubclassOf<AActor> BPClass,
 	if (OutPtr)
 	{
 		OutPtr->SetActorEnableCollision(false);
-		bPlacingStructure = true;
+		IsPlacingStructure = true;
 	}
 }
 
@@ -702,7 +671,7 @@ void AOrionPlayerController::OnToggleDemolishingMode(const bool bIsChecked)
 		return;
 	}
 
-	if (bPlacingStructure)
+	if (IsPlacingStructure)
 	{
 		if (PreviewStructure)
 		{
@@ -710,12 +679,12 @@ void AOrionPlayerController::OnToggleDemolishingMode(const bool bIsChecked)
 			PreviewStructure = nullptr;
 		}
 		BuildBP = nullptr;
-		bPlacingStructure = false;
-		bStructureSnapped = false;
+		IsPlacingStructure = false;
+		IsStructureSnapped = false;
 		/*return;*/
 	}
 
-	bDemolishingMode = bIsChecked;
+	IsDemolishingMode = bIsChecked;
 	if (bIsChecked)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Demolishing Mode On"));
@@ -800,7 +769,7 @@ void AOrionPlayerController::OnLeftMouseUp()
 			{
 				ConfirmPlaceStructure(BuildBP, PreviewStructure);
 			}
-			else if (bDemolishingMode)
+			else if (IsDemolishingMode)
 			{
 				DemolishStructureUnderCursor();
 			}

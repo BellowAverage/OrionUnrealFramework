@@ -67,13 +67,13 @@ void AOrionCameraPawn::BeginPlay()
 
 		FInputModeGameAndUI InputMode;
 		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
 		PC->SetInputMode(InputMode);
 
-		// --- 新增：禁用 Viewport 的自动捕获（项目默认是 CaptureDuringMouseDown） ---
-		//if (GetWorld()->GetGameViewport())
-		//{
-		//	GetWorld()->GetGameViewport()->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);
-		//}
+		if (UGameViewportClient* ViewportClient = GetWorld()->GetGameViewport())
+		{
+			ViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently);
+		}
 	}
 }
 
@@ -93,7 +93,7 @@ void AOrionCameraPawn::Tick(float DeltaSeconds)
 	StopFollowIfTargetInvalid();
 
 	// 2. 执行位置跟随
-	if (bIsFollowing && FollowTarget)
+	if (IsFollowing && FollowTarget)
 	{
 		const FVector Desired =
 			FollowTarget->GetActorLocation() + FollowOffset;
@@ -154,8 +154,15 @@ void AOrionCameraPawn::StartRotate()
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		PC->bShowMouseCursor = false;
-		PC->SetInputMode(FInputModeGameOnly());
+		PC->bShowMouseCursor = true;
+
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
+
+		if (UGameViewportClient* ViewportClient = GetWorld()->GetGameViewport())
+		{
+			ViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);
+		}
 	}
 }
 
@@ -166,7 +173,16 @@ void AOrionCameraPawn::StopRotate()
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		PC->bShowMouseCursor = true;
-		PC->SetInputMode(FInputModeGameAndUI());
+
+		FInputModeGameAndUI InputMode;
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+		InputMode.SetHideCursorDuringCapture(false);
+		PC->SetInputMode(InputMode);
+
+		if (UGameViewportClient* ViewportClient = GetWorld()->GetGameViewport())
+		{
+			ViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringMouseDown);
+		}
 	}
 }
 
@@ -192,9 +208,9 @@ void AOrionCameraPawn::CameraPitch(float Value)
 
 void AOrionCameraPawn::ToggleFollow()
 {
-	if (bIsFollowing) // 已锁定 → 解除
+	if (IsFollowing) // 已锁定 → 解除
 	{
-		bIsFollowing = false;
+		IsFollowing = false;
 		FollowTarget = nullptr;
 		return;
 	}
@@ -207,7 +223,7 @@ void AOrionCameraPawn::ToggleFollow()
 			FollowTarget = Cast<AActor>(PC->OrionCharaSelection[0]);
 			if (IsValid(FollowTarget))
 			{
-				bIsFollowing = true;
+				IsFollowing = true;
 			}
 		}
 		/*else if (PC->OrionPawnSelection.Num() == 1)
@@ -215,7 +231,7 @@ void AOrionCameraPawn::ToggleFollow()
 			FollowTarget = PC->OrionPawnSelection[0];
 			if (IsValid(FollowTarget))
 			{
-				bIsFollowing = true;
+				IsFollowing = true;
 			}
 		}*/
 	}
@@ -223,9 +239,9 @@ void AOrionCameraPawn::ToggleFollow()
 
 void AOrionCameraPawn::StopFollowIfTargetInvalid()
 {
-	if (bIsFollowing && (!FollowTarget))
+	if (IsFollowing && (!FollowTarget))
 	{
-		bIsFollowing = false;
+		IsFollowing = false;
 		FollowTarget = nullptr;
 	}
 }

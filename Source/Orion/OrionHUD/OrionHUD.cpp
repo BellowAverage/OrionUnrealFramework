@@ -1,9 +1,13 @@
 ﻿#include "OrionHUD.h"
+
+/* UE Utils */
 #include "Engine/Canvas.h"
 #include "Kismet/GameplayStatics.h"
-#include "Orion/OrionChara/OrionChara.h"
 #include "GameFramework/PlayerController.h"
 #include "Blueprint/UserWidget.h"
+
+/* Orion Internals */
+#include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionGameInstance/OrionGameInstance.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
@@ -303,28 +307,24 @@ void AOrionHUD::ShowBuildingMenu()
 	BuildingMenu = CreateWidget<UOrionUserWidgetBuildingMenu>(
 		GetWorld(), WB_BuildingMenu);
 
-	if (BuildingMenu)
-	{
-		BuildingMenu->InitBuildingMenu(BuildingManagerInstance->OrionDataBuildings);
 
-		BuildingMenu->OnBuildingOptionSelected.BindLambda(
-			[&](int32 InBuildingId, bool bIsChecked)
-			{
-				OnBuildingOptionSelected.ExecuteIfBound(InBuildingId, bIsChecked);
-			});
+	BuildingMenu->InitBuildingMenu(BuildingManagerInstance->OrionDataBuildings);
 
-		BuildingMenu->OnToggleDemolishMode.BindLambda(
-			[&](bool bIsChecked)
-			{
-				OnToggleDemolishMode.ExecuteIfBound(bIsChecked);
-			});
+	BuildingMenu->OnBuildingOptionSelected.BindLambda(
+		[&](const int32 InBuildingId, const bool bIsChecked)
+		{
+			OrionPlayerControllerInstance->SwitchFromPlacingStructures(InBuildingId, bIsChecked);
+		});
 
-		BuildingMenu->AddToViewport();
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to create Building Menu!"));
-	}
+	BuildingMenu->OnToggleDemolishMode.BindLambda(
+		[&](const bool bIsChecked)
+		{
+			OrionPlayerControllerInstance->OnToggleDemolishingMode(bIsChecked);
+		});
+
+	BuildingMenu->AddToViewport();
+
+
 }
 
 void AOrionHUD::HideBuildingMenu()

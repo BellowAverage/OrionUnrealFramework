@@ -40,7 +40,7 @@ class ORION_API AOrionPlayerController : public APlayerController
 
 public:
 	AOrionPlayerController();
-	void OnKey8Pressed();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Build")
 	TSubclassOf<AActor> DoubleWallBP = nullptr;
 
@@ -91,7 +91,7 @@ public:
 	}
 
 	UPROPERTY()
-	TArray<AOrionChara*> CachedOrionCharaSelectionInBuilding = {};
+	TArray<AOrionChara*> CachedOrionCharaSelection = {};
 
 	UFUNCTION(BlueprintCallable, Category = "OrionChara Selection")
 	TArray<AOrionChara*> GetOrionCharaSelection() const
@@ -126,9 +126,7 @@ public:
 	bool FindPlacementSurface(const FVector& StartLocation, FVector& OutSurfaceLocation,
 	                          FVector& OutSurfaceNormal) const;
 
-	void SwitchFromPlacingStructures(int32 InBuildingId, bool bIsChecked);
-
-	static const TMap<EOrionStructure, FVector> StructureOriginalScaleMap;
+	void SwitchFromPlacingStructures(int32 InBuildingId, bool IsChecked);
 
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
 	float SnapInDist = 200.f;
@@ -151,14 +149,14 @@ public:
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManager = nullptr;
 
-	bool bPlacingStructure = false;
-	bool bStructureSnapped = false;
+	bool IsPlacingStructure = false;
+	bool IsStructureSnapped = false;
 
 	/* 0. Demolishing Mode */
 
 	void OnToggleDemolishingMode(bool bIsChecked);
 	void SpawnPreviewStructure(TSubclassOf<AActor> BPClass, AActor*& OutPtr);
-	bool bDemolishingMode = false;
+	bool IsDemolishingMode = false;
 	void DemolishStructureUnderCursor() const;
 
 	/* 1. Place Foundation Structure */
@@ -190,6 +188,7 @@ public:
 	void OnKey5Pressed();
 	void OnKey6Pressed();
 	void OnKey7Pressed();
+	void OnKey8Pressed();
 
 
 	/* Niagara Interaction Effect */
