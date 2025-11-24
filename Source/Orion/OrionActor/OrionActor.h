@@ -3,17 +3,19 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-#include <vector>
 #include <algorithm>
-#include "Kismet/GameplayStatics.h"
-
 #include "Components/SphereComponent.h"
 #include "GameFramework/Actor.h"
 #include "Orion/OrionComponents/OrionInventoryComponent.h"
+
+// Orion Interfaces
 #include "Orion/OrionInterface/OrionInterfaceSerializable.h"
+
+// Serialization
 #include "Misc/Guid.h"
-/*#include "Orion/OrionComponents/OrionStructureComponent.h"*/
+#include "Orion/OrionInterface/OrionInterfaceHoverable.h"
+
+// UE Reflection
 #include "OrionActor.generated.h"
 
 class UOrionStructureComponent;
@@ -32,7 +34,6 @@ struct FOrionActorFullRecord
 	UPROPERTY(SaveGame)
 	FString ClassPath;
 
-	/* 标记：SerializedBytes.Num() == 0 视为无效 */
 	UPROPERTY(SaveGame)
 	TArray<uint8> SerializedBytes;
 };
@@ -55,12 +56,14 @@ enum class EActorCategory : uint8
 };
 
 UCLASS()
-class ORION_API AOrionActor : public AActor, public IOrionInterfaceSerializable
+class ORION_API AOrionActor : public AActor, public IOrionInterfaceSerializable, public IOrionInterfaceHoverable
 {
 	GENERATED_BODY()
 
 public:
 	AOrionActor();
+
+	virtual TArray<FString> TickShowHoveringInfo() override;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
 	UOrionStructureComponent* StructureComponent = nullptr;

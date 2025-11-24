@@ -83,8 +83,7 @@ public:
 				BuildingOption->OnBuildingOptionSelected.BindLambda(
 					[&](int32 InBuildingId, bool bIsChecked)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("Building Id: %d, Checked: %s"), InBuildingId,
-						       bIsChecked ? TEXT("True") : TEXT("False"));
+						//UE_LOG(LogTemp, Warning, TEXT("Building Id: %d, Checked: %s"), InBuildingId, bIsChecked ? TEXT("True") : TEXT("False"));
 
 						if (CachedBuildingOptions.Num() == BuildingMenuOptions.Num() && bIsChecked)
 						{

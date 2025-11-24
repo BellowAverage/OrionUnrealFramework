@@ -1,7 +1,7 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
-#include "Orion/OrionPlayerController/OrionPlayerController.h"
+
 // #include "Components/ArrowComponent.h"
 // #include "Components/BoxComponent.h"
 class UPrimitiveComponent;
@@ -33,10 +33,14 @@ UOrionStructureComponent::UOrionStructureComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 	StructureMesh = nullptr;
 	bAutoRegisterSockets = true;
-	BIsPreviewStructure = true;
+	
+	// [Fix] 默认为 false (实体)。只有 Controller 生成幽灵时才需手动设为 true。
+	BIsPreviewStructure = false;
+	
 	bIsAdjustable = false;
 
-	// ...
+	// 根据类型设置默认衰减，也可以在蓝图里配
+	StabilityDecay = 0.1f; 
 }
 
 
@@ -58,12 +62,143 @@ void UOrionStructureComponent::BeginPlay()
 		UE_LOG(LogTemp, Error, TEXT("OrionStructureComponent::BeginPlay: Unable to get StructureMesh StaticMeshComponent. "));
 	}
 
-	// AOrionPlayerController* OrionPC = Cast<AOrionPlayerController>(GetWorld()->GetFirstPlayerController());
 
-	if (bAutoRegisterSockets)
+	// 根据类型微调 Decay (如果蓝图没设的话)
+	if (OrionStructureType == EOrionStructure::Wall || OrionStructureType == EOrionStructure::DoubleWall)
+		StabilityDecay = 0.1f; // 墙壁很硬
+	else 
+		StabilityDecay = 0.25f; // 屋顶/地板比较脆
+
+	if (bAutoRegisterSockets && !BIsPreviewStructure)
 	{
 		SocketsRegistryHandler();
+		// 注意：BeginPlay 时不需要手动调 UpdateStability，
+		// 因为 BuildingManager::DelaySpawnNewStructure 里会调。
 	}
+}
+
+
+// ---------------------------------------------------------
+// [Core] 稳定性算法
+// ---------------------------------------------------------	 
+void UOrionStructureComponent::UpdateStability()
+{
+	if (!BuildingManager) return;
+
+	float NewStability = 0.0f;
+
+	// 1. 接地检测 (Anchor = 100%)
+	if (CheckIsTouchingGround())
+	{
+		NewStability = 1.0f;
+	}
+	else
+	{
+		// 2. 获取所有物理连接的邻居
+		TArray<UOrionStructureComponent*> Neighbors = BuildingManager->GetConnectedNeighbors(GetOwner());
+		
+		float MaxNeighborStability = 0.0f;
+		UOrionStructureComponent* BestNeighbor = nullptr;
+
+		for (const UOrionStructureComponent* Neighbor : Neighbors)
+		{
+			if (Neighbor->CurrentStability > MaxNeighborStability)
+			{
+				MaxNeighborStability = Neighbor->CurrentStability;
+				BestNeighbor = const_cast<UOrionStructureComponent*>(Neighbor);
+			}
+		}
+
+		// [Debug] 可视化支撑关系：画一条线指向支撑我的那个邻居
+		if (BestNeighbor && GetWorld())
+		{
+			DrawDebugLine(GetWorld(), GetOwner()->GetActorLocation(), BestNeighbor->GetOwner()->GetActorLocation(), 
+				FColor::Cyan, false, 0.1f, 0, 5.0f);
+		}
+
+		// 3. 计算：最强邻居 - 衰减
+		NewStability = MaxNeighborStability - StabilityDecay;
+	}
+
+	// 4. 钳制范围
+	if (NewStability < 0.0f) NewStability = 0.0f;
+
+	// 5. 只有数值变化了才处理 (防止无限递归)
+	if (!FMath::IsNearlyEqual(CurrentStability, NewStability, 0.001f))
+	{
+		CurrentStability = NewStability;
+
+		UE_LOG(LogTemp, Log, TEXT("[Stability] %s value updated: %.2f"), *GetOwner()->GetName(), CurrentStability);
+
+		// [Debug] 持久化显示稳定性数值 (事件触发)
+		if (GetWorld())
+		{
+			// 使用 -1.0f (Infinite duration) 持久显示
+			DrawDebugString(GetWorld(), FVector(0, 0, 100), 
+				FString::Printf(TEXT("%.2f"), CurrentStability), 
+				GetOwner(), FColor::Blue, -1.0f, /*bDrawShadow=*/true, /*FontScale=*/1.0f);
+		}
+
+		// 6. 崩塌检测
+		if (CurrentStability <= 0.0f)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Stability] %s unstable! Collapsing..."), *GetOwner()->GetName());
+
+			GetOwner()->Destroy();
+		}
+		else
+		{
+			// 7. 传播：通知邻居重新计算
+			for (TArray<UOrionStructureComponent*> Neighbors = BuildingManager->GetConnectedNeighbors(GetOwner()); UOrionStructureComponent* Neighbor : Neighbors)
+			{
+				// 递归调用
+				Neighbor->UpdateStability();
+			}
+		}
+	}
+}
+
+void UOrionStructureComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (EndPlayReason == EEndPlayReason::Destroyed && !BIsPreviewStructure)
+	{
+		// 1. 获取邻居 (必须在 Unregister 之前获取，否则找不到)
+		// 注意：此时我已经不能提供支撑了，但邻居还不知道
+		TArray<UOrionStructureComponent*> Neighbors;
+		if (BuildingManager)
+		{
+			Neighbors = BuildingManager->GetConnectedNeighbors(GetOwner());
+			
+			// 2. 立即从 Grid 移除我的插槽
+			// 这样邻居在下一行重算时，就不会再扫描到我了
+			BuildingManager->UnregisterSockets(GetOwner());
+		}
+
+		// [Fix] 关键：在通知邻居前，先将自己的稳定性归零！
+		// 原因：因为使用的是物理重叠检测，邻居在 UpdateStability 时可能仍然能检测到我（物理碰撞体还没销毁）。
+		// 如果我不归零，邻居会读到我旧的高稳定性数值，从而误判为"支撑依旧存在"，导致不进行连锁更新。
+		CurrentStability = 0.0f;
+
+		// 3. 强制邻居重算
+		for (UOrionStructureComponent* Neighbor : Neighbors)
+		{
+			if (Neighbor && Neighbor->IsValidLowLevel())
+			{
+				// 邻居会发现少了一个支撑 (我)，从而算出更低的值
+				Neighbor->UpdateStability();
+			}
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void UOrionStructureComponent::TickComponent(const float DeltaTime, const ELevelTick TickType,
+                                             FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// ...
 }
 
 void UOrionStructureComponent::SocketsRegistryHandler() const
@@ -75,6 +210,8 @@ void UOrionStructureComponent::SocketsRegistryHandler() const
 	{
 	case EOrionStructure::BasicSquareFoundation: RegisterSquareFoundationSockets(StructureLocation, StructureRotation);
 		break;
+	case EOrionStructure::BasicRoof: RegisterSquareFoundationSockets(StructureLocation, StructureRotation);
+		break;
 	case EOrionStructure::BasicTriangleFoundation: RegisterTriangleFoundationSockets(
 		StructureLocation, StructureRotation);
 		break;
@@ -84,28 +221,6 @@ void UOrionStructureComponent::SocketsRegistryHandler() const
 		break;
 	default: break;
 	}
-}
-
-void UOrionStructureComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	if (EndPlayReason == EEndPlayReason::Destroyed && BuildingManager)
-	{
-		if (UOrionBuildingManager* SafeInitializedBuildingManager =
-			GetOwner()->GetGameInstance()->GetSubsystem<UOrionBuildingManager>())
-		{
-			SafeInitializedBuildingManager->RemoveSocketRegistration(*GetOwner());
-		}
-	}
-
-	Super::EndPlay(EndPlayReason);
-}
-
-void UOrionStructureComponent::TickComponent(float DeltaTime, ELevelTick TickType,
-                                             FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	// ...
 }
 
 void UOrionStructureComponent::RegisterSquareFoundationSockets(const FVector& StructureLocation,
@@ -370,5 +485,47 @@ FVector UOrionStructureComponent::GetStructureBounds(const EOrionStructure Type)
 	{
 		return *BoundVector;
 	}
+	UE_LOG(LogTemp, Error, TEXT("[Error] StructureBounds not found for type %d! Returning ZeroVector. This will cause sockets to spawn at actor center!"), (int32)Type);
 	return FVector::ZeroVector;
+}
+
+bool UOrionStructureComponent::CheckIsTouchingGround() const
+{
+	AActor* Owner = GetOwner();
+	if (!Owner) return false;
+
+	FVector Start = Owner->GetActorLocation();
+	// 向下探测：长度根据地基厚度调整，通常 100cm 足够穿透到地面
+	FVector End = Start - FVector(0.f, 0.f, 100.f);
+
+	FHitResult Hit;
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(Owner); // 忽略自己
+	Params.bTraceComplex = false;
+
+	UWorld* World = GetWorld();
+	if (!World) return false;
+
+	// 使用 WorldStatic 通道进行检测（地形通常是 WorldStatic）
+	bool bHit = World->LineTraceSingleByChannel(
+		Hit,
+		Start,
+		End,
+		ECC_WorldStatic,
+		Params
+	);
+
+	if (bHit)
+	{
+		// 关键判断：虽然撞到了东西，但如果撞到的是"另一个建筑"，说明我在二楼 -> 不是锚点
+		if (Hit.GetActor() && Hit.GetActor()->FindComponentByClass<UOrionStructureComponent>())
+		{
+			return false;
+		}
+
+		// 撞到了非建筑物体（通常是 Landscape） -> 是锚点
+		return true;
+	}
+
+	return false; // 悬空 -> 不是锚点
 }

@@ -159,6 +159,7 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 	for (AActor* Actor : FoundActors)
 	{
 		AOrionChara* OrionChara = Cast<AOrionChara>(Actor);
+
 		if (!OrionChara)
 		{
 			continue;
@@ -220,8 +221,8 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 
 			Canvas->DrawText(
 				RenderFont,
-				FStringView(*CombinedText), // <- Pass FString instead of FStringView
-				//CombinedText,
+				//FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -236,7 +237,7 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 
 void AOrionHUD::TickShowInfoAtMouse()
 {
-	if (!PlayerOwner || !bShowActorInfo) return;
+	if (!PlayerOwner || !IsShowActorInfo) return;
 
 	float MouseX = 0.f, MouseY = 0.f;
 
@@ -245,7 +246,7 @@ void AOrionHUD::TickShowInfoAtMouse()
 	const UFont* RenderFont = GEngine->GetMediumFont();
 
 	float CurrentY = MouseY;
-	for (const FString& Line : InfoLines)
+	for (const FString& Line : InfoAtMouseCache)
 	{
 		constexpr float YOffsetBetweenLines = 20.f;
 		constexpr float XOffset = 15.f;
@@ -257,8 +258,8 @@ void AOrionHUD::TickShowInfoAtMouse()
 
 		Canvas->DrawText(
 			RenderFont,
-			FStringView(*Line),
-			//Line,
+			//FStringView(*Line),
+			Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,
@@ -274,7 +275,7 @@ void AOrionHUD::TickShowInfoAtMouse()
 // Called by PlayerController when Hovering over an Actor
 void AOrionHUD::ShowInfoAtMouse(const TArray<FString>& InLines)
 {
-	InfoLines = InLines;
+	InfoAtMouseCache = InLines;
 }
 
 void AOrionHUD::ShowCharaInfoPanel() const
@@ -290,7 +291,7 @@ void AOrionHUD::HideCharaInfoPanel() const
 	if (CharaInfoPanel)
 	{
 		CharaInfoPanel->SetVisibility(ESlateVisibility::Collapsed);
-		// 或者彻底：CharaPanel->RemoveFromParent();
+		// CharaPanel->RemoveFromParent();
 	}
 }
 

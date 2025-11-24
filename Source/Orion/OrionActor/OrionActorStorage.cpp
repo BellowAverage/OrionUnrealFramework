@@ -33,3 +33,14 @@ void AOrionActorStorage::Tick(float DeltaTime)
 		UE_LOG(LogTemp, Warning, TEXT("[%s] StorageCategory is None!"), *GetName());
 	}
 }
+
+
+TArray<FString> AOrionActorStorage::TickShowHoveringInfo()
+{
+	TArray<FString> Lines;
+
+	Lines.Add(FString::Printf(TEXT("Name: %s"), *GetName()));
+	Lines.Add(FString::Printf(TEXT("CurrHealth: %d"), CurrHealth));
+
+	return Lines;
+}

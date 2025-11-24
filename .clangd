@@ -1,0 +1,39 @@
+Diagnostics:
+  # 禁用未使用的包含检查
+  UnusedIncludes: None
+  # 禁用缺失包含检查
+  MissingIncludes: None
+  
+  # 禁用ClangTidy检查
+  ClangTidy:
+    Add: []
+    Remove:
+      - '*'
+  
+  # 抑制虚幻引擎相关的常见错误
+  Suppress:
+    - 'unknown attribute'
+    - 'unknown type name'
+    - 'use of undeclared identifier'
+    - 'macro redefined'
+    - 'GENERATED_BODY'
+    - 'UCLASS'
+    - 'USTRUCT'
+    - 'UENUM'
+    - 'UPROPERTY'
+    - 'UFUNCTION'
+    - 'GENERATED_UCLASS_BODY'
+    - 'GENERATED_USTRUCT_BODY'
+    - 'UE_INLINE'
+    - 'UE_DEPRECATED'
+
+CompileFlags:
+  Add:
+    - -Wno-unknown-attributes
+    - -Wno-unknown-pragmas
+    - -Wno-unknown-warning-option
+    - -Wno-unused-parameter
+    - -DUE_EDITOR=1
+    - -DWITH_EDITOR=1
+    - -DUE_GAME=1
+

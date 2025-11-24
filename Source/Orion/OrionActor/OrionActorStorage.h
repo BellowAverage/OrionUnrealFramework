@@ -29,6 +29,8 @@ class ORION_API AOrionActorStorage : public AOrionActor
 public:
 	AOrionActorStorage();
 
+	virtual TArray<FString> TickShowHoveringInfo() override;
+
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 

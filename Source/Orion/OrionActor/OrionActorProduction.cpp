@@ -1,13 +1,10 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "OrionActorProduction.h"
-
 
 AOrionActorProduction::AOrionActorProduction()
 {
 	PrimaryActorTick.bCanEverTick = true;
-
 }
 
 void AOrionActorProduction::OnConstruction(const FTransform& Transform)
@@ -21,7 +18,6 @@ void AOrionActorProduction::OnConstruction(const FTransform& Transform)
 	{
 		AvailableInventoryMap = { {2, 100}, {3, 2000} }; // 原料 2，上限 100；成品 3，上限 2000
 		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
-		UE_LOG(LogTemp, Warning, TEXT("[OrionActorProduction] OnConstruction set AvailableInventoryMap for Bullets Production"));
 	}
 }
 
@@ -86,4 +82,28 @@ void AOrionActorProduction::ProductionProgressUpdate(float DeltaTime)
 		// Subtract 100 from the progress, retaining any leftover progress.
 		ProductionProgress -= 100.0f;
 	}
+}
+
+TArray<FString> AOrionActorProduction::TickShowHoveringInfo()
+{
+	TArray<FString> Lines;
+
+	const float Progress = ProductionProgress;
+	FString Bar;
+
+	constexpr int32 TotalBars = 20; // Segments number
+	const int32 FilledBars = FMath::RoundToInt((Progress / 100.0f) * TotalBars);
+
+	for (int32 i = 0; i < TotalBars; ++i)
+	{
+		Bar += (i < FilledBars) ? TEXT("#") : TEXT("-");
+	}
+
+	Lines.Add(FString::Printf(TEXT("Name: %s"), *GetName()));
+	Lines.Add(FString::Printf(TEXT("CurrNumOfWorkers: %d"), CurrWorkers));
+	Lines.Add(FString::Printf(TEXT("ProductionProgress: [%s] %.1f%%"), *Bar, Progress));
+
+	Lines.Add(FString::Printf(TEXT("CurrHealth: %d"), CurrHealth));
+
+	return Lines;
 }

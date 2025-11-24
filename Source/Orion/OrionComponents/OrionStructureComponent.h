@@ -35,7 +35,6 @@ public:
 	void RegisterTriangleFoundationSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterWallSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterDoubleWallSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
-	void RegisterAllSockets() const;
 
 	/* Orion Structure Rule Type */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
@@ -54,7 +53,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")
 	bool bAutoRegisterSockets;
 
+	// [Rust System] Current stability (0.0 - 1.0)
+	UPROPERTY(VisibleInstanceOnly, Category = "Stability")
+	float CurrentStability = 0.0f;
+
+	// [Rust System] Self decay value
+	// Recommended default: Wall=0.1 (supports 10 vertical layers), Floor/Roof=0.2 (supports 5 hanging blocks)
+	UPROPERTY()
+	float StabilityDecay = 0.1f;
+
+	// [Rust System] Core calculation function
+	void UpdateStability();
+
+	void SocketsRegistryHandler() const;
+
 private:
+	// Helper: Ground check
+	bool CheckIsTouchingGround() const;
+	
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManager = nullptr;
 };

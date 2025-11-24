@@ -3,6 +3,11 @@
 
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
+#include "DrawDebugHelpers.h"
+#include "Engine/World.h"
+#include "Engine/OverlapResult.h"
+#include "Components/StaticMeshComponent.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 const TArray<FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildings = {
 	{
@@ -81,24 +86,50 @@ UOrionBuildingManager::UOrionBuildingManager()
 
 }
 
+void UOrionBuildingManager::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+
+	FWorldDelegates::OnWorldInitializedActors.AddUObject(this, &UOrionBuildingManager::OnWorldInitializedActors);
+}
+
+void UOrionBuildingManager::OnWorldInitializedActors(const FActorsInitializedParams& ActorsInitializedParams)
+{
+	if (!GetWorld())
+	{
+		UE_LOG(LogTemp, Error, TEXT("UOrionBuildingManager::OnWorldInitializedActors: World is null."));
+		return;
+	}
+
+	BuildingObjectsPool = MakeUnique<FBuildingObjectsPool>(this);
+}
+
 void UOrionBuildingManager::ResetAllSockets(const UWorld* World)
 {
-	SocketsRaw.Empty();
-	SocketsUnique.Empty();
+	SpatialGrid.Empty();
 	SocketsByKind.Empty();
 	UKismetSystemLibrary::FlushPersistentDebugLines(World);
+}
+
+// Get Grid Key (Simple int32 merge to int64)
+int64 UOrionBuildingManager::GetGridKey(const FVector& Location)
+{
+	const int32 X = FMath::FloorToInt(Location.X / GridCellSize);
+	const int32 Y = FMath::FloorToInt(Location.Y / GridCellSize);
+	return (static_cast<int64>(X) << 32) | static_cast<uint32>(Y); // High 32 bits store X, Low 32 bits store Y
 }
 
 
 bool UOrionBuildingManager::ConfirmPlaceStructure(
 	TSubclassOf<AActor> BPClass,
-	AActor*& PreviewPtr,
-	bool& bSnapped,
-	const FTransform& SnapTransform)
+	AActor* PreviewPtr,  // Read-only: Only used to get Transform, not destroyed
+	bool bSnapped,
+	const FTransform& SnapTransform,
+	AActor* ParentActor)
 {
 	if (!PreviewPtr || !BPClass) { return false; }
 
-	/* ① 预览体必须带结构组件 */
+	/* 1. Preview actor must have structure component */
 	if (UOrionStructureComponent* Comp =
 			PreviewPtr->FindComponentByClass<UOrionStructureComponent>();
 		!Comp)
@@ -120,14 +151,12 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 	UWorld* World = PreviewPtr->GetWorld();
 	if (!World) { return false; }
 
-	/* ② 计算最终放置的目标变换 */
+	/* 2. Calculate final target transform */
+	// If snapped, use SnapTransform; if not snapped, use PreviewPtr's current Transform
 	const FTransform TargetTransform =
 		bSnapped
 			? SnapTransform
-			: FTransform(
-				PreviewPtr->GetActorRotation(),
-				PreviewPtr->GetActorLocation(),
-				PreviewPtr->GetActorScale3D());
+			: PreviewPtr->GetActorTransform();
 
 	/*const FVector PreviewScale = PreviewPtr->GetActorScale3D();
 	UE_LOG(LogTemp, Log, TEXT("[Building] PreviewPtr->GetActorScale3D() = (%.3f, %.3f, %.3f)"), PreviewScale.X,
@@ -142,7 +171,7 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 	       SnapScale.X, SnapScale.Y, SnapScale.Z);*/
 
 
-	/* ③ 占位体碰撞检测（含容忍度 + 调试绘制） ------------------ */
+	/* 3. Placeholder collision check (with tolerance + debug draw) ------------------ */
 	bool bBlocked = false;
 
 	if (const UPrimitiveComponent* RootPrim =
@@ -152,12 +181,12 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 		const FVector ExtentFull = Bounds.BoxExtent;
 		const FVector Center = Bounds.Origin;
 
-		/* —— 3-A. 轻度容忍：给盒子收缩 2 cm ——————————— */
-		constexpr float ToleranceCm = 100.f; // ← 容忍度
+		/* -- 3-A. Light tolerance: shrink box by 2 cm -- */
+		constexpr float ToleranceCm = 100.f; // <- Tolerance
 		const FVector ExtentLoose = (ExtentFull - FVector(ToleranceCm))
-			.ComponentMax(FVector(1.f)); // 防负值
+			.ComponentMax(FVector(1.f)); // Prevent negative value
 
-		/* —— 3-B. 先严格检测，再用容忍盒复检 ——————————— */
+		/* -- 3-B. Strict check first, then double check with loose box -- */
 		FCollisionShape ShapeStrict = FCollisionShape::MakeBox(ExtentFull);
 		FCollisionShape ShapeLoose = FCollisionShape::MakeBox(ExtentLoose);
 
@@ -170,10 +199,10 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 		const bool bBlockedLoose = World->OverlapBlockingTestByChannel(
 			Center, TargetTransform.GetRotation(), ECC_WorldStatic, ShapeLoose, QueryParams);
 
-		/* —— 3-C. 只有“严格阻挡”且“宽松也阻挡”才认定真阻挡 —— */
+		/* -- 3-C. Only consider blocked if both "Strict" and "Loose" are blocked -- */
 		bBlocked = bBlockedStrict && bBlockedLoose;
 
-		/* —— 3-D. 调试输出 ———————————————————————————— */
+		/* -- 3-D. Debug Output -- */
 		UE_LOG(LogTemp, Verbose,
 		       TEXT(
 			       "[Building][Debug] Center=(%.1f,%.1f,%.1f)  ExtentFull=(%.1f,%.1f,%.1f)  BlockedStrict=%d  BlockedLoose=%d"
@@ -195,25 +224,27 @@ bool UOrionBuildingManager::ConfirmPlaceStructure(
 		return false;
 	}
 
-	/* ⑤ 销毁预览体并复位状态 ------------------------------ */
-	PreviewPtr->Destroy();
-	PreviewPtr = nullptr;
-	bSnapped = false;
+	// -----------------------------------------------------------------------
+	// 【Core Change】: Removed PreviewPtr->Destroy() and PreviewPtr = nullptr;
+	// Preview actor is now safe, we don't touch it.
+	// -----------------------------------------------------------------------
 
-	if (bool DelaySpawnNewStructureRes; DelaySpawnNewStructure(BPClass, World, TargetTransform,
-	                                                           DelaySpawnNewStructureRes))
-	{
-		return DelaySpawnNewStructureRes;
-	}
+	/* 4. Directly spawn new "Real" building */
+	// Note: No need to pass bSnapped to Spawn function anymore, as Transform is already determined
+	bool bSpawnSuccess = false;
+	
+	// Reuse existing spawn logic, but slightly adjust parameter passing
+	// We pass bSnapped state for subsequent logic (like socket logic)
+	DelaySpawnNewStructure(BPClass, World, TargetTransform, bSpawnSuccess, bSnapped, ParentActor);
 
-	return true;
+	return bSpawnSuccess;
 }
 
 
-bool UOrionBuildingManager::DelaySpawnNewStructure(TSubclassOf<AActor> BPClass, UWorld* World,
-                                                   const FTransform TargetTransform, bool& bValue)
+bool UOrionBuildingManager::DelaySpawnNewStructure(const TSubclassOf<AActor> BPClass, UWorld* World,
+                                                   const FTransform& TargetTransform, bool& DelaySpawnNewStructureRes, bool bSnapped, AActor* ParentActor)
 {
-	/* ④ 正式生成 Actor --------------------------------------- */
+	/* 4. Officially Spawn Actor --------------------------------------- */
 	FActorSpawnParameters P;
 	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
@@ -221,39 +252,139 @@ bool UOrionBuildingManager::DelaySpawnNewStructure(TSubclassOf<AActor> BPClass, 
 	{
 		UE_LOG(LogTemp, Error,
 		       TEXT("[Building] SpawnActor failed (class: %s)."), *BPClass->GetName());
-		bValue = false;
+		DelaySpawnNewStructureRes = false;
 		return true;
 	}
 	else
 	{
 		/* Here the actor has done spawning, which means transforms made bellow won't affect socket registration */
 		NewlySpawnedActor->SetActorScale3D(TargetTransform.GetScale3D());
+		
+		// Set entity properties (Entity needs collision and visibility)
+		NewlySpawnedActor->SetActorEnableCollision(true); // Entity must have collision
+		NewlySpawnedActor->SetActorHiddenInGame(false);   // Entity must be visible
 
 
-		if (UOrionStructureComponent* SC = NewlySpawnedActor->FindComponentByClass<UOrionStructureComponent>())
+		if (UOrionStructureComponent* StructureComp = NewlySpawnedActor->FindComponentByClass<UOrionStructureComponent>())
 		{
-			SC->BIsPreviewStructure = false;
+			StructureComp->BIsPreviewStructure = false; // This is a real entity
 
-			/*if (SC->OrionStructureType == EOrionStructure::Wall)
+			// [Fix] Force re-register sockets
+			// Reason: BeginPlay might run before Transform update during SpawnActor, causing sockets to register at (0,0,0)
+			// Here we ensure Actor is in correct position, unregister old ones (if any), then register new ones.
+			this->UnregisterSockets(NewlySpawnedActor);
+			StructureComp->SocketsRegistryHandler();
+
+
+			// Calculate stability, triggers Destroy() automatically if 0
+			StructureComp->UpdateStability();
+
+			// [Fix] Check if object is alive (IsValid checks if marked PendingKill)
+			// And check if stability is greater than 0
+			if (IsValid(NewlySpawnedActor) && StructureComp->CurrentStability > 0.0f)
 			{
-				const FVector WallBound = UOrionStructureComponent::GetStructureBounds(EOrionStructure::Wall);
-				const float HalfLen = WallBound.Y;
-				const float HalfThick = WallBound.X;
-
-				FVector NewActorScale = NewlySpawnedActor->GetActorScale3D();
-
-				// 1) 让长度缩短一个“厚度”：
-				//    (2·HalfLen → 2·HalfLen − 2·HalfThick) ⇒ 比例 = (HalfLen − HalfThick)/HalfLen
-				const float ShrinkRatio = (HalfLen - HalfThick) / HalfLen;
-				NewActorScale.Y *= ShrinkRatio;
-				NewlySpawnedActor->SetActorScale3D(NewActorScale);
-
-				// 2) 沿本地 +Y 平移一个“厚度”，避免与邻墙重叠
-				const float FullThick = HalfThick * 2.f;
-				const FVector Offset = NewlySpawnedActor->GetActorRightVector() * FullThick;
-				NewlySpawnedActor->AddActorWorldOffset(Offset);
-			}*/
+				DelaySpawnNewStructureRes = true; // Placement successful and alive
+			}
+			else
+			{
+				// Object unstable, collapse triggered (also considered placement successful as return true)
+				UE_LOG(LogTemp, Warning, TEXT("[Building] Structure placed but collapsed immediately due to lack of support."));
+				DelaySpawnNewStructureRes = true;
+			}
 		}
+		else
+		{
+			// No component, treat as normal object placement success
+			DelaySpawnNewStructureRes = true;
+		}
+	}
+
+	return true; // DelaySpawnNewStructure execution itself had no errors
+}
+
+// Core: Query + Filter
+bool UOrionBuildingManager::FindNearestSocket(const FVector& QueryPos, const float SearchRadius, const EOrionStructure Type, FOrionGlobalSocket& OutSocket) const
+{
+	float MinDistSqr = SearchRadius * SearchRadius;
+	constexpr float BlockThresholdSqr = 5.0f * 5.0f; // Blocked if Occupied within 5cm
+	const FOrionGlobalSocket* BestCandidate = nullptr;
+	
+	// 1. Determine query range (3x3 Grid)
+	const int64 CenterKey = GetGridKey(QueryPos);
+	const int32 CenterX = CenterKey >> 32;
+	const int32 CenterY = static_cast<int32>(CenterKey);
+	
+	// List 1: Candidates (Type matches, I can snap to)
+	TArray<const FOrionGlobalSocket*> LocalCandidates;
+	// List 2: Potential blockers (All sockets in area, regardless of type)
+	TArray<const FOrionGlobalSocket*> AllNearbySockets; 
+	
+	for (int32 x = -1; x <= 1; ++x)
+	{
+		for (int32 y = -1; y <= 1; ++y)
+		{
+			const int64 Key = (static_cast<int64>(CenterX + x) << 32) | static_cast<uint32>(CenterY + y);
+			if (const FOrionSocketBucket* Bucket = SpatialGrid.Find(Key))
+			{
+				for (const FOrionGlobalSocket& S : Bucket->Sockets)
+				{
+					// Collect all sockets for blockage detection
+					AllNearbySockets.Add(&S);
+
+					// Only collect matching types for snapping
+					if (S.Kind == Type) 
+					{
+						LocalCandidates.Add(&S);
+					}
+				}
+			}
+		}
+	}
+	
+	// 2. Iterate candidates, find nearest & unblocked
+	for (const FOrionGlobalSocket* S : LocalCandidates)
+	{
+		// Distance pre-filter
+		const float DistSqr = FVector::DistSquared(S->Location, QueryPos);
+		if (DistSqr > MinDistSqr) continue;
+		
+		// === The Filter Logic ===
+		// Check if any "Occupied" socket exists near this location (S->Location)?
+		// If so, it means although there is a free socket (from foundation), it's blocked by a wall
+		bool bIsBlocked = false;
+		
+		// If socket itself is Occupied, it definitely can't be used
+		if (S->bOccupied) 
+		{
+			bIsBlocked = true;
+		}
+		else 
+		{
+			// [Fix] Look for blockers in AllNearbySockets (Full Set), not just in Candidates
+			for (const FOrionGlobalSocket* Blocker : AllNearbySockets)
+			{
+				if (Blocker->bOccupied && 
+					FVector::DistSquared(Blocker->Location, S->Location) < BlockThresholdSqr)
+				{
+					bIsBlocked = true; // Blocker found
+					break;
+				}
+			}
+		}
+		
+		// 3. If unblocked and closer, select it
+		// [Safe] Also check if Owner is still valid
+		if (!bIsBlocked && S->Owner.IsValid())
+		{
+			MinDistSqr = DistSqr;
+			BestCandidate = const_cast<FOrionGlobalSocket*>(S); // Cast away const
+		}
+	}
+	
+	if (BestCandidate && BestCandidate->Owner.IsValid())
+	{
+		OutSocket = *BestCandidate;
+		return true;
 	}
 	return false;
 }
@@ -268,296 +399,197 @@ const TArray<FOrionGlobalSocket>& UOrionBuildingManager::GetSnapSocketsByKind(co
 	return Empty;
 }
 
-bool UOrionBuildingManager::IsSocketFree(const FVector& Loc, const EOrionStructure Kind) const
-{
-	for (const FOrionGlobalSocket& S : GetSnapSocketsByKind(Kind))
-	{
-		if (!S.bOccupied && FVector::DistSquared(S.Location, Loc) < MergeTolSqr)
-		{
-			return true;
-		}
-	}
-	return false;
-}
-
 void UOrionBuildingManager::RegisterSocket(const FVector& Loc, const FRotator& Rot, const EOrionStructure Kind,
-                                           bool bOccupied, const UWorld* World, AActor* Owner, const FVector& Scale)
+                                           const bool IsOccupied, const UWorld* World, AActor* Owner, const FVector& Scale)
 {
 	if (!World)
 	{
 		return;
 	}
 
+	// [Grid] Register directly to grid, no deduplication
+	const FOrionGlobalSocket NewSocket(Loc, Rot, Kind, IsOccupied, Owner, Scale);
+	const int64 Key = GetGridKey(Loc);
+	SpatialGrid.FindOrAdd(Key).Sockets.Add(NewSocket);
+
+	// Compatible with old system: Update SocketsByKind simultaneously (Used for GetSnapSocketsByKind)
+	SocketsByKind.FindOrAdd(Kind).Add(NewSocket);
+
+	// Special handling: Wall also registers DoubleWall, SquareFoundation also registers BasicRoof
 	if (Kind == EOrionStructure::Wall)
 	{
-		SocketsRaw.Emplace(Loc, Rot, EOrionStructure::DoubleWall, bOccupied, Owner, Scale);
-		const FOrionGlobalSocket New(Loc, Rot, EOrionStructure::DoubleWall, bOccupied, Owner, Scale);
-
-		SocketsRaw.Add(New);
-		AddUniqueSocket(New);
-		RefreshDebug(World);
+		const FOrionGlobalSocket DoubleWallSocket(Loc, Rot, EOrionStructure::DoubleWall, IsOccupied, Owner, Scale);
+		SpatialGrid.FindOrAdd(Key).Sockets.Add(DoubleWallSocket);
+		SocketsByKind.FindOrAdd(EOrionStructure::DoubleWall).Add(DoubleWallSocket);
 	}
-
 	else if (Kind == EOrionStructure::BasicSquareFoundation)
 	{
-		SocketsRaw.Emplace(Loc, Rot, EOrionStructure::BasicRoof, bOccupied, Owner, Scale);
-		const FOrionGlobalSocket New(Loc, Rot, EOrionStructure::BasicRoof, bOccupied, Owner, Scale);
-		SocketsRaw.Add(New);
-		AddUniqueSocket(New);
-		RefreshDebug(World);
-	}
-
-	const FOrionGlobalSocket New(Loc, Rot, Kind, bOccupied, Owner, Scale);
-
-	// Add to raw list
-	SocketsRaw.Add(New);
-
-	// Add to unique list
-	AddUniqueSocket(New);
-
-
-	RefreshDebug(World);
-}
-
-void UOrionBuildingManager::RebuildUniqueForKind(EOrionStructure Kind)
-{
-	// 1) Remove this Kind from unique list and bucket
-	for (int32 i = SocketsUnique.Num() - 1; i >= 0; --i)
-	{
-		if (SocketsUnique[i].Kind == Kind)
-		{
-			SocketsUnique.RemoveAt(i);
-		}
-	}
-	SocketsByKind.Remove(Kind);
-
-	// 2) Re-add sockets of the same type from raw to unique pool
-	for (const FOrionGlobalSocket& Raw : SocketsRaw)
-	{
-		if (Raw.Kind == Kind)
-		{
-			AddUniqueSocket(Raw);
-		}
+		const FOrionGlobalSocket RoofSocket(Loc, Rot, EOrionStructure::BasicRoof, IsOccupied, Owner, Scale);
+		SpatialGrid.FindOrAdd(Key).Sockets.Add(RoofSocket);
+		SocketsByKind.FindOrAdd(EOrionStructure::BasicRoof).Add(RoofSocket);
 	}
 }
 
-void UOrionBuildingManager::RemoveSocketRegistration(const AActor& Ref)
+// Unregister: Find grid cell where Actor is located, remove sockets belonging to it
+void UOrionBuildingManager::UnregisterSockets(AActor* Owner)
 {
-	const UWorld* World = Ref.GetWorld();
-	TSet<EOrionStructure> KindsToRebuild;
+	if (!Owner) return;
+	
+	const UWorld* World = Owner->GetWorld();
+	
+	// [Fix] Deprecate Bounds-based cleanup, use full grid scan to prevent residuals due to Bounds calculation errors
+	// This ensures absolute cleanliness, preventing ghost sockets
+	TArray<int64> KeysToRemove;
 
-	// 1) Remove this Owner from raw list and record all removed Kinds
-	for (int32 i = SocketsRaw.Num() - 1; i >= 0; --i)
+	for (auto& Elem : SpatialGrid)
 	{
-		if (SocketsRaw[i].Owner.Get() == &Ref)
+		FOrionSocketBucket& Bucket = Elem.Value;
+		
+		int32 RemovedNum = Bucket.Sockets.RemoveAll([Owner](const FOrionGlobalSocket& S) {
+			return S.Owner.Get() == Owner;
+		});
+
+		// If bucket is empty, mark Key for removal
+		if (Bucket.Sockets.Num() == 0)
 		{
-			KindsToRebuild.Add(SocketsRaw[i].Kind);
-			SocketsRaw.RemoveAt(i, 1, EAllowShrinking::No);
+			KeysToRemove.Add(Elem.Key);
 		}
 	}
 
-	// 2) For each removed Kind, rebuild unique sockets
-	for (EOrionStructure Kind : KindsToRebuild)
+	// Clean up empty buckets
+	for (const int64 Key : KeysToRemove)
 	{
-		RebuildUniqueForKind(Kind);
+		SpatialGrid.Remove(Key);
 	}
-
-	// 3) Redraw debug information
-	if (World)
+	
+	// Update SocketsByKind simultaneously (Old system compatibility)
+	TArray<EOrionStructure> KindsToRemove;
+	for (auto& Elem : SocketsByKind)
 	{
-		RefreshDebug(World);
+		Elem.Value.RemoveAll([Owner](const FOrionGlobalSocket& S) {
+			return S.Owner.Get() == Owner;
+		});
+		
+		if (Elem.Value.Num() == 0)
+		{
+			KindsToRemove.Add(Elem.Key);
+		}
+	}
+	
+	for (const EOrionStructure Kind : KindsToRemove)
+	{
+		SocketsByKind.Remove(Kind);
 	}
 }
 
-void UOrionBuildingManager::AddUniqueSocket(const FOrionGlobalSocket& New)
+// [New] Get surrounding neighbors (Using physical overlap detection, bypassing Pivot offset issues)
+TArray<UOrionStructureComponent*> UOrionBuildingManager::GetConnectedNeighbors(AActor* CenterStructure, bool bDebug) const
 {
-	// 先在 Unique 里找一下是不是"同位置+同Kind"
-	for (int32 i = 0; i < SocketsUnique.Num(); ++i)
+	TArray<UOrionStructureComponent*> Result;
+	if (!CenterStructure) return Result;
+
+	UWorld* World = GetWorld();
+	if (!World) return Result;
+
+	// -------------------------------------------------------
+	// 1. Get StructureMesh (This is the most accurate geometry source)
+	// -------------------------------------------------------
+	UStaticMeshComponent* MeshComp = nullptr;
+	if (auto* StructComp = CenterStructure->FindComponentByClass<UOrionStructureComponent>())
 	{
-		if (FOrionGlobalSocket& Exist = SocketsUnique[i]; Exist.Kind == New.Kind
-			&& FVector::DistSquared(Exist.Location, New.Location) < MergeTolSqr)
+		MeshComp = StructComp->StructureMesh;
+	}
+	// Double insurance: If no cache, try direct lookup
+	if (!MeshComp) MeshComp = CenterStructure->FindComponentByClass<UStaticMeshComponent>();
+	if (!MeshComp) return Result;
+
+	// -------------------------------------------------------
+	// 2. Calculate precise OABB (Oriented Bounding Box)
+	// -------------------------------------------------------
+	FVector LocalMin, LocalMax;
+	MeshComp->GetLocalBounds(LocalMin, LocalMax);
+
+	// Calculate geometric center in local coordinate system (Auto-correct Pivot offset)
+	FVector LocalCenter = (LocalMin + LocalMax) * 0.5f;
+	FVector LocalExtent = (LocalMax - LocalMin) * 0.5f;
+
+	// Transform center point and rotation to world space
+	FTransform CompTransform = MeshComp->GetComponentTransform();
+	FVector WorldCenter = CompTransform.TransformPosition(LocalCenter);
+	FQuat WorldRotation = CompTransform.GetRotation();
+
+	// Calculate extended half-extent (Apply scale + 0.05m tolerance)
+	// Note: GetLocalBounds returns unscaled size, must multiply by Scale
+	FVector SearchExtent = LocalExtent * CompTransform.GetScale3D();
+	SearchExtent += FVector(5.0f); // Extend 5cm in xyz
+
+	// -------------------------------------------------------
+	// 3. Execute physical overlap detection
+	// -------------------------------------------------------
+	TArray<FOverlapResult> Overlaps;
+	FCollisionShape BoxShape = FCollisionShape::MakeBox(SearchExtent);
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(CenterStructure); // Ignore self
+	Params.bTraceComplex = false;            // Simple collision detection is more efficient
+
+	// Use WorldStatic channel (Buildings are usually WorldStatic)
+	World->OverlapMultiByChannel(
+		Overlaps,
+		WorldCenter,
+		WorldRotation,
+		ECC_WorldStatic,
+		BoxShape,
+		Params
+	);
+
+	// -------------------------------------------------------
+	// 4. Debug Visualization
+	// -------------------------------------------------------
+	if (bDebug)
+	{
+		// Draw purple "Search Box": Show actual detection range (Lasts 0.1s, fits Tick)
+		DrawDebugBox(World, WorldCenter, SearchExtent, WorldRotation, FColor::Purple, false, 0.1f, 0, 2.0f);
+	
+		// Draw small coordinate axis at geometric center, confirm center calculation correctness
+		DrawDebugCoordinateSystem(World, WorldCenter, WorldRotation.Rotator(), 50.0f, false, 0.1f, 0, 1.0f);
+	}
+
+	// -------------------------------------------------------
+	// 5. Filter results and "Highlight" neighbors
+	// -------------------------------------------------------
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* HitActor = Overlap.GetActor();
+		if (!HitActor || HitActor == CenterStructure) continue;
+
+		// Confirm hit is a building with OrionStructureComponent
+		if (UOrionStructureComponent* NeighborComp = HitActor->FindComponentByClass<UOrionStructureComponent>())
 		{
-			// 如果已有占用就不换；如果已有空闲且新的是占用，就替换
-			if (!Exist.bOccupied && New.bOccupied)
+			Result.AddUnique(NeighborComp);
+
+			if (bDebug)
 			{
-				Exist = New; // ← 这里用 Exist 而不是 Exists
-
-				// 桶里也要更新
-				auto& Bucket = SocketsByKind.FindOrAdd(New.Kind);
-				for (auto& B : Bucket)
+				// [Highlight] Detected neighbor: Draw yellow box enclosing it
+				if (UStaticMeshComponent* NeighborMesh = HitActor->FindComponentByClass<UStaticMeshComponent>())
 				{
-					if (FVector::DistSquared(B.Location, New.Location) < MergeTolSqr)
-					{
-						B = New;
-						return;
-					}
+					FVector N_Min, N_Max;
+					NeighborMesh->GetLocalBounds(N_Min, N_Max);
+					FVector N_Center = NeighborMesh->GetComponentTransform().TransformPosition((N_Min + N_Max) * 0.5f);
+					FVector N_Extent = (N_Max - N_Min) * 0.5f * NeighborMesh->GetComponentScale();
+				
+					// Draw yellow box indicating "Connected"
+					DrawDebugBox(World, N_Center, N_Extent, NeighborMesh->GetComponentQuat(), FColor::Yellow, false, 0.1f, 0, 3.0f);
 				}
 			}
-			return; // 已处理完毕
 		}
 	}
 
-	// 没有找到就新增
-	SocketsUnique.Add(New);
-	SocketsByKind.FindOrAdd(New.Kind).Add(New);
-}
-
-void UOrionBuildingManager::RemoveUniqueSocket(const FOrionGlobalSocket& Old)
-{
-	// Unique 列表中删
-	for (int32 i = SocketsUnique.Num() - 1; i >= 0; --i)
+	// Print log for debugging
+	if (bDebug && Result.Num() > 0)
 	{
-		if (SocketsUnique[i].Kind == Old.Kind
-			&& FVector::DistSquared(SocketsUnique[i].Location, Old.Location) < MergeTolSqr)
-		{
-			SocketsUnique.RemoveAt(i);
-		}
-	}
-	// 桶里也删
-	if (auto* Bucket = SocketsByKind.Find(Old.Kind))
-	{
-		for (int32 i = Bucket->Num() - 1; i >= 0; --i)
-		{
-			if (FVector::DistSquared((*Bucket)[i].Location, Old.Location) < MergeTolSqr)
-			{
-				Bucket->RemoveAt(i);
-			}
-		}
-		if (Bucket->Num() == 0)
-		{
-			SocketsByKind.Remove(Old.Kind);
-		}
-	}
-}
-
-void UOrionBuildingManager::RebuildUnique()
-{
-	// 1) 把所有手动注册的插槽合并到 SocketsUnique
-	SocketsUnique.Empty();
-	for (const FOrionGlobalSocket& Src : SocketsRaw)
-	{
-		int32 FoundIdx = INDEX_NONE;
-		for (int32 i = 0; i < SocketsUnique.Num(); ++i)
-		{
-			if (const auto& UniqueSocket = SocketsUnique[i]; UniqueSocket.Kind == Src.Kind &&
-				FVector::DistSquared(UniqueSocket.Location, Src.Location) < MergeTolSqr)
-			{
-				FoundIdx = i;
-				break;
-			}
-		}
-
-		if (FoundIdx == INDEX_NONE)
-		{
-			SocketsUnique.Add(Src);
-		}
-		else if (!SocketsUnique[FoundIdx].bOccupied && Src.bOccupied)
-		{
-			// 如果已有空闲，但新的是占用，则替换
-			SocketsUnique[FoundIdx] = Src;
-		}
+		// Limit log frequency to prevent Tick spam, simple output here
+		// UE_LOG(LogTemp, Log, TEXT("[Structure] %s found %d neighbors via Overlap."), *CenterStructure->GetName(), Result.Num());
 	}
 
-	SocketsByKind.Empty();
-	for (const FOrionGlobalSocket& S : SocketsUnique)
-	{
-		SocketsByKind.FindOrAdd(S.Kind).Add(S);
-	}
-}
-
-void UOrionBuildingManager::RefreshDebug(const UWorld* World)
-{
-	if (!World)
-	{
-		return;
-	}
-
-	if (!BEnableDebugLine)
-	{
-		return;
-	}
-
-	// 清掉上一帧的线
-	UKismetSystemLibrary::FlushPersistentDebugLines(World);
-
-	// 调试线粗细
-	constexpr float LineThickness = 2.f;
-
-	for (const FOrionGlobalSocket& S : SocketsUnique)
-	{
-		const FColor Color = S.bOccupied ? FColor::Red : FColor::Green;
-
-		switch (S.Kind)
-		{
-		//--------------------------------------------------
-		// 1) 方形基座：画一个 100×100 的正方形
-		//--------------------------------------------------
-		case EOrionStructure::BasicSquareFoundation:
-			{
-				// 半边长
-				constexpr float HalfEdge = 50.f;
-				DrawDebugBox(
-					World,
-					S.Location,
-					FVector(HalfEdge, HalfEdge, 2.f),
-					S.Rotation.Quaternion(),
-					Color, /*bPersistent=*/true,
-					/*LifeTime=*/-1.f,
-					/*DepthPriority=*/0,
-					LineThickness
-				);
-				break;
-			}
-
-		////--------------------------------------------------
-			//// 2) 三角基座：画一个等边三角形轮廓
-			////--------------------------------------------------
-		//case EOrionStructure::BasicTriangleFoundation:
-		//	{
-		//		// 假设三角边长也是 100
-		//		constexpr float EdgeLen = 100.f;
-		//		// 等边三角高度
-		//		const float TriHeight = EdgeLen * FMath::Sqrt(3.f) / 2.f;
-
-		//		// 本地坐标系下的顶点（质心在原点）
-		//		const FVector LocalVerts[3] = {
-		//			FVector(-EdgeLen * 0.5f, -TriHeight / 3.f, 0.f),
-		//			FVector(EdgeLen * 0.5f, -TriHeight / 3.f, 0.f),
-		//			FVector(0.f, 2.f * TriHeight / 3.f, 0.f)
-		//		};
-
-		//		// 用插槽自己的旋转和位置来做变换
-		//		const FTransform SockT(S.Rotation, S.Location);
-
-		//		const FVector W0 = SockT.TransformPosition(LocalVerts[0]);
-		//		const FVector W1 = SockT.TransformPosition(LocalVerts[1]);
-		//		const FVector W2 = SockT.TransformPosition(LocalVerts[2]);
-
-		//		DrawDebugLine(World, W0, W1, Color, true, -1.f, 0, LineThickness);
-		//		DrawDebugLine(World, W1, W2, Color, true, -1.f, 0, LineThickness);
-		//		DrawDebugLine(World, W2, W0, Color, true, -1.f, 0, LineThickness);
-		//		break;
-		//	}
-
-		//--------------------------------------------------
-		// 3) 墙：画一条垂直线
-		//--------------------------------------------------
-		/*case EOrionStructure::Wall:
-				{
-					DrawDebugPoint(GetWorld(), S.Location, 10.f, FColor::Blue, true, -1, 0);
-					break;
-				}
-			case EOrionStructure::DoubleWall:
-				{
-					DrawDebugPoint(GetWorld(), S.Location, 10.f, FColor::Blue, true, -1, 0);
-					break;
-				}*/
-		//--------------------------------------------------
-		// 其它（fallback，用一个点标记）
-		//--------------------------------------------------
-		default:
-			//DrawDebugPoint(World, S.Location, 8.f, Color, true, -1.f, 0);
-			break;
-		}
-	}
+	return Result;
 }

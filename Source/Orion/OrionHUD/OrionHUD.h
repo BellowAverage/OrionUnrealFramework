@@ -24,7 +24,6 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
-
 	/* Reference to External Game Resources */
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManagerInstance;
@@ -83,8 +82,8 @@ public:
 	FString PreviousInfoChara = "";
 
 	/* OrionActor Hovering Info Panel */
-	TArray<FString> InfoLines;
-	bool bShowActorInfo = false;
+	TArray<FString> InfoAtMouseCache;
+	bool IsShowActorInfo = false;
 	void ShowInfoAtMouse(const TArray<FString>& InLines);
 
 

@@ -66,7 +66,10 @@ public:
 
 	float MouseX = 0.f, MouseY = 0.f;
 
-	void UpdateBasicPlayerControllerParams();
+	void TickBasicPlayerControllerParams();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basics")
+	AActor* HoveringActor = nullptr;
 
 	/* Sole & Identifiable Pointers */
 
@@ -135,13 +138,17 @@ public:
 
 	const float SnapInDistSqr = SnapInDist * SnapInDist;
 
-	void UpdateBuildingControl();
-	void UpdatePlacingStructure(TSubclassOf<AActor>, AActor*& Preview);
+	void TickBuildingControl();
+	void TickPlacingStructure(AActor*& Preview);
 
 
 	FVector SnappedSocketLoc = FVector();
 	FRotator SnappedSocketRot = FRotator();
 	FVector SnappedSocketScale = FVector(1.0f, 1.0f, 1.0f);
+
+	// [Dependency] 缓存吸附目标，用于建立依赖关系
+	UPROPERTY()
+	TWeakObjectPtr<AActor> CachedSnapTarget = nullptr;
 
 
 	/* Place Structure */
@@ -155,7 +162,7 @@ public:
 	/* 0. Demolishing Mode */
 
 	void OnToggleDemolishingMode(bool bIsChecked);
-	void SpawnPreviewStructure(TSubclassOf<AActor> BPClass, AActor*& OutPtr);
+	void SpawnPreviewStructure(AActor*& InPreviewStructure, TSubclassOf<AActor> ClassToSpawn);
 	bool IsDemolishingMode = false;
 	void DemolishStructureUnderCursor() const;
 
@@ -164,8 +171,6 @@ public:
 
 	UPROPERTY()
 	AActor* PreviewStructure = nullptr;
-
-	TSubclassOf<AActor> BuildBP = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Build")
 	TSubclassOf<AActor> SquareFoundationBP;
@@ -182,7 +187,7 @@ public:
 
 	/* Developer & Debug */
 
-	void DrawOrionActorStatus();
+	void TickDrawOrionActorStatus() const;
 
 	void OnKey4Pressed();
 	void OnKey5Pressed();
@@ -204,7 +209,7 @@ public:
 	/* Input Interaction Functions*/
 
 
-	void ConfirmPlaceStructure(const TSubclassOf<AActor>& BPClass, AActor*& PreviewPtr);
+	void ConfirmPlaceStructure(AActor*& PreviewPtr);
 	void OnLeftMouseDown();
 	void OnLeftMouseUp();
 	void SingleSelectionUnderCursor();

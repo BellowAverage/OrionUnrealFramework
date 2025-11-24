@@ -7,80 +7,45 @@
 
 AOrionActor::AOrionActor()
 {
-	/*PrimaryActorTick.bCanEverTick = true;*/
-
-	/*
-
-	RootStaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
-
-	RootComponent = RootStaticMeshComp;
-
-	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
-
-	*/
-
-
-	/*InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
-
-
-	MaxHealth = 30;
-	CurrHealth = MaxHealth;
-
-	this->SetCanBeDamaged(true);
-
-	ActorStatus = EActorStatus::Interactable;*/
-
+	// Set Attributes
 
 	PrimaryActorTick.bCanEverTick = true;
+	SetCanBeDamaged(true);
 
+	// Acquire Components
 
+	// 1. The root mesh component representing the visual appearance of the actor.
 	RootStaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MeshComp"));
 	RootStaticMeshComp->ComponentTags.Add(FName(TEXT("StructureMesh")));
 
-	RootComponent = RootStaticMeshComp;
+	RootComponent = RootStaticMeshComp; // Supper::RootComponent
 
 
+	// 2. Defines the ranges within which other actors can interact with this actor.
 	CollisionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("CollisionSphere"));
 	CollisionSphere->SetupAttachment(RootComponent);
 
-
+	// 3. Game logics supporting components.
 	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
-
 	StructureComponent = CreateDefaultSubobject<UOrionStructureComponent>(TEXT("StructureComponent"));
+}
 
-
-	SetCanBeDamaged(true);
+TArray<FString> AOrionActor::TickShowHoveringInfo()
+{
+	return TArray<FString>{ FString::Printf(TEXT("Name: %s"), *GetName()),
+		FString::Printf(TEXT("CurrHealth: %d"), CurrHealth) };
 }
 
 void AOrionActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	/*InitSerializable(ActorSerializable);
-
-	InventoryComp = FindComponentByClass<UOrionInventoryComponent>();
-
-	CollisionSphere = FindComponentByClass<USphereComponent>();
+	InitSerializable(ActorSerializable); // Distribute the sole identifier of this game object.
 
 	if (InventoryComp)
 	{
-		InventoryComp->AvailableInventoryMap.Empty();
 		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("%s missing UOrionInventoryComponent!"), *GetName());
-	}
-
-	InventoryComp->ModifyItemQuantity(2, +2);*/
-
-	InitSerializable(ActorSerializable);
-
-	/* 加载后 AvailableInventoryMap 会被反序列化覆盖 */
-	if (InventoryComp)
-	{
-		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
-		InventoryComp->ModifyItemQuantity(2, +2); // 示例逻辑
+		InventoryComp->ModifyItemQuantity(2, +2);
 	}
 }
 
@@ -113,7 +78,7 @@ float AOrionActor::TakeDamage(float DamageAmount,
 
 void AOrionActor::Die()
 {
-	UE_LOG(LogTemp, Log, TEXT("%s died."), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("OrionActor::Die: %s died."), *GetName());
 
 	ActorStatus = EActorStatus::NotInteractable;
 	SpawnDeathEffect(GetActorLocation());
@@ -158,3 +123,4 @@ void AOrionActor::HandleDelayedDestroy()
 {
 	Destroy();
 }
+

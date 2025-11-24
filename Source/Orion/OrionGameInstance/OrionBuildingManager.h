@@ -10,6 +10,7 @@
 
 class AOrionStructure;
 class UOrionStructureComponent;
+class FBuildingObjectsPool;
 
 #include "OrionBuildingManager.generated.h"
 
@@ -81,6 +82,16 @@ struct FOrionGlobalSocket
 	}
 };
 
+	// [UHT Compatible] Struct wrapper: UHT does not support TMap Value directly being TArray
+USTRUCT()
+struct FOrionSocketBucket
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FOrionGlobalSocket> Sockets;
+};
+
 /**
  * 
  */
@@ -98,12 +109,9 @@ public:
 	static const TMap<EOrionStructure, FVector> StructureOriginalScaleMap;
 
 
-	UPROPERTY()
-	TArray<FOrionGlobalSocket> SocketsRaw;
-
-	/* Reference pool: no duplicates allowed, used for snapping & Debug, rebuilt from Raw at any time */
-	UPROPERTY()
-	TArray<FOrionGlobalSocket> SocketsUnique;
+	// [Deprecated] Old system removed, replaced by spatial grid
+	// TArray<FOrionGlobalSocket> SocketsRaw;
+	// TArray<FOrionGlobalSocket> SocketsUnique;
 
 
 	/* Save & Load */
@@ -126,81 +134,171 @@ public:
 		}
 	}
 
-	/*void UOrionBuildingManager::CollectStructureRecords(
-		TArray<FOrionStructureRecord>& OutRecords) const
-	{
-		OutRecords.Empty();
-
-		for (TActorIterator<AOrionStructure> It(GetWorld()); It; ++It)
-		{
-			AOrionStructure* Struct = *It;
-			if (!Struct)
-			{
-				continue;
-			}
-
-			FOrionStructureRecord Rec;
-
-			/* 路径要带 “_C” 才能 LoadClass #1#
-			Rec.ClassPath = Struct->GetClass()->GetPathName();
-
-			Rec.Transform = Struct->GetActorTransform();
-
-			OutRecords.Add(MoveTemp(Rec));
-		}
-	}*/
-
 	/* ========== ② Completely reset Socket pool (called before loading) ========== */
 	void ResetAllSockets(const UWorld* World);
-	static bool DelaySpawnNewStructure(TSubclassOf<AActor> BPClass, UWorld* World, FTransform TargetTransform,
-	                                   bool& bValue);
+	bool DelaySpawnNewStructure(TSubclassOf<AActor> BPClass, UWorld* World, const FTransform& TargetTransform,
+	                                   bool& DelaySpawnNewStructureRes, bool bSnapped = false, AActor* ParentActor = nullptr);
 
-	static constexpr float MergeTolSqr = 5.f * 5.f;
+	static constexpr float MergeTolSqr = 2.f * 2.f;
 
-	/*virtual void Initialize(FSubsystemCollectionBase&) override
-	{
-	}
-
-	virtual void Deinitialize() override
-	{
-	}*/
-
-	static bool ConfirmPlaceStructure(
+	bool ConfirmPlaceStructure(
 		TSubclassOf<AActor> BPClass,
-		AActor*& PreviewPtr,
-		bool& bSnapped,
-		const FTransform& SnapTransform);
+		AActor* PreviewPtr,  // Read-only: Only used to get Transform, not destroyed
+		bool bSnapped,
+		const FTransform& SnapTransform,
+		AActor* ParentActor = nullptr);
 
-
-	TMap<EOrionStructure, TArray<FOrionGlobalSocket>> SocketsByKind;
 
 	const TArray<FOrionGlobalSocket>& GetSnapSocketsByKind(const EOrionStructure Kind) const;
 
-	/* Deprecated Due to Low Performance */
-	//const TArray<FOrionGlobalSocket>& GetSnapSockets() const { return SocketsUnique; }
-
-	bool IsSocketFree(const FVector& Loc, const EOrionStructure Kind) const;
-
+	// [Core] Register socket (Directly into storage, using new grid system)
 	void RegisterSocket(const FVector& Loc,
 	                    const FRotator& Rot,
 	                    const EOrionStructure Kind,
-	                    bool bOccupied,
+	                    bool IsOccupied,
 	                    const UWorld* World,
 	                    AActor* Owner, const FVector& Scale = FVector(1.0f, 1.0f, 1.0f));
 
+	// [Core] Unregister socket (Remove by Owner)
+	void UnregisterSockets(AActor* Owner);
 
-	void RebuildUniqueForKind(EOrionStructure Kind);
+	// [Query] Core query + Filter logic
+	// Returns whether found, and fills OutSocket with the best socket
+	bool FindNearestSocket(const FVector& QueryPos, float SearchRadius, EOrionStructure Type, FOrionGlobalSocket& OutSocket) const;
 
-	void RemoveSocketRegistration(const AActor& Ref);
+	// [New] Get all physically touching building components around specified actor (No connection established, returns list only)
+	TArray<UOrionStructureComponent*> GetConnectedNeighbors(AActor* CenterStructure, bool bDebug = false) const;
 
-	void AddUniqueSocket(const FOrionGlobalSocket& New);
-
-	void RemoveUniqueSocket(const FOrionGlobalSocket& Old);
-
-	/* Deprecated Due to Low Performance */
-	void RebuildUnique();
+	TMap<EOrionStructure, TArray<FOrionGlobalSocket>> SocketsByKind;
 
 	bool BEnableDebugLine = true;
 
-	void RefreshDebug(const UWorld* World);
+	TUniquePtr<FBuildingObjectsPool> BuildingObjectsPool;
+
+private:
+	// [Grid] Grid size (e.g. 500cm)
+	static constexpr float GridCellSize = 500.f;
+	
+	// [Grid] Core storage: Spatial Hash
+	// Key: Compressed Coordinate Hash
+	// Value: All sockets in this cell (No deduplication, no overwriting)
+	// [UHT Compatible] Use FOrionSocketBucket wrapper for TArray, as UHT doesn't support nested containers
+	UPROPERTY()
+	TMap<int64, FOrionSocketBucket> SpatialGrid;
+
+	// [Grid] Calculate Key
+	static int64 GetGridKey(const FVector& Location);
+
+	void OnWorldInitializedActors(const FActorsInitializedParams& ActorsInitializedParams);
+	virtual void Initialize(FSubsystemCollectionBase&) override;
+
+	// virtual void Deinitialize() override;
+
+};
+
+class FBuildingObjectsPool
+{
+private:
+	TWeakObjectPtr<UOrionBuildingManager> Owner;
+
+	TMap<int32, AActor*> Pool;
+
+	UOrionBuildingManager* GetOwner() const { return Owner.Get(); }
+
+public:
+	FBuildingObjectsPool(const FBuildingObjectsPool&) = delete;
+	FBuildingObjectsPool& operator=(const FBuildingObjectsPool&) = delete;
+
+	explicit FBuildingObjectsPool(UOrionBuildingManager* InOwner)
+	{
+		Owner = InOwner;
+		InitPreviewStructures(InOwner->GetWorld());
+	}
+
+	~FBuildingObjectsPool()
+	{
+		Pool.Empty();
+	}
+
+	void InitPreviewStructures(UWorld* World)
+	{
+		if (!World || !GetOwner()) return;
+
+		for (auto& Each : GetOwner()->OrionDataBuildingsMap)
+		{
+			const int32 BuildingId = Each.Value.BuildingId;
+
+			if (Pool.Contains(BuildingId)) continue;
+
+			// 最好在数据资产里直接存 TSubclassOf<AActor>，而不是存字符串路径来 LoadClass
+			// LoadClass 是阻塞加载，如果资产多会卡顿
+			UClass* StructureBPSubclass = LoadClass<AActor>(nullptr, *Each.Value.BuildingBlueprintReference);
+
+			if (!StructureBPSubclass)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("FBuildingObjectsPool::InitPreviewStructures: Failed to load class for ID: %d"), BuildingId);
+				continue;
+			}
+
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+			AActor* PreviewActor = World->SpawnActor<AActor>(StructureBPSubclass, FVector::ZeroVector, FRotator::ZeroRotator, Params);
+
+			if (PreviewActor)
+			{
+				DeactivateActor(PreviewActor);
+
+				// 改名为 Preview_XX 方便在 Outliner 调试
+				PreviewActor->SetActorLabel(FString::Printf(TEXT("Preview_%d"), BuildingId));
+
+				Pool.Add(BuildingId, PreviewActor);
+			}
+		}
+	}
+
+	AActor* AcquirePreviewActor(int32 BuildingId)
+	{
+		if (AActor** FoundActorPtr = Pool.Find(BuildingId))
+		{
+			if (AActor* Actor = *FoundActorPtr; IsValid(Actor))
+			{
+				Actor->SetActorHiddenInGame(false);
+				Actor->SetActorEnableCollision(false); 
+				Actor->SetActorTickEnabled(false);
+
+				return Actor;
+			}
+		}
+		return nullptr;
+	}
+
+	void ReleasePreviewActor(const int32 BuildingId)
+	{
+		if (AActor** FoundActorPtr = Pool.Find(BuildingId))
+		{
+			DeactivateActor(*FoundActorPtr);
+		}
+	}
+
+	void ReleaseAll()
+	{
+		for (const auto& Pair : Pool)
+		{
+			DeactivateActor(Pair.Value);
+		}
+	}
+
+private:
+	static void DeactivateActor(AActor* Actor)
+	{
+		if (IsValid(Actor))
+		{
+			Actor->SetActorHiddenInGame(true); 
+			Actor->SetActorEnableCollision(false);
+			Actor->SetActorTickEnabled(false);
+
+			Actor->SetActorLocation(FVector(0, 0, -10000));
+		}
+	}
 };

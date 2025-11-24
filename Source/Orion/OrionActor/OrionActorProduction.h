@@ -25,21 +25,23 @@ class ORION_API AOrionActorProduction : public AOrionActor
 public:
 	AOrionActorProduction();
 
+	virtual TArray<FString> TickShowHoveringInfo() override;
+
 	virtual void BeginPlay() override;
 
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Config (Non-null)")
 	EProductionCategory ProductionCategory = EProductionCategory::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Config (Non-null)")
 	int32 ProductionTimeCost = 15;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Config (Non-null)")
 	float ProductionProgress = 0.f;
 
-	UFUNCTION(BlueprintCallable, Category = "Basics")
+	UFUNCTION(BlueprintCallable)
 	void ProductionProgressUpdate(float DeltaTime);
 };

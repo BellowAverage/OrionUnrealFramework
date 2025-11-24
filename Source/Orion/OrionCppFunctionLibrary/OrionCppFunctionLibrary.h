@@ -149,4 +149,29 @@ class ORION_API OrionCppFunctionLibrary
 public:
 	OrionCppFunctionLibrary();
 	~OrionCppFunctionLibrary();
+
+	/**
+	 * 获取输入Actor的StaticMesh Component的边线并高亮显示 (通过CustomDepth)
+	 * @param Actor         目标Actor
+	 * @param bEnable       是否启用高亮
+	 * @param StencilValue  CustomDepth Stencil Value (默认为252，常用作高亮)
+	 */
+	static void SetActorHighlight(const class AActor* Actor, bool bEnable, int32 StencilValue = 252);
+
+	/**
+	 * 将输入FString打印在输入Actor的位置映射到玩家Canvas上位置
+	 * 注意：此函数应在HUD的DrawHUD循环中调用，因为它需要有效的Canvas对象
+	 * @param Canvas        HUD Canvas
+	 * @param Player        PlayerController (用于坐标投影)
+	 * @param Actor         目标Actor
+	 * @param Text          要打印的文本
+	 * @param TextColor     文本颜色
+	 */
+	static void DrawTextOnCanvasAtActorLocation(class UCanvas* Canvas, const class APlayerController* Player, const class AActor* Actor, const FString& Text, FColor TextColor = FColor::White);
+
+	/**
+	 * 将 Debug 信息写入到本地文件 Saved/Logs/OrionDebug.log
+	 * @param LogContent  要写入的内容
+	 */
+	static void WriteDebugLog(const FString& LogContent);
 };
