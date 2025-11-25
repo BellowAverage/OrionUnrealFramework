@@ -167,7 +167,7 @@ public:
 	 * @param Text          要打印的文本
 	 * @param TextColor     文本颜色
 	 */
-	static void DrawTextOnCanvasAtActorLocation(class UCanvas* Canvas, const class APlayerController* Player, const class AActor* Actor, const FString& Text, FColor TextColor = FColor::White);
+	// static void DrawTextOnCanvasAtActorLocation(class UCanvas* Canvas, const class APlayerController* Player, const class AActor* Actor, const FString& Text, FColor TextColor = FColor::White);
 
 	/**
 	 * 将 Debug 信息写入到本地文件 Saved/Logs/OrionDebug.log

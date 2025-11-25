@@ -41,6 +41,7 @@ void OrionCppFunctionLibrary::SetActorHighlight(const AActor* Actor, const bool 
 	}
 }
 
+/*
 void OrionCppFunctionLibrary::DrawTextOnCanvasAtActorLocation(UCanvas* Canvas, const APlayerController* Player, const AActor* Actor, const FString& Text, FColor TextColor)
 {
 	if (!Canvas || !Player || !Actor || !GEngine)
@@ -77,6 +78,7 @@ void OrionCppFunctionLibrary::DrawTextOnCanvasAtActorLocation(UCanvas* Canvas, c
 		}
 	}
 }
+*/
 
 void OrionCppFunctionLibrary::WriteDebugLog(const FString& LogContent)
 {

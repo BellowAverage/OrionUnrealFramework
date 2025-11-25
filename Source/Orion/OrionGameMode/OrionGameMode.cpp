@@ -8,7 +8,12 @@
 #include "Kismet/GameplayStatics.h"
 #include "Engine/DamageEvents.h"
 #include "EngineUtils.h"
+#include "Orion/OrionGameInstance/OrionCharaManager.h"
 #include "PhysicsEngine/RadialForceComponent.h"
+#include "Orion/OrionActor/OrionActorOre.h"
+#include "Orion/OrionActor/OrionActorProduction.h"
+#include "Orion/OrionInterface/OrionInterfaceActionable.h"
+#include "Math/RandomStream.h"
 
 #define ORION_CHARA_HALF_HEIGHT 88.f
 
@@ -182,10 +187,130 @@ void AOrionGameMode::OnTestKey2Pressed()
 
 	UOrionCharaManager* CharaManager = GetGameInstance()->GetSubsystem<UOrionCharaManager>();
 
-	if (CharaManager)
+	if (!CharaManager)
 	{
-		CharaManager->LoadAllCharacters(GetWorld(), CharaManager->TestCharactersSet);
+		UE_LOG(LogTemp, Warning, TEXT("CharaManager is null!"));
+		return;
 	}
+
+	// Load all characters
+	CharaManager->LoadAllCharacters(GetWorld(), CharaManager->TestCharactersSet);
+
+	// Check if there are any characters
+	if (CharaManager->GlobalCharaMap.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No characters found in GlobalCharaMap!"));
+		return;
+	}
+
+	// Initialize random stream with seed for reproducibility
+	FRandomStream RandomStream(TestRandomSeed);
+	UE_LOG(LogTemp, Log, TEXT("Using random seed: %d"), TestRandomSeed);
+
+	// Collect all available Ores and Productions
+	TArray<AActor*> FoundOres;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionActorOre::StaticClass(), FoundOres);
+
+	TArray<AActor*> FoundProduction;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionActorProduction::StaticClass(), FoundProduction);
+
+	if (FoundOres.IsEmpty() && FoundProduction.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No Ores or Productions found in the world!"));
+		return;
+	}
+
+	// Convert to typed arrays for easier access
+	TArray<AOrionActorOre*> AvailableOres;
+	for (AActor* Actor : FoundOres)
+	{
+		if (AOrionActorOre* Ore = Cast<AOrionActorOre>(Actor))
+		{
+			AvailableOres.Add(Ore);
+		}
+	}
+
+	TArray<AOrionActorProduction*> AvailableProductions;
+	for (AActor* Actor : FoundProduction)
+	{
+		if (AOrionActorProduction* Production = Cast<AOrionActorProduction>(Actor))
+		{
+			AvailableProductions.Add(Production);
+		}
+	}
+
+	// Iterate through all characters and assign random tasks
+	int32 CharaIndex = 0;
+	for (const TPair<FGuid, TWeakObjectPtr<AOrionChara>>& Pair : CharaManager->GlobalCharaMap)
+	{
+		AOrionChara* Chara = Pair.Value.Get();
+		if (!Chara)
+		{
+			continue;
+		}
+
+		IOrionInterfaceActionable* CharaInterface = Cast<IOrionInterfaceActionable>(Chara);
+		if (!CharaInterface)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Chara %s does not implement IOrionInterfaceActionable!"), *Chara->GetName());
+			continue;
+		}
+
+		// Determine number of tasks for this character (random between MinTasksPerChara and MaxTasksPerChara)
+		int32 NumTasks = RandomStream.RandRange(MinTasksPerChara, MaxTasksPerChara);
+		UE_LOG(LogTemp, Log, TEXT("Assigning %d tasks to Chara %d (%s)"), NumTasks, CharaIndex, *Chara->GetName());
+
+		// Assign random tasks
+		for (int32 TaskIndex = 0; TaskIndex < NumTasks; ++TaskIndex)
+		{
+			// Randomly choose between Mining (Ore) and Production
+			bool bChooseMining = RandomStream.FRand() < 0.5f;
+
+			if (bChooseMining && !AvailableOres.IsEmpty())
+			{
+				// Randomly select an Ore
+				int32 OreIndex = RandomStream.RandRange(0, AvailableOres.Num() - 1);
+				AOrionActorOre* SelectedOre = AvailableOres[OreIndex];
+
+				FOrionAction MiningAction = CharaInterface->InitActionInteractWithActor(
+					FString::Printf(TEXT("TestMiningAction_Chara%d_Task%d"), CharaIndex, TaskIndex), SelectedOre);
+				Chara->InsertOrionActionToQueue(MiningAction, EActionExecution::Procedural, -1);
+				UE_LOG(LogTemp, Log, TEXT("  - Assigned Mining task to Ore: %s"), *SelectedOre->GetName());
+			}
+			else if (!AvailableProductions.IsEmpty())
+			{
+				// Randomly select a Production
+				int32 ProductionIndex = RandomStream.RandRange(0, AvailableProductions.Num() - 1);
+				AOrionActorProduction* SelectedProduction = AvailableProductions[ProductionIndex];
+
+				FOrionAction ProductionAction = CharaInterface->InitActionInteractWithProduction(
+					FString::Printf(TEXT("TestProductionAction_Chara%d_Task%d"), CharaIndex, TaskIndex), SelectedProduction);
+				Chara->InsertOrionActionToQueue(ProductionAction, EActionExecution::Procedural, -1);
+				UE_LOG(LogTemp, Log, TEXT("  - Assigned Production task to: %s"), *SelectedProduction->GetName());
+			}
+			else if (!AvailableOres.IsEmpty())
+			{
+				// Fallback to Ore if Production is not available
+				int32 OreIndex = RandomStream.RandRange(0, AvailableOres.Num() - 1);
+				AOrionActorOre* SelectedOre = AvailableOres[OreIndex];
+
+				FOrionAction MiningAction = CharaInterface->InitActionInteractWithActor(
+					FString::Printf(TEXT("TestMiningAction_Chara%d_Task%d"), CharaIndex, TaskIndex), SelectedOre);
+				Chara->InsertOrionActionToQueue(MiningAction, EActionExecution::Procedural, -1);
+				UE_LOG(LogTemp, Log, TEXT("  - Assigned Mining task (fallback) to Ore: %s"), *SelectedOre->GetName());
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("  - No available tasks for Chara %d, Task %d"), CharaIndex, TaskIndex);
+			}
+		}
+
+		// Set character as procedural
+		Chara->bIsCharaProcedural = true;
+		CharaIndex++;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Task assignment completed for %d characters"), CharaIndex);
 }
 
 void AOrionGameMode::Tick(float DeltaTime)
@@ -249,7 +374,8 @@ void AOrionGameMode::SpawnCharaInstance(FVector SpawnLocation)
 		}
 
 		OrionChara->MaxHealth = 10.0f;
-		OrionChara->FireRange = 2000.0f;
+
+		OrionChara->CombatComp->FireRange = 2000.0f;
 		OrionChara->CharaSide = 1;
 		OrionChara->HostileGroupsIndex.Add(0);
 		OrionChara->CharaAIState = EAIState::Unavailable;

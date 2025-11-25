@@ -221,8 +221,8 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 
 			Canvas->DrawText(
 				RenderFont,
-				//FStringView(*CombinedText), // <- Pass FString instead of FStringView
-				CombinedText,
+				FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				//CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -258,8 +258,8 @@ void AOrionHUD::TickShowInfoAtMouse()
 
 		Canvas->DrawText(
 			RenderFont,
-			//FStringView(*Line),
-			Line,
+			FStringView(*Line),
+			//Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,

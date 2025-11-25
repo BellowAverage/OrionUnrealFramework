@@ -5,6 +5,7 @@
 #include "Components/VerticalBox.h"
 #include "Orion/OrionChara/OrionChara.h"
 #include "OrionUserWidgetCharaDetails.h"
+#include "Orion/OrionComponents/OrionMovementComponent.h"
 
 
 void UOrionUserWidgetCharaInfo::NativeConstruct()
@@ -281,7 +282,10 @@ void UOrionUserWidgetCharaInfo::InitCharaInfoPanelParams(AOrionChara* InChara)
 
 	if (SliderSpeed)
 	{
-		SliderSpeed->SetValue(InChara->OrionCharaSpeed);
+		if (InChara->MovementComp)
+		{
+			SliderSpeed->SetValue(InChara->MovementComp->OrionCharaSpeed);
+		}
 	}
 
 	CharaRef = InChara;

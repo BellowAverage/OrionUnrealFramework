@@ -21,20 +21,12 @@ class ORION_API UOrionCharaManager : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
-	/*—————————————————————
-	 *  蓝图类引用
-	 *————————————————————*/
+
 	UPROPERTY()
 	TSubclassOf<AOrionChara> CharacterBPClass;
 
-	/*—————————————————————
-	 *  用于测试的静态样本
-	 *————————————————————*/
 	static TArray<FOrionCharaSerializable> TestCharactersSet;
 
-	/*============================================================
-	 *  收集当前世界里所有角色 → 序列化为数组
-	 *===========================================================*/
 	void CollectCharacterRecords(TArray<FOrionCharaSerializable>& OutRecords)
 	{
 		OutRecords.Empty();
@@ -50,13 +42,12 @@ public:
 				Chara->Serialize(Ar);
 
 				FOrionCharaSerializable S;
-				/* —— 1) 基本信息 —— */
+
 				S.CharaGameId = Chara->GameSerializable.GameId;
 				S.CharaLocation = Chara->GetActorLocation();
 				S.CharaRotation = Chara->GetActorRotation();
 				S.SerializedBytes = MemWriter;
 
-				/* —— 2) 流程动作 —— */
 				for (const FOrionAction& Act : Chara->CharacterProcActionQueue.Actions)
 				{
 					S.SerializedProcActions.Add(Act.Params);
@@ -67,9 +58,6 @@ public:
 		}
 	}
 
-	/*============================================================
-	 *  移除当前世界中所有 OrionChara
-	 *===========================================================*/
 	void RemoveAllCharacters(UWorld* World)
 	{
 		for (const TPair<FGuid, TWeakObjectPtr<AOrionChara>>& Pair : GlobalCharaMap)
@@ -82,9 +70,6 @@ public:
 		GlobalCharaMap.Empty();
 	}
 
-	/*============================================================
-	 *  从保存数据重新生成全部角色
-	 *===========================================================*/
 	void LoadAllCharacters(UWorld* World,
 	                       const TArray<FOrionCharaSerializable>& Saved)
 	{
@@ -129,9 +114,6 @@ public:
 		}
 	}
 
-	/*============================================================
-	 *  子系统初始化：加载蓝图类
-	 *===========================================================*/
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override
 	{
 		Super::Initialize(Collection);
@@ -147,24 +129,16 @@ public:
 		}
 	}
 
-	/*============================================================
-	 *  外部查找接口（可供其它系统使用）
-	 *===========================================================*/
 	FORCEINLINE AOrionChara* FindCharaById(const FGuid& Id) const
 	{
 		const TWeakObjectPtr<AOrionChara>* Ptr = GlobalCharaMap.Find(Id);
 		return Ptr && Ptr->IsValid() ? Ptr->Get() : nullptr;
 	}
 
-private:
-	/*—————————————————————
-	 *  全局弱引用表
-	 *————————————————————*/
 	TMap<FGuid, TWeakObjectPtr<AOrionChara>> GlobalCharaMap;
 
-	/*============================================================
-	 *  根据保存记录 Spawn 单个角色并注册
-	 *===========================================================*/
+private:
+
 	void SpawnAndRegisterOrionChara(const FOrionCharaSerializable& Serializable)
 	{
 		if (AOrionChara* Chara =
@@ -183,9 +157,7 @@ private:
 		}
 	}
 
-	/*------------------------------------------------------------
-	 *  Spawn Helper：自动对地面投射，避免出生地下
-	 *-----------------------------------------------------------*/
+
 	AOrionChara* SpawnOrionChara(const FVector& Location,
 	                             const FRotator& Rotation) const
 	{
@@ -223,9 +195,7 @@ private:
 		return SpawningChara;
 	}
 
-	/*------------------------------------------------------------
-	 *  把角色放进全局表
-	 *-----------------------------------------------------------*/
+
 	void RegisterChara(AOrionChara* Chara)
 	{
 		if (Chara)
@@ -234,9 +204,6 @@ private:
 		}
 	}
 
-	/*------------------------------------------------------------
-	 *  通过 Params 恢复流程 Action 队列
-	 *-----------------------------------------------------------*/
 	static void RecoverProcActions(AOrionChara* Chara,
 	                               const FOrionCharaSerializable& S)
 	{

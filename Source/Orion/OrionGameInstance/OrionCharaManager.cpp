@@ -13,19 +13,19 @@ TArray<FOrionCharaSerializable> UOrionCharaManager::TestCharactersSet = {
 	},
 	{
 		FGuid::NewGuid(),
-		FVector(200.f, 0.0f, 150.f),
+		FVector(200.f, 200.0f, 150.f),
 		FRotator(0.0f, 0.0f, 0.0f),
 		{}
 	},
 	{
 		FGuid::NewGuid(),
-		FVector(400.f, 0.0f, 150.f),
+		FVector(400.f, 200.0f, 150.f),
 		FRotator(0.0f, 0.0f, 0.0f),
 		{}
 	},
 	{
 		FGuid::NewGuid(),
-		FVector(600.f, 0.0f, 150.f),
+		FVector(600.f, 100.0f, 150.f),
 		FRotator(0.0f, 0.0f, 0.0f),
 		{}
 	},

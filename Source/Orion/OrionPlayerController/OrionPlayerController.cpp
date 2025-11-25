@@ -1485,13 +1485,15 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 		{
 			FString ActionName = FString::Printf(
 				TEXT("InteractWithInventory%s"), *CachedActionObjects->GetName());
-			OrionCharaSelection[0]->CharacterActionQueue.Actions.Add(FOrionAction(
+			FOrionAction AddingAction(
 				ActionName,
-				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](
-				float DeltaTime) -> bool
+				EOrionAction::InteractWithStorage,
+				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](float DeltaTime) -> bool
 				{
 					return charPtr->InteractWithInventory(targetActor);
-				}));
+				});
+			AddingAction.Params.OrionActionType = EOrionAction::InteractWithStorage;
+			OrionCharaSelection[0]->CharacterActionQueue.Actions.Add(AddingAction);
 		}
 		else
 		{

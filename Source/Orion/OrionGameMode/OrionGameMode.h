@@ -6,7 +6,6 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "WheeledVehiclePawn.h"
-#include "Orion/OrionGameInstance/OrionCharaManager.h"
 #include "OrionGameMode.generated.h"
 
 
@@ -41,7 +40,21 @@ public:
 
 	void OnTestKey1Pressed();
 	bool GenerateExplosionSimulation();
+
+	UFUNCTION(BlueprintCallable, Category = "Developer")
 	void OnTestKey2Pressed();
+
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Developer")
 	TSubclassOf<AActor> ExplosionClass;
+
+	/* Test Function Configuration */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Developer|Test", meta = (ToolTip = "Random seed for test function. Set this to reproduce the same random task assignments."))
+	int32 TestRandomSeed = 555;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Developer|Test", meta = (ToolTip = "Minimum number of tasks to assign to each character"))
+	int32 MinTasksPerChara = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Developer|Test", meta = (ToolTip = "Maximum number of tasks to assign to each character"))
+	int32 MaxTasksPerChara = 4;
 };
