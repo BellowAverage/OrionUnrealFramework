@@ -187,6 +187,131 @@ public:
 
 	TMap<FGuid, TWeakObjectPtr<AOrionChara>> GlobalCharaMap;
 
+	/** Helper function to add initial actions to character's queue */
+	void AddInitialActionsToChara(AOrionChara* Chara, const FOrionCharaSpawnParams& SpawnParams);
+
+	/** 
+	 * 向指定角色添加移动到位置的动作
+	 * @param Chara 目标角色指针
+	 * @param TargetLocation 目标位置
+	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
+	 * @param Index 插入位置索引，-1 表示添加到队列末尾
+	 * @return 是否成功添加动作
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddMoveToLocationAction(AOrionChara* Chara, const FVector& TargetLocation,
+	                             EActionExecution ExecutionType = EActionExecution::Procedural,
+	                             int32 Index = -1);
+
+	/** 
+	 * 向指定角色添加攻击角色的动作
+	 * @param Chara 目标角色指针
+	 * @param TargetActor 要攻击的目标Actor
+	 * @param HitOffset 命中偏移量
+	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
+	 * @param Index 插入位置索引，-1 表示添加到队列末尾
+	 * @return 是否成功添加动作
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddAttackOnCharaAction(AOrionChara* Chara, AActor* TargetActor, const FVector& HitOffset = FVector::ZeroVector,
+	                            EActionExecution ExecutionType = EActionExecution::Procedural,
+	                            int32 Index = -1);
+
+	/** 
+	 * 向指定角色添加与Actor交互的动作
+	 * @param Chara 目标角色指针
+	 * @param TargetActor 要交互的目标Actor
+	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
+	 * @param Index 插入位置索引，-1 表示添加到队列末尾
+	 * @return 是否成功添加动作
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddInteractWithActorAction(AOrionChara* Chara, AOrionActor* TargetActor,
+	                                EActionExecution ExecutionType = EActionExecution::Procedural,
+	                                int32 Index = -1);
+
+	/** 
+	 * 向指定角色添加与生产Actor交互的动作
+	 * @param Chara 目标角色指针
+	 * @param TargetActor 要交互的生产Actor
+	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
+	 * @param Index 插入位置索引，-1 表示添加到队列末尾
+	 * @return 是否成功添加动作
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddInteractWithProductionAction(AOrionChara* Chara, AOrionActorProduction* TargetActor,
+	                                      EActionExecution ExecutionType = EActionExecution::Procedural,
+	                                      int32 Index = -1);
+
+	/** 
+	 * 向指定角色添加收集货物的动作
+	 * @param Chara 目标角色指针
+	 * @param TargetActor 要收集的存储Actor
+	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
+	 * @param Index 插入位置索引，-1 表示添加到队列末尾
+	 * @return 是否成功添加动作
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddCollectCargoAction(AOrionChara* Chara, AOrionActorStorage* TargetActor,
+	                            EActionExecution ExecutionType = EActionExecution::Procedural,
+	                            int32 Index = -1);
+
+	/** 
+	 * 向指定角色添加收集子弹的动作
+	 * @param Chara 目标角色指针
+	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
+	 * @param Index 插入位置索引，-1 表示添加到队列末尾
+	 * @return 是否成功添加动作
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddCollectBulletsAction(AOrionChara* Chara,
+	                             EActionExecution ExecutionType = EActionExecution::Procedural,
+	                             int32 Index = -1);
+
+	/** 
+	 * [New] 向指定角色添加交互库存(ExchangeCargo)的动作
+	 * @param Chara 目标角色指针
+	 * @param TargetActor 目标Actor
+	 * @param ExecutionType 动作执行类型
+	 * @param Index 插入位置
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool AddInteractWithInventoryAction(AOrionChara* Chara, AOrionActor* TargetActor,
+	                                    EActionExecution ExecutionType = EActionExecution::Procedural,
+	                                    int32 Index = -1);
+
+	/** 
+	 * 移除指定角色的所有动作
+	 * @param Chara 目标角色指针
+	 * @return 是否成功移除
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool RemoveAllActionsFromChara(AOrionChara* Chara);
+
+	/** 
+	 * 移除指定角色的特定索引的 Procedural 动作
+	 * @param Chara 目标角色指针
+	 * @param Index 动作在 Procedural 队列中的索引
+	 * @return 是否成功移除
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool RemoveProceduralActionAtFromChara(AOrionChara* Chara, int32 Index);
+
+	/** 
+	 * 重新排序指定角色的 Procedural 动作
+	 * @param Chara 目标角色指针
+	 * @param DraggedIndex 被拖拽动作的原始索引
+	 * @param DropIndex 目标位置索引
+	 * @return 是否成功重新排序
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
+	bool ReorderProceduralActionInChara(AOrionChara* Chara, int32 DraggedIndex, int32 DropIndex);
+
+	/** 统一的通过参数添加动作的函数 */
+	bool AddActionByParams(AOrionChara* Chara, const FOrionActionParams& P,
+	                       EActionExecution ExecutionType = EActionExecution::Procedural,
+	                       int32 Index = -1);
+
 private:
 
 	void SpawnAndRegisterOrionChara(const FOrionCharaSerializable& Serializable)
@@ -257,120 +382,6 @@ private:
 	void RecoverProcActions(AOrionChara* Chara,
 	                        const FOrionCharaSerializable& S);
 
-	/** Helper function to add initial actions to character's queue */
-	void AddInitialActionsToChara(AOrionChara* Chara, const FOrionCharaSpawnParams& SpawnParams);
-
-	/** 
-	 * 向指定角色添加移动到位置的动作
-	 * @param Chara 目标角色指针
-	 * @param TargetLocation 目标位置
-	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
-	 * @param Index 插入位置索引，-1 表示添加到队列末尾
-	 * @return 是否成功添加动作
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool AddMoveToLocationAction(AOrionChara* Chara, const FVector& TargetLocation,
-	                             EActionExecution ExecutionType = EActionExecution::Procedural,
-	                             int32 Index = -1);
-
-	/** 
-	 * 向指定角色添加攻击角色的动作
-	 * @param Chara 目标角色指针
-	 * @param TargetChara 要攻击的目标角色
-	 * @param HitOffset 命中偏移量
-	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
-	 * @param Index 插入位置索引，-1 表示添加到队列末尾
-	 * @return 是否成功添加动作
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool AddAttackOnCharaAction(AOrionChara* Chara, AOrionChara* TargetChara, const FVector& HitOffset = FVector::ZeroVector,
-	                            EActionExecution ExecutionType = EActionExecution::Procedural,
-	                            int32 Index = -1);
-
-	/** 
-	 * 向指定角色添加与Actor交互的动作
-	 * @param Chara 目标角色指针
-	 * @param TargetActor 要交互的目标Actor
-	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
-	 * @param Index 插入位置索引，-1 表示添加到队列末尾
-	 * @return 是否成功添加动作
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool AddInteractWithActorAction(AOrionChara* Chara, AOrionActor* TargetActor,
-	                                EActionExecution ExecutionType = EActionExecution::Procedural,
-	                                int32 Index = -1);
-
-	/** 
-	 * 向指定角色添加与生产Actor交互的动作
-	 * @param Chara 目标角色指针
-	 * @param TargetActor 要交互的生产Actor
-	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
-	 * @param Index 插入位置索引，-1 表示添加到队列末尾
-	 * @return 是否成功添加动作
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool AddInteractWithProductionAction(AOrionChara* Chara, AOrionActorProduction* TargetActor,
-	                                      EActionExecution ExecutionType = EActionExecution::Procedural,
-	                                      int32 Index = -1);
-
-	/** 
-	 * 向指定角色添加收集货物的动作
-	 * @param Chara 目标角色指针
-	 * @param TargetActor 要收集的存储Actor
-	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
-	 * @param Index 插入位置索引，-1 表示添加到队列末尾
-	 * @return 是否成功添加动作
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool AddCollectCargoAction(AOrionChara* Chara, AOrionActorStorage* TargetActor,
-	                            EActionExecution ExecutionType = EActionExecution::Procedural,
-	                            int32 Index = -1);
-
-	/** 
-	 * 向指定角色添加收集子弹的动作
-	 * @param Chara 目标角色指针
-	 * @param ExecutionType 动作执行类型（Procedural 或 RealTime），默认为 Procedural
-	 * @param Index 插入位置索引，-1 表示添加到队列末尾
-	 * @return 是否成功添加动作
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool AddCollectBulletsAction(AOrionChara* Chara,
-	                             EActionExecution ExecutionType = EActionExecution::Procedural,
-	                             int32 Index = -1);
-
-	/** 
-	 * 移除指定角色的所有动作
-	 * @param Chara 目标角色指针
-	 * @return 是否成功移除
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool RemoveAllActionsFromChara(AOrionChara* Chara);
-
-	/** 
-	 * 移除指定角色的特定索引的 Procedural 动作
-	 * @param Chara 目标角色指针
-	 * @param Index 动作在 Procedural 队列中的索引
-	 * @return 是否成功移除
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool RemoveProceduralActionAtFromChara(AOrionChara* Chara, int32 Index);
-
-	/** 
-	 * 重新排序指定角色的 Procedural 动作
-	 * @param Chara 目标角色指针
-	 * @param DraggedIndex 被拖拽动作的原始索引
-	 * @param DropIndex 目标位置索引
-	 * @return 是否成功重新排序
-	 */
-	UFUNCTION(BlueprintCallable, Category = "Orion|Character Action")
-	bool ReorderProceduralActionInChara(AOrionChara* Chara, int32 DraggedIndex, int32 DropIndex);
-
-	/** 统一的通过参数添加动作的函数 */
-	bool AddActionByParams(AOrionChara* Chara, const FOrionActionParams& P,
-	                       EActionExecution ExecutionType = EActionExecution::Procedural,
-	                       int32 Index = -1);
-
-private:
 	/** 内部统一的添加动作出口 */
 	bool Internal_AddAction(AOrionChara* Chara, const FOrionAction& Action,
 	                        EActionExecution ExecutionType, int32 Index);

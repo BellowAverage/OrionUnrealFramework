@@ -7,6 +7,7 @@
 #include "Orion/OrionComponents/OrionActionComponent.h"
 #include "Orion/OrionComponents/OrionAttributeComponent.h"
 #include "Orion/OrionGameInstance/OrionFactionManager.h"
+#include "Orion/OrionGameInstance/OrionCharaManager.h"
 #include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionActor/OrionActor.h"
 #include "Orion/OrionStructure/OrionStructure.h"
@@ -134,8 +135,10 @@ void AOrionAIController::RegisterFetchingAmmoEvent()
 	{
 		UE_LOG(LogTemp, Log, TEXT("Enqueuing FetchAmmo action"));
 
-		const FOrionAction AddingOrionAction = ControlledPawn->InitActionCollectBullets(TEXT("AC_CollectAmmo"));
-		ControlledPawn->InsertOrionActionToQueue(AddingOrionAction, EActionExecution::RealTime, -1);
+		if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+		{
+			Manager->AddCollectBulletsAction(ControlledPawn, EActionExecution::RealTime);
+		}
 	}
 }
 
@@ -161,10 +164,10 @@ void AOrionAIController::RegisterDefensiveAIActon()
 		if (AActor* TargetActor = GetClosestHostileActor())
 		{
 			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::RegisterDefensiveAIActon: Found target %s"), *TargetActor->GetName());
-			const FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange|%s"), *TargetActor->GetName());
-
-			const FOrionAction AddingOrionAction = ControlledPawn->InitActionAttackOnChara(ActionName, TargetActor, FVector());
-			ControlledPawn->InsertOrionActionToQueue(AddingOrionAction, EActionExecution::RealTime, -1);
+			if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+			{
+				Manager->AddAttackOnCharaAction(ControlledPawn, TargetActor, FVector::ZeroVector, EActionExecution::RealTime);
+			}
 		}
 		else
 		{

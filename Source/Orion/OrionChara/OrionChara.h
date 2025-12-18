@@ -178,11 +178,6 @@ public:
 	FString GetUnifiedActionName() const;
 	EOrionAction GetUnifiedActionType() const;
 
-	void InsertOrionActionToQueue(
-		const FOrionAction& OrionActionInstance,
-		const EActionExecution ActionExecutionType,
-		const int32 Index);
-
 	/* UI interface to get specific action status */
 	UFUNCTION(BlueprintCallable, Category = "Orion|ActionSystem")
 	FString GetActionValidityReason(int32 ActionIndex, bool bIsProcedural);
@@ -202,8 +197,10 @@ public:
 	FOrionAction InitActionCollectCargo(const FString& ActionName, AOrionActorStorage* TargetActor);
 
 
-	/* Warning: Collecting Bullets is currently not serializable */
 	FOrionAction InitActionCollectBullets(const FString& ActionName);
+
+	// [New] InitActionInteractWithInventory
+	FOrionAction InitActionInteractWithInventory(const FString& ActionName, AOrionActor* TargetActor);
 
 
 	/* 5. Character Selectable System */
@@ -243,7 +240,7 @@ public:
 	/* Physics & Animation Utils */
 
 	UFUNCTION(BlueprintCallable, Category = "Orion|Physics")
-	void SynchronizeCapsuleCompLocation() const;
+	void SynchronizeCapsuleCompLocation();
 
 	void OnForceExceeded(const FVector& VelocityChange);
 
@@ -251,7 +248,7 @@ public:
 	float ForceThreshold = 2.0f;
 
 	FVector PreviousVelocity;
-	float VelocityChangeThreshold = 1000.0f;
+	float VelocityChangeThreshold = 600.f;
 
 	void ForceDetectionOnVelocityChange();
 
@@ -262,7 +259,15 @@ public:
 
 	void RagdollWakeup();
 	float RagdollWakeupAccumulatedTime = 0;
-	float RagdollWakeupThreshold = 5.0f;
+	float RagdollWakeupThreshold = 5.f;
+
+	/** 仰卧起身蒙太奇 (躺在背上时播放) - Supine */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation|Ragdoll")
+	UAnimMontage* GetUpMontage_FaceUp;
+
+	/** 俯卧起身蒙太奇 (趴在地上时播放) - Prone */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation|Ragdoll")
+	UAnimMontage* GetUpMontage_FaceDown;
 
 	FVector DefaultMeshRelativeLocation;
 	FRotator DefaultMeshRelativeRotation;
@@ -378,4 +383,10 @@ public:
 	std::vector<AOrionChara*> GetOtherCharasByProximity() const;
 
 	/* Developer Only */
+
+	UPROPERTY(EditDefaultsOnly, Category = "Config(Non-null)|Animation")
+	UAnimMontage* Montage_Mining;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Config(Non-null)|Animation")
+	UAnimMontage* Montage_Crafting;
 };

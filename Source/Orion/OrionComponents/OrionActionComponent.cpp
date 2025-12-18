@@ -1,5 +1,4 @@
 #include "OrionActionComponent.h"
-#include "Orion/OrionChara/OrionChara.h"
 
 UOrionActionComponent::UOrionActionComponent()
 {

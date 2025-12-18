@@ -19,6 +19,7 @@
 #include "Orion/OrionInterface/OrionInterfaceHoverable.h"
 #include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionGameInstance/OrionFactionManager.h"
+#include "Orion/OrionGameInstance/OrionCharaManager.h"
 
 AOrionPlayerController::AOrionPlayerController()
 {
@@ -1071,9 +1072,10 @@ void AOrionPlayerController::OnRightMouseUp()
 				{
 					FString ActionName = FString::Printf(
 						TEXT("CollectingCargo_%s"), *StorageActorInstance->GetName());
-					FOrionAction AddingAction = EachChara->
-						InitActionCollectCargo(ActionName, StorageActorInstance);
-					EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+					if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+					{
+						Manager->AddCollectCargoAction(EachChara, StorageActorInstance, EActionExecution::Procedural);
+					}
 				}
 			}
 			}
@@ -1093,13 +1095,11 @@ void AOrionPlayerController::OnRightMouseUp()
 						}
 
 
-						EachChara->ActionComp->RemoveAllActions();
-
-						FString ActionName = FString::Printf(
-							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
-						FOrionAction AddingAction = EachChara->InitActionInteractWithProduction(
-							ActionName, ProductionActorInstance);
-						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+						{
+							Manager->RemoveAllActionsFromChara(EachChara);
+							Manager->AddInteractWithProductionAction(EachChara, ProductionActorInstance, EActionExecution::RealTime);
+						}
 					}
 				}
 			}
@@ -1109,11 +1109,10 @@ void AOrionPlayerController::OnRightMouseUp()
 				{
 					if (EachChara && EachChara->ActionComp)
 					{
-						FString ActionName = FString::Printf(
-							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
-						FOrionAction AddingAction = EachChara->InitActionInteractWithProduction(
-							ActionName, ProductionActorInstance);
-						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+						if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+						{
+							Manager->AddInteractWithProductionAction(EachChara, ProductionActorInstance, EActionExecution::Procedural);
+						}
 					}
 				}
 			}
@@ -1131,13 +1130,11 @@ void AOrionPlayerController::OnRightMouseUp()
 							EachChara->ActionComp->SetProcedural(false);
 						}
 
-						EachChara->ActionComp->RemoveAllActions();
-
-						FString ActionName = FString::Printf(
-							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
-						FOrionAction AddingAction = EachChara->InitActionInteractWithActor(
-							ActionName, OreActorInstance);
-						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+						{
+							Manager->RemoveAllActionsFromChara(EachChara);
+							Manager->AddInteractWithActorAction(EachChara, OreActorInstance, EActionExecution::RealTime);
+						}
 					}
 				}
 			}
@@ -1148,11 +1145,10 @@ void AOrionPlayerController::OnRightMouseUp()
 				{
 					if (EachChara && EachChara->ActionComp)
 					{
-						FString ActionName = FString::Printf(
-							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
-						FOrionAction AddingAction = EachChara->InitActionInteractWithActor(
-							ActionName, OreActorInstance);
-						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+						if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+						{
+							Manager->AddInteractWithActorAction(EachChara, OreActorInstance, EActionExecution::Procedural);
+						}
 					}
 				}
 			}
@@ -1290,11 +1286,11 @@ void AOrionPlayerController::OnRightMouseDown()
 							EachChara->ActionComp->SetProcedural(false);
 						}
 
-						EachChara->ActionComp->RemoveAllActions();
-
-						FOrionAction AddingAction = EachChara->InitActionMoveToLocation(
-							TEXT("MoveToLocation"), HitResult.Location);
-						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+						{
+							Manager->RemoveAllActionsFromChara(EachChara);
+							Manager->AddMoveToLocationAction(EachChara, HitResult.Location, EActionExecution::RealTime);
+						}
 					}
 				}
 			}
@@ -1306,9 +1302,10 @@ void AOrionPlayerController::OnRightMouseDown()
 			{
 				if (EachChara && EachChara->ActionComp)
 				{
-					FOrionAction AddingAction = EachChara->InitActionMoveToLocation(
-						TEXT("MoveToLocation"), HitResult.Location);
-					EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+					if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+					{
+						Manager->AddMoveToLocationAction(EachChara, HitResult.Location, EActionExecution::RealTime);
+					}
 				}
 			}
 		}
@@ -1349,11 +1346,11 @@ void AOrionPlayerController::OnRightMouseDown()
 								continue;
 							} */
 
-							EachChara->ActionComp->RemoveAllActions();
-
-							FOrionAction AddingAction = EachChara->InitActionAttackOnChara(
-								ActionName, HitActor, HitOffset);
-							EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+							if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+							{
+								Manager->RemoveAllActionsFromChara(EachChara);
+								Manager->AddAttackOnCharaAction(EachChara, HitActor, HitOffset, EActionExecution::RealTime);
+							}
 						}
 					}
 				}
@@ -1370,9 +1367,10 @@ void AOrionPlayerController::OnRightMouseDown()
 					{
 						if (EachChara && EachChara->ActionComp)
 						{
-							FOrionAction AddingAction = EachChara->InitActionAttackOnChara(
-								ActionName, HitActor, HitOffset);
-							EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+							if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+							{
+								Manager->AddAttackOnCharaAction(EachChara, HitActor, HitOffset, EActionExecution::RealTime);
+							}
 						}
 					}
 				}
@@ -1465,11 +1463,11 @@ void AOrionPlayerController::RequestAttackOnOrionActor(FVector HitOffset, EComma
 					continue;
 				} */
 
-				EachChara->ActionComp->RemoveAllActions();
-
-				FOrionAction AddingAction = EachChara->InitActionAttackOnChara(
-					ActionName, CachedActionObjects, HitOffset);
-				EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+				if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+				{
+					Manager->RemoveAllActionsFromChara(EachChara);
+					Manager->AddAttackOnCharaAction(EachChara, CachedActionObjects, HitOffset, EActionExecution::RealTime);
+				}
 			}
 		}
 	}
@@ -1493,20 +1491,12 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 	{
 		if (!OrionCharaSelection.IsEmpty() && OrionCharaSelection.Num() == 1)
 		{
-			FString ActionName = FString::Printf(
-				TEXT("InteractWithInventory%s"), *CachedActionObjects->GetName());
-			FOrionAction AddingAction(
-				ActionName,
-				EOrionAction::InteractWithStorage,
-				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](float DeltaTime) -> EActionStatus
-				{
-					bool bFinished = charPtr->InteractWithInventory(targetActor);
-					return bFinished ? EActionStatus::Finished : EActionStatus::Running;
-				});
-			AddingAction.Params.OrionActionType = EOrionAction::InteractWithStorage;
 			if (OrionCharaSelection[0])
 			{
-				OrionCharaSelection[0]->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, INDEX_NONE);
+				if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+				{
+					Manager->AddInteractWithInventoryAction(OrionCharaSelection[0], CachedActionObjects, EActionExecution::RealTime);
+				}
 			}
 		}
 		else

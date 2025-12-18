@@ -121,12 +121,10 @@ void AOrionChara::Tick(float DeltaTime)
 		return;
 	}
 
-	/* Physics Handle - See Movement Module */
-	// RegisterCharaRagdoll(DeltaTime);
+	ForceDetectionOnVelocityChange();
+	RegisterCharaRagdoll(DeltaTime);
 
-	// ForceDetectionOnVelocityChange();
 
-	/* Action dispatch logic moved to Component, state detection also handled by Component delegates */
 
 
 	/* Refresh Attack Frequency */
@@ -146,17 +144,6 @@ FString AOrionChara::GetUnifiedActionName() const
 EOrionAction AOrionChara::GetUnifiedActionType() const
 {
 	return ActionComp ? ActionComp->GetUnifiedActionType() : EOrionAction::Undefined;
-}
-
-void AOrionChara::InsertOrionActionToQueue(
-	const FOrionAction& OrionActionInstance,
-	const EActionExecution ActionExecutionType,
-	const int32 Index)
-{
-	if (ActionComp)
-	{
-		ActionComp->InsertAction(OrionActionInstance, ActionExecutionType == EActionExecution::Procedural, Index);
-	}
 }
 
 void AOrionChara::OnActionTypeChangedHandler(EOrionAction PrevType, EOrionAction CurrType)
@@ -720,6 +707,38 @@ FOrionAction AOrionChara::InitActionCollectBullets(const FString& ActionName)
 	return AddingAction;
 }
 
+// [New] InitActionInteractWithInventory
+FOrionAction AOrionChara::InitActionInteractWithInventory(const FString& ActionName, AOrionActor* TargetActor)
+{
+	FGuid TargetID;
+	if (TargetActor) TargetID = TargetActor->ActorSerializable.GameId;
+
+	FOrionAction Action(
+		ActionName,
+		EOrionAction::InteractWithStorage,
+		[this, TargetActor](float DeltaTime) -> EActionStatus
+		{
+			bool bFinished = InteractWithInventory(TargetActor);
+			return bFinished ? EActionStatus::Finished : EActionStatus::Running;
+		}
+	);
+
+	Action.Params.OrionActionType = EOrionAction::InteractWithStorage;
+	Action.Params.TargetActorId = TargetID;
+
+	Action.ValidityCheckFunction = [this, TargetActor](FString& OutReason) -> EActionValidity
+	{
+		if (!TargetActor || !TargetActor->IsValidLowLevel())
+		{
+			OutReason = TEXT("Inventory Target Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+		return EActionValidity::Valid;
+	};
+
+	return Action;
+}
+
 ESelectable AOrionChara::GetSelectableType() const
 {
 	return ESelectable::OrionChara;
@@ -1220,6 +1239,32 @@ bool AOrionChara::InteractWithActorStart(const EInteractWithActorState& State)
 	LookAtRot.Roll = 0;
 	SetActorRotation(LookAtRot);
 
+	/* 播放对应的动画蒙太奇 */
+	UAnimMontage* MontageToPlay = nullptr;
+
+	// 根据 SetInteractingAnimation 设置好的 Enum 决定播放哪个蒙太奇
+	switch (InteractAnimationKind)
+	{
+	case EInteractCategory::Mining:
+		MontageToPlay = Montage_Mining;
+		break;
+	case EInteractCategory::CraftingBullets:
+		MontageToPlay = Montage_Crafting;
+		break;
+	default:
+		break;
+	}
+
+	if (MontageToPlay)
+	{
+		// 播放蒙太奇 (如果蒙太奇设置了 Loop Section，它会自动循环直到被打断)
+		PlayAnimMontage(MontageToPlay);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("InteractWithActorStart: No Montage assigned for InteractKind: %d"), (int32)InteractAnimationKind);
+	}
+
 	return false;
 }
 
@@ -1227,6 +1272,8 @@ void AOrionChara::InteractWithActorStop(EInteractWithActorState& State)
 {
 	if (State == EInteractWithActorState::Interacting)
 	{
+		StopAnimMontage();
+
 		if (CurrentInteractActor)
 		{
 			CurrentInteractActor->CurrWorkers -= 1;
@@ -1522,15 +1569,44 @@ void AOrionChara::RegisterCharaRagdoll(float DeltaTime)
 	}
 }
 
-void AOrionChara::SynchronizeCapsuleCompLocation() const
+void AOrionChara::SynchronizeCapsuleCompLocation()
 {
-	const FName RootBone = GetMesh()->GetBoneName(0);
-	const FVector MeshRootLocation = GetMesh()->GetBoneLocation(RootBone);
-
-	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
+	if (GetMesh() && GetMesh()->IsSimulatingPhysics())
 	{
-		const FVector NewCapsuleLocation = MeshRootLocation + DefaultCapsuleMeshOffset;
-		CapsuleComp->SetWorldLocation(NewCapsuleLocation);
+		// 1. 获取 Mesh 盆骨（核心位置）的世界坐标
+		FVector PelvisLocation = GetMesh()->GetSocketLocation(TEXT("pelvis"));
+
+		// 2. 调整胶囊体的高度
+		// 因为胶囊体的中心点是在半个高度处，而躺在地上的盆骨非常低。
+		// 如果直接把胶囊体设在盆骨位置，胶囊体会陷进地里一半。
+		float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+		// 我们希望胶囊体底部略低于盆骨，或者做一个射线检测找到地面（更严谨做法）
+		// 这里用简易做法：假设盆骨在地面，胶囊体中心 = 盆骨位置 + (0, 0, HalfHeight)
+		// 但为了防止穿墙，通常需要做一个向下的射线检测找到真正的地面
+		FVector TargetLocation = PelvisLocation;
+
+		// --- 进阶：防止穿地逻辑 ---
+		FHitResult Hit;
+		FVector TraceStart = PelvisLocation + FVector(0, 0, 50.0f);
+		FVector TraceEnd = PelvisLocation - FVector(0, 0, 100.0f); // 向下探测
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(this); // 忽略自己
+
+		if (GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+		{
+			// 如果探测到地面，将胶囊体中心放在地面之上 HalfHeight 的位置
+			TargetLocation = Hit.ImpactPoint + FVector(0, 0, CapsuleHalfHeight);
+		}
+		else
+		{
+			// 没探测到地面（可能飞在空中），直接跟盆骨，但修正高度以免相机太低
+			TargetLocation.Z += CapsuleHalfHeight * 0.5f;
+		}
+
+		// 3. 更新胶囊体位置
+		// 注意：bSweep=true，这样如果撞墙了就会停下，防止Mesh穿墙导致胶囊体也卡进墙里
+		SetActorLocation(TargetLocation, true);
 	}
 }
 
@@ -1540,13 +1616,15 @@ void AOrionChara::ForceDetectionOnVelocityChange()
 
 	if (const float VelocityChange = (CurrentVelocity - PreviousVelocity).Size() > VelocityChangeThreshold)
 	{
-		//OnForceExceeded(CurrentVelocity - PreviousVelocity);
-		BlueprintNativeVelocityExceeded();
+		OnForceExceeded(CurrentVelocity - PreviousVelocity);
+		UE_LOG(LogTemp, Warning, TEXT("Velocity change exceeded threshold: %f"), VelocityChange);
+		//BlueprintNativeVelocityExceeded();
 	}
 
 	PreviousVelocity = CurrentVelocity;
 }
 
+/*
 void AOrionChara::OnForceExceeded(const FVector& DeltaVelocity)
 {
 	const float DeltaVSize = DeltaVelocity.Size();
@@ -1578,10 +1656,70 @@ void AOrionChara::OnForceExceeded(const FVector& DeltaVelocity)
 
 	GetMesh()->AddImpulse(ImpulseToAdd, NAME_None, true);
 }
+*/
+
+void AOrionChara::OnForceExceeded(const FVector& DeltaVelocity)
+{
+	// 1. 记录当前基础速度 (用于平滑过渡)
+	const FVector CurrVel = GetVelocity();
+
+	// 2. 开启物理模拟 (Ragdoll)
+	Ragdoll();
+
+	// 3. 确保 Mesh 已经开启物理
+	if (GetMesh() && GetMesh()->IsSimulatingPhysics())
+	{
+		// --- 核心逻辑开始 ---
+
+		// A. 继承胶囊体之前的速度，避免瞬间停顿
+		GetMesh()->SetAllPhysicsLinearVelocity(CurrVel);
+
+		// B. 计算虚拟撞击点 (Virtual Impact Point)
+		// 逻辑：如果速度向右(DeltaVelocity)，说明撞击点在左边(-DeltaVelocity)
+
+		// 获取力的方向
+		FVector ImpulseDir = DeltaVelocity.GetSafeNormal();
+
+		// 获取角色中心位置 (或者使用 GetMesh()->GetCenterOfMass())
+		FVector CenterLocation = GetMesh()->GetComponentLocation();
+
+		// 获取胶囊体半径，用于把点推到身体表面
+		float CapsuleRadius = 35.0f;
+		if (GetCapsuleComponent())
+		{
+			CapsuleRadius = GetCapsuleComponent()->GetScaledCapsuleRadius();
+		}
+
+		// C. 制造随机性 (关键步骤)
+		// 为了让布娃娃每次倒下的姿势不同，我们在高度上加一点随机偏移
+		// 这样有时会打中头部(后仰)，有时打中腿部(前扑)
+		float RandomHeightOffset = FMath::RandRange(-150.0f, 150.0f);
+		FVector RandomOffset(0, 0, RandomHeightOffset);
+
+		// 计算最终的虚拟撞击点位置：
+		// 中心点 + (反方向 * 半径) + 随机高度
+		FVector VirtualImpactPoint = CenterLocation - (ImpulseDir * CapsuleRadius) + RandomOffset;
+
+		// D. 应用带位置的冲量 (Option B)
+		// 注意：使用 bVelChange=true，直接把 DeltaVelocity 作为速度变化量施加，
+		// 这样就不用关心质量(Mass)和时间(DeltaT)的换算了，手感最准。
+		GetMesh()->AddImpulseAtLocation(DeltaVelocity, VirtualImpactPoint, NAME_None);
+
+		// --- 核心逻辑结束 ---
+
+		// Debug 线条：画出撞击点位置 (红色) 和 力的方向 (绿色)
+		// DrawDebugSphere(GetWorld(), VirtualImpactPoint, 10.0f, 12, FColor::Red, false, 3.0f);
+		// DrawDebugLine(GetWorld(), VirtualImpactPoint, VirtualImpactPoint + DeltaVelocity, FColor::Green, false, 3.0f, 0, 2.0f);
+
+		UE_LOG(LogTemp, Warning, TEXT("Applied Ragdoll Impulse at Virtual Point: %s"), *VirtualImpactPoint.ToString());
+	}
+}
 
 void AOrionChara::Ragdoll()
 {
 	RemoveAllActions();
+
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
 
 	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(
 		GetComponentByClass(UPrimitiveComponent::StaticClass()));
@@ -1595,33 +1733,100 @@ void AOrionChara::Ragdoll()
 
 void AOrionChara::RagdollWakeup()
 {
-	CharaState = ECharaState::Alive;
+	if (!GetMesh() || !GetCapsuleComponent()) return;
 
-	UE_LOG(LogTemp, Warning, TEXT("AOrionChara::RagdollWakeup() called."));
+	UE_LOG(LogTemp, Log, TEXT("AOrionChara::RagdollWakeup() - Starting Recovery Sequence"));
 
-	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(
-		GetComponentByClass(UPrimitiveComponent::StaticClass()));
-	if (PrimitiveComponent)
+	// =================================================================================
+	// 步骤 A: 获取盆骨数据
+	// =================================================================================
+	FVector PelvisLoc = GetMesh()->GetSocketLocation(TEXT("pelvis"));
+	FRotator PelvisRot = GetMesh()->GetSocketRotation(TEXT("pelvis"));
+
+	// =================================================================================
+	// 步骤 B: 判断朝向 (Face Up vs Face Down)
+	// =================================================================================
+	// 获取盆骨的 X轴 (Forward Vector，通常是从肚子指出去的方向)
+	FVector PelvisForwardVec = FRotationMatrix(PelvisRot).GetUnitAxis(EAxis::X);
+
+	// 如果 Z > 0，说明肚子指向上方 (仰卧)；反之则为俯卧
+	bool bIsFaceUp = PelvisForwardVec.Z > 0.0f;
+
+	UE_LOG(LogTemp, Log, TEXT("Ragdoll Orientation Check: Pelvis Z = %f, IsFaceUp = %s"),
+		PelvisForwardVec.Z, bIsFaceUp ? TEXT("TRUE") : TEXT("FALSE"));
+
+	// 选择对应的蒙太奇
+	UAnimMontage* MontageToPlay = bIsFaceUp ? GetUpMontage_FaceUp : GetUpMontage_FaceDown;
+
+	// =================================================================================
+	// 步骤 C: 计算落地位置 (防止穿地)
+	// =================================================================================
+	FHitResult HitResult;
+	FVector TraceStart = PelvisLoc + FVector(0.f, 0.f, 50.f);
+	FVector TraceEnd = PelvisLoc - FVector(0.f, 0.f, 150.f);
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(this);
+
+	FVector NewCapsuleLocation = PelvisLoc;
+	float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+	if (GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
 	{
-		PrimitiveComponent->SetSimulatePhysics(false);
+		NewCapsuleLocation = HitResult.ImpactPoint + FVector(0.f, 0.f, CapsuleHalfHeight);
+	}
+	else
+	{
+		NewCapsuleLocation.Z += CapsuleHalfHeight;
 	}
 
-	FRotator CurrentRot = GetActorRotation();
-	FRotator UprightRot(0.0f, CurrentRot.Yaw, 0.0f);
-	SetActorRotation(UprightRot);
+	// =================================================================================
+	// 步骤 D: 同步胶囊体位置与旋转
+	// =================================================================================
+	FRotator NewCapsuleRotation = GetActorRotation();
+	NewCapsuleRotation.Yaw = PelvisRot.Yaw; // 保持角色倒下的朝向
 
-	if (GetMesh())
+	// 特殊处理：如果是俯卧 (Face Down)，有时候需要根据动画资源反转180度
+	// 这取决于你的动画制作方式。如果播放俯卧起身时发现角色朝向反了，可以取消下面这行的注释：
+	// if (!bIsFaceUp) { NewCapsuleRotation.Yaw += 180.0f; }
+
+	SetActorLocationAndRotation(NewCapsuleLocation, NewCapsuleRotation, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// =================================================================================
+	// 步骤 E: 关闭物理并复位 Mesh
+	// =================================================================================
+	GetMesh()->SetSimulatePhysics(false);
+	GetMesh()->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::SnapToTargetIncludingScale);
+
+	// 强制复位 Mesh 到胶囊体中心
+	GetMesh()->SetRelativeLocation(DefaultMeshRelativeLocation);
+	GetMesh()->SetRelativeRotation(DefaultMeshRelativeRotation);
+	GetMesh()->RefreshBoneTransforms();
+
+	// =================================================================================
+	// 步骤 F: 播放动画
+	// =================================================================================
+	if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
 	{
-		GetMesh()->SetRelativeLocation(DefaultMeshRelativeLocation);
-		GetMesh()->SetRelativeRotation(DefaultMeshRelativeRotation);
-
-		GetMesh()->RefreshBoneTransforms();
-
-		if (UAnimInstance* AnimInst = GetMesh()->GetAnimInstance())
+		if (MontageToPlay)
 		{
-			AnimInst->InitializeAnimation();
+			// 可选：在这里根据不同的起身速度调整 PlayRate
+			// float PlayRate = 1.0f;
+			AnimInst->Montage_Play(MontageToPlay, 1.0f);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("RagdollWakeup: No Montage assigned for %s state!"),
+				bIsFaceUp ? TEXT("FaceUp") : TEXT("FaceDown"));
 		}
 	}
+
+	// =================================================================================
+	// 步骤 G: 恢复状态
+	// =================================================================================
+	CharaState = ECharaState::Alive;
+	RagdollWakeupAccumulatedTime = 0.0f;
+	PreviousVelocity = FVector::ZeroVector;
+	GetVelocity();
 }
 
 void AOrionChara::ChangeMaxWalkSpeed(float InValue)

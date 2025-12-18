@@ -192,7 +192,8 @@ bool UOrionCharaManager::AddActionByParams(AOrionChara* Chara, const FOrionActio
 		break;
 			
 	case EOrionAction::AttackOnChara:
-		if (auto* Target = Cast<AOrionChara>(FindActorById(P.TargetActorId)))
+		// [Refactor] Allow any Actor target (if serialized as such)
+		if (auto* Target = FindActorById(P.TargetActorId))
 		{
 			Action = Chara->InitActionAttackOnChara(TEXT("AttackOnChara"), Target, P.HitOffset);
 		}
@@ -221,6 +222,14 @@ bool UOrionCharaManager::AddActionByParams(AOrionChara* Chara, const FOrionActio
 			
 	case EOrionAction::CollectBullets:
 		Action = Chara->InitActionCollectBullets(TEXT("CollectBullets"));
+		break;
+
+	// [New] Handle InteractWithStorage (Inventory)
+	case EOrionAction::InteractWithStorage:
+		if (auto* Target = Cast<AOrionActor>(FindActorById(P.TargetActorId)))
+		{
+			Action = Chara->InitActionInteractWithInventory(TEXT("InteractWithInventory"), Target);
+		}
 		break;
 			
 	default:
@@ -253,11 +262,12 @@ bool UOrionCharaManager::AddMoveToLocationAction(AOrionChara* Chara, const FVect
 	return Internal_AddAction(Chara, Action, ExecutionType, Index);
 }
 
-bool UOrionCharaManager::AddAttackOnCharaAction(AOrionChara* Chara, AOrionChara* TargetChara, const FVector& HitOffset,
+// [Refactor] Updated to take AActor*
+bool UOrionCharaManager::AddAttackOnCharaAction(AOrionChara* Chara, AActor* TargetActor, const FVector& HitOffset,
                                                  EActionExecution ExecutionType, int32 Index)
 {
-	if (!Chara || !TargetChara) return false;
-	FOrionAction Action = Chara->InitActionAttackOnChara(TEXT("AttackOnChara"), TargetChara, HitOffset);
+	if (!Chara || !TargetActor) return false;
+	FOrionAction Action = Chara->InitActionAttackOnChara(TEXT("AttackOnChara"), TargetActor, HitOffset);
 	return Internal_AddAction(Chara, Action, ExecutionType, Index);
 }
 
@@ -289,6 +299,14 @@ bool UOrionCharaManager::AddCollectBulletsAction(AOrionChara* Chara, EActionExec
 {
 	if (!Chara) return false;
 	FOrionAction Action = Chara->InitActionCollectBullets(TEXT("CollectBullets"));
+	return Internal_AddAction(Chara, Action, ExecutionType, Index);
+}
+
+bool UOrionCharaManager::AddInteractWithInventoryAction(AOrionChara* Chara, AOrionActor* TargetActor,
+                                                    EActionExecution ExecutionType, int32 Index)
+{
+	if (!Chara || !TargetActor) return false;
+	FOrionAction Action = Chara->InitActionInteractWithInventory(TEXT("InteractWithInventory"), TargetActor);
 	return Internal_AddAction(Chara, Action, ExecutionType, Index);
 }
 

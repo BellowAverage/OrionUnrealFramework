@@ -57,13 +57,11 @@ bool AOrionActorOre::ApplyInteractionToCharas(TArray<AOrionChara*> InteractedCha
 				Chara->ActionComp->SetProcedural(false);
 			}
 
-			Chara->ActionComp->RemoveAllActions();
-
-			FString ActionName = FString::Printf(
-				TEXT("InteractWithActor_%s"), *InteractingActor->GetName());
-			FOrionAction AddingAction = Chara->InitActionInteractWithActor(
-				ActionName, InteractingActor);
-			Chara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+			if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+			{
+				Manager->RemoveAllActionsFromChara(Chara);
+				Manager->AddInteractWithActorAction(Chara, InteractingActor, EActionExecution::RealTime);
+			}
 		}
 		else
 		{

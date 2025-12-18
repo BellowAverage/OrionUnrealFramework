@@ -120,7 +120,7 @@ bool AOrionGameMode::GenerateExplosionSimulation()
 	{
 		FVector ImpactPoint = HitResult.ImpactPoint;
 		float Radius = 500.f; // 范围
-		float Strength = 2000.f; // 强度
+		float Strength = 3000.f; // 强度
 		bool bVelChange = true;
 
 		// —— 调试：在世界中绘制一个红色球体来显示影响范围 —— 
@@ -611,8 +611,10 @@ void AOrionGameMode::IssueMoveOrder(AOrionChara* Chara, const FVector& TargetLoc
 		return;
 	}
 
-	const FOrionAction MoveAction = Chara->InitActionMoveToLocation(TEXT("MoveToLocation"), TargetLocation);
-	Chara->InsertOrionActionToQueue(MoveAction, EActionExecution::RealTime, INDEX_NONE);
+	if (UOrionCharaManager* Manager = GetGameInstance()->GetSubsystem<UOrionCharaManager>())
+	{
+		Manager->AddMoveToLocationAction(Chara, TargetLocation, EActionExecution::RealTime);
+	}
 }
 
 void AOrionGameMode::EnqueueGameMessage(const FString& Message)
