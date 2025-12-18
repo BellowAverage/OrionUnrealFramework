@@ -1,7 +1,9 @@
 #include "OrionInventoryComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Orion/OrionGameInstance/OrionInventoryManager.h"
 #include "Orion/OrionGlobals/OrionDataItem.h"
+#include "Orion/OrionHUD/OrionHUD.h"
 
 TArray<FOrionDataItem> UOrionInventoryComponent::ItemInfoTable = {
 	{1, FName("Log"), FText::FromString("Log"), FText::FromString(TEXT("原木")), 1.f, 30.f},
@@ -30,25 +32,12 @@ void UOrionInventoryComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	/*/* 默认上限 #1#
-	AvailableInventoryMap = {
-		{1, 20}, // Log
-		{2, 20}, // Stone Ore
-		{3, 300}, // Bullet
-		{4, 300}, // 预留
-	};
+	InventoryManagerInstance = GetWorld()->GetGameInstance()->GetSubsystem<UOrionInventoryManager>();
+	checkf(InventoryManagerInstance, TEXT("UOrionInventoryComponent::BeginPlay: cannot find InventoryManagerInstance"));
 
-	/* 如果持有者是角色，再覆盖成角色专属容量 #1#
-	const FString Name = GetOwner() ? GetOwner()->GetName() : TEXT("");
-	if (Name.Contains(TEXT("OrionChara")))
-	{
-		AvailableInventoryMap = {
-			{1, 10},
-			{2, 10},
-			{3, 300},
-			{4, 300},
-		};
-	}*/
+	InventoryManagerInstance->RegisterInventoryComponent(this);
+
+	this->OnInventoryChanged.AddDynamic(Cast<AOrionHUD>(GetWorld()->GetFirstPlayerController()->GetHUD()), &AOrionHUD::UpdatePlayerFactionResourceDisplay);
 }
 
 void UOrionInventoryComponent::RefreshInventoryText()
@@ -174,10 +163,11 @@ bool UOrionInventoryComponent::ModifyItemQuantity(const int32 ItemId, const int3
 		InventoryMap.Remove(ItemId);
 	}
 
-	/*SpawnResourceFloatUI(ItemId, Quantity);*/
 	SpawnNewResourceFloatUI(ItemId, Quantity);
 
 	OnInventoryChange();
+
+	
 
 	return true;
 }
@@ -297,6 +287,5 @@ void UOrionInventoryComponent::OnInventoryChange()
 	}
 
 	RefreshInventoryText();
-
 	OnInventoryChanged.Broadcast();
 }

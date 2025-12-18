@@ -67,7 +67,7 @@ public:
 	AOrionActor* FindClosetAvailableCargoContainer(int32 ItemId) const;
 
 	/* Find all available cargo containers by distance */
-	TArray<AOrionActor*> FindAvailableCargoContainersByDistance(int32 ItemId) const;
+	TArray<AOrionActor*> FindAvailableCargoContainersByDistance(int32 ItemId, AActor* IgnoredActor = nullptr) const;
 
 	/* Execute trading logic (state machine) */
 	bool TradingCargo(const TMap<AActor*, TMap<int32, int32>>& TradeRoute);
@@ -84,6 +84,13 @@ public:
 	UPROPERTY()
 	TArray<FTradeSeg> TradeSegments;
 	int32 CurrentSegIndex = 0;
+	float TradeStartTime = 0.0f; // Track when trade started for timeout detection
+	
+	// [New] 交易会话 ID，用于作废过期的异步回调
+	int32 CurrentTradeID = 0;
+	
+	// [Fix 10] Dynamic timeout based on distance
+	float DynamicTimeout = 30.0f;
 
 	// Animation State (logistics-related animation logic)
 	bool BIsPickupAnimPlaying = false;

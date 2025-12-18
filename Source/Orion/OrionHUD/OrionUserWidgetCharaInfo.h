@@ -5,10 +5,8 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Orion/OrionChara/OrionChara.h"
-//#include "Orion/OrionComponents/OrionInventoryComponent.h"
 #include "Components/CheckBox.h"
 #include "Components/TextBlock.h"
-//#include "Components/ProgressBar.h"
 #include "OrionUserWidgetCharaDetails.h"
 #include "OrionUserWidgetProceduralAction.h"
 #include "Components/Border.h"
@@ -100,7 +98,6 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UBorder* BorderActorDetails = nullptr;
 
-
 	UPROPERTY(meta = (BindWidget))
 	UImage* ImageTradeIcon = nullptr;
 
@@ -131,7 +128,7 @@ public:
 	bool bSuppressCheckEvents = false;
 
 	UFUNCTION()
-	void OnCheckbIsCharaProceduralChanged(bool bIsChecked);
+	void OnCheckIsCharaProceduralChanged(bool IsChecked);
 
 	UPROPERTY(EditDefaultsOnly, Category = "Procedural")
 	TSubclassOf<UOrionUserWidgetProceduralAction> ProceduralActionItemClass;
@@ -151,6 +148,6 @@ public:
 	UFUNCTION()
 	void OnDeleteClicked();
 
-	// 高亮选中条目
-	void RefreshHighlight();
+	// Highlight selected item
+	void RefreshHighlight() const;
 };

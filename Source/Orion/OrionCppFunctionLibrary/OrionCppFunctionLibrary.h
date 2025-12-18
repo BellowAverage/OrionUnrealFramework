@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/ContainersFwd.h"
+#include "Containers/Map.h"
 
 /**
  * 监听元素变动的 TArray 包装类
@@ -174,4 +175,49 @@ public:
 	 * @param LogContent  要写入的内容
 	 */
 	static void WriteDebugLog(const FString& LogContent);
+
+	/**
+	 * 使用 UE_LOG 按行打印 TMap 的 Key / Value
+	 * @param MapName    方便定位输出来源的名字
+	 * @param Verbosity  UE_LOG 的日志等级 (Log / Warning / Error 等)
+	 */
+	template <typename KeyType, typename ValueType>
+	static void OrionPrintTMap(const TMap<KeyType, ValueType>& InMap, ELogVerbosity::Type Verbosity = ELogVerbosity::Log, const FString& MapName = TEXT("TMap"))
+	{
+#define ORION_TMAP_LOG_LINE(VerbosityArg, ...)                     \
+		do                                                         \
+		{                                                          \
+			switch (VerbosityArg)                                  \
+			{                                                      \
+			case ELogVerbosity::Error:                             \
+				UE_LOG(LogTemp, Error, __VA_ARGS__);               \
+				break;                                             \
+			case ELogVerbosity::Warning:                           \
+				UE_LOG(LogTemp, Warning, __VA_ARGS__);             \
+				break;                                             \
+			default:                                               \
+				UE_LOG(LogTemp, Log, __VA_ARGS__);                 \
+				break;                                             \
+			}                                                      \
+		} while (0)
+
+		ORION_TMAP_LOG_LINE(Verbosity, TEXT("==== %s | Count: %d ===="), *MapName, InMap.Num());
+
+		if (InMap.Num() == 0)
+		{
+			ORION_TMAP_LOG_LINE(Verbosity, TEXT("%s is empty"), *MapName);
+			return;
+		}
+
+		int32 Index = 0;
+		for (const TPair<KeyType, ValueType>& Pair : InMap)
+		{
+			const FString KeyString = LexToString(Pair.Key);
+			const FString ValueString = LexToString(Pair.Value);
+			ORION_TMAP_LOG_LINE(Verbosity, TEXT("[%d] Key: %s | Value: %s"), Index++, *KeyString, *ValueString);
+		}
+
+		ORION_TMAP_LOG_LINE(Verbosity, TEXT("==== End of %s ===="), *MapName);
+#undef ORION_TMAP_LOG_LINE
+	}
 };

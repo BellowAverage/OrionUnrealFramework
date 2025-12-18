@@ -1,33 +1,31 @@
-﻿// OrionChara.cpp
+// OrionChara.cpp
 
 #include "OrionChara.h"
 #include "Orion/OrionAIController/OrionAIController.h"
 #include "AIController.h"
 #include "Kismet/KismetMathLibrary.h"
-#include "NavigationSystem.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Animation/AnimInstance.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "Perception/AISense_Sight.h"
 #include "DrawDebugHelpers.h"
-#include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include <limits>
 #include <algorithm>
 #include "TimerManager.h"
-#include "EngineUtils.h"
-#include "NavigationPath.h"
 #include "Components/CapsuleComponent.h"
 #include <Components/SphereComponent.h>
 #include "Orion/OrionActor/OrionActorOre.h"
 #include "Orion/OrionComponents/OrionLogisticsComponent.h"
 #include "Orion/OrionComponents/OrionMovementComponent.h"
+#include "Orion/OrionComponents/OrionAttributeComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/PlayerController.h"
+#include "Orion/OrionGameInstance/OrionInventoryManager.h"
 
 class OrionActorStorage;
 
@@ -64,12 +62,11 @@ AOrionChara::AOrionChara()
 	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
 
 	/* Register OrionChara Components */
-	CharaActionComp = CreateDefaultSubobject<UOrionCharaActionComponent>(TEXT("CharaActionComp"));
+	ActionComp = CreateDefaultSubobject<UOrionActionComponent>(TEXT("ActionComp"));
 	LogisticsComp = CreateDefaultSubobject<UOrionLogisticsComponent>(TEXT("LogisticsComp"));
 	CombatComp = CreateDefaultSubobject<UOrionCombatComponent>(TEXT("CombatComp"));
 	MovementComp = CreateDefaultSubobject<UOrionMovementComponent>(TEXT("MovementComp"));
-
-	/* Init Static Value */
+	AttributeComp = CreateDefaultSubobject<UOrionAttributeComponent>(TEXT("AttributeComp"));
 }
 
 void AOrionChara::InitSerializable(const FSerializable& InSerializable)
@@ -86,33 +83,32 @@ FSerializable AOrionChara::GetSerializable() const
 	return GameSerializable;
 }
 
-void AOrionChara::SerializeCharaStats()
-{
-	UE_LOG(LogTemp, Log, TEXT("Saving Chara: %s"), *GetName());
-
-	/* Serialize Procedural Actions */
-	for (const auto& ProcAction : CharacterProcActionQueue.Actions)
-	{
-		CharaSerializable.CharaGameId = GameSerializable.GameId;
-		CharaSerializable.CharaLocation = GetActorLocation();
-		CharaSerializable.CharaRotation = GetActorRotation();
-		CharaSerializable.SerializedProcActions.Add(ProcAction.Params);
-	}
-}
-
 void AOrionChara::BeginPlay()
 {
 	Super::BeginPlay();
 
 	InitSerializable(GameSerializable);
 
-	AIController = Cast<AOrionAIController>(GetController());
+	OrionAIControllerInstance = Cast<AOrionAIController>(GetController());
 
 	InitOrionCharaMovement();
 
-	CurrHealth = MaxHealth;
-
 	this->SetCanBeDamaged(true);
+
+	// Bind component delegates
+	if (ActionComp)
+	{
+		ActionComp->OnActionTypeChanged.AddDynamic(this, &AOrionChara::OnActionTypeChangedHandler);
+		ActionComp->OnActionNameChanged.AddDynamic(this, &AOrionChara::OnActionNameChangedHandler);
+
+	}
+
+	if (AttributeComp)
+	{
+		AttributeComp->MaxHealth = MaxHealth;
+		AttributeComp->SetHealth(MaxHealth);
+		AttributeComp->OnHealthZero.AddDynamic(this, &AOrionChara::HandleHealthZero);
+	}
 }
 
 void AOrionChara::Tick(float DeltaTime)
@@ -130,28 +126,7 @@ void AOrionChara::Tick(float DeltaTime)
 
 	// ForceDetectionOnVelocityChange();
 
-	/* AI Controlling */
-
-	const FString PrevName = LastActionName;
-	const EOrionAction PrevType = LastActionType;
-
-	DistributeCharaAction(DeltaTime);
-
-	const FString CurrName = GetUnifiedActionName();
-	const EOrionAction CurrType = GetUnifiedActionType();
-
-	if (PrevType != CurrType)
-	{
-		SwitchingStateHandle(PrevType, CurrType);
-	}
-
-	if (PrevName != CurrName)
-	{
-		OnCharaActionChange.Broadcast(PrevName, CurrName);
-	}
-
-	LastActionName = CurrName;
-	LastActionType = CurrType;
+	/* Action dispatch logic moved to Component, state detection also handled by Component delegates */
 
 
 	/* Refresh Attack Frequency */
@@ -165,32 +140,12 @@ void AOrionChara::Tick(float DeltaTime)
 
 FString AOrionChara::GetUnifiedActionName() const
 {
-	// choose between procedural vs real-time
-	if (bIsCharaProcedural)
-	{
-		return CurrentProcAction ? CurrentProcAction->Name : TEXT("");
-	}
-	return CurrentAction ? CurrentAction->Name : TEXT("");
+	return ActionComp ? ActionComp->GetUnifiedActionName() : FString();
 }
 
 EOrionAction AOrionChara::GetUnifiedActionType() const
 {
-	if (bIsCharaProcedural)
-	{
-		return CurrentProcAction ? CurrentProcAction->GetActionType() : EOrionAction::Undefined;
-	}
-	return CurrentAction ? CurrentAction->GetActionType() : EOrionAction::Undefined;
-}
-
-bool AOrionChara::GetIsCharaProcedural()
-{
-	return bIsCharaProcedural;
-}
-
-bool AOrionChara::SetIsCharaProcedural(bool bInIsCharaProcedural)
-{
-	bIsCharaProcedural = bInIsCharaProcedural;
-	return bIsCharaProcedural;
+	return ActionComp ? ActionComp->GetUnifiedActionType() : EOrionAction::Undefined;
 }
 
 void AOrionChara::InsertOrionActionToQueue(
@@ -198,75 +153,13 @@ void AOrionChara::InsertOrionActionToQueue(
 	const EActionExecution ActionExecutionType,
 	const int32 Index)
 {
-	auto& Actions = (ActionExecutionType == EActionExecution::Procedural)
-		                ? CharacterProcActionQueue.Actions
-		                : CharacterActionQueue.Actions;
-
-	if (Index == INDEX_NONE || Index < 0 || Index > Actions.Num())
+	if (ActionComp)
 	{
-		Actions.Add(OrionActionInstance);
-	}
-	else
-	{
-		Actions.Insert(OrionActionInstance, Index);
+		ActionComp->InsertAction(OrionActionInstance, ActionExecutionType == EActionExecution::Procedural, Index);
 	}
 }
 
-void AOrionChara::DistributeCharaAction(float DeltaTime)
-{
-	if (bIsCharaProcedural)
-	{
-		DistributeProceduralAction(DeltaTime);
-	}
-	else
-	{
-		DistributeRealTimeAction(DeltaTime);
-	}
-}
-
-void AOrionChara::DistributeRealTimeAction(float DeltaTime)
-{
-	if (CurrentAction)
-	{
-		PreviousAction = CurrentAction;
-	}
-
-	if (!CharacterActionQueue.Actions.IsEmpty())
-	{
-		CurrentAction = CharacterActionQueue.GetFrontAction();
-	}
-	else
-	{
-		CurrentAction = nullptr;
-	}
-
-	if (CurrentAction && CurrentAction->ExecuteFunction(DeltaTime))
-	{
-		CharacterActionQueue.PopFrontAction();
-		CurrentAction = nullptr;
-	}
-}
-
-void AOrionChara::DistributeProceduralAction(float DeltaTime)
-{
-	if (CurrentProcAction)
-	{
-		PreviousProcAction = CurrentProcAction;
-	}
-
-	for (auto& ProcAction : CharacterProcActionQueue.Actions)
-	{
-		bool bInterrupted = ProcAction.ExecuteFunction(DeltaTime);
-
-		if (!bInterrupted)
-		{
-			CurrentProcAction = &ProcAction;
-			break;
-		}
-	}
-}
-
-void AOrionChara::SwitchingStateHandle(EOrionAction PrevType, EOrionAction CurrType)
+void AOrionChara::OnActionTypeChangedHandler(EOrionAction PrevType, EOrionAction CurrType)
 {
 	if (const UEnum* EnumPtr = StaticEnum<EOrionAction>())
 	{
@@ -309,6 +202,16 @@ void AOrionChara::SwitchingStateHandle(EOrionAction PrevType, EOrionAction CurrT
 /* Logistics functions moved to UOrionLogisticsComponent */
 /* Movement functions moved to UOrionMovementComponent */
 
+FString AOrionChara::GetActionValidityReason(int32 ActionIndex, bool bIsProcedural)
+{
+	return ActionComp ? ActionComp->GetActionValidityReason(ActionIndex, bIsProcedural) : TEXT("Action Component Invalid");
+}
+
+FString AOrionChara::GetActionStatusString(int32 ActionIndex, bool bIsProcedural)
+{
+	return ActionComp ? ActionComp->GetActionStatusString(ActionIndex, bIsProcedural) : TEXT("Action Component Invalid");
+}
+
 FOrionAction AOrionChara::InitActionMoveToLocation(const FString& ActionName, const FVector& TargetLocation)
 {
 	// Use TWeakObjectPtr to capture this safely
@@ -316,22 +219,52 @@ FOrionAction AOrionChara::InitActionMoveToLocation(const FString& ActionName, co
 	// Capture TargetLocation by value
 	FVector CapturedLocation = TargetLocation;
 
+	auto DescFunc = []() -> FString
+	{
+		return TEXT("Moving to Location");
+	};
+	
+	// [Fix 9] CheckFunc for MoveToLocation (always valid if character exists)
+	auto CheckFunc = [WeakChara](FString& OutReason) -> EActionValidity
+	{
+		if (!WeakChara.IsValid())
+		{
+			OutReason = TEXT("Character Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+		return EActionValidity::Valid;
+	};
+
+	// [Fix] Add OnExit
+	auto ExitFunc = [WeakChara](bool bInterrupted)
+	{
+		if (AOrionChara* Chara = WeakChara.Get())
+		{
+			if (Chara->MovementComp) Chara->MovementComp->MoveToLocationStop();
+		}
+	};
+
 	FOrionAction AddingAction = FOrionAction(
 		ActionName,
 		EOrionAction::MoveToLocation,
-		[WeakChara, CapturedLocation](float DeltaTime) -> bool
+		[WeakChara, CapturedLocation](float DeltaTime) -> EActionStatus
 		{
 			// Check if pointer is valid before execution
 			if (AOrionChara* Chara = WeakChara.Get())
 			{
 				if (Chara->MovementComp) // Delegate to component
 				{
-					return Chara->MovementComp->MoveToLocation(CapturedLocation);
+					// MovementComp->MoveToLocation returns true if arrived/done
+					bool bArrived = Chara->MovementComp->MoveToLocation(CapturedLocation);
+					return bArrived ? EActionStatus::Finished : EActionStatus::Running;
 				}
 			}
-			// If pointer is invalid (character is dead/destroyed), return true to indicate action should be removed
-			return true;
-		}
+			// If pointer is invalid (character is dead/destroyed), treat as finished
+			return EActionStatus::Finished;
+		},
+		CheckFunc, // [Fix 9] Pass CheckFunc
+		DescFunc,
+		ExitFunc // Pass ExitFunc
 	);
 
 	AddingAction.Params.TargetLocation = TargetLocation;
@@ -347,20 +280,75 @@ FOrionAction AOrionChara::InitActionAttackOnChara(const FString& ActionName,
 	// Target should also be weak reference to prevent crashes when target disappears
 	TWeakObjectPtr<AActor> WeakTarget(TargetChara);
 
+	auto ExecFunc = [WeakChara, WeakTarget, inHitOffset = HitOffset](float DeltaTime) -> EActionStatus
+	{
+		AOrionChara* CharaPtr = WeakChara.Get();
+		AActor* TargetPtr = WeakTarget.Get();
+
+		if (CharaPtr && TargetPtr && CharaPtr->CombatComp)
+		{
+			bool bFinished = CharaPtr->CombatComp->AttackOnChara(DeltaTime, TargetPtr, inHitOffset);
+			return bFinished ? EActionStatus::Finished : EActionStatus::Running;
+		}
+		return EActionStatus::Finished;
+	};
+
+	// [Fix 9] Updated CheckFunc signature
+	auto CheckFunc = [WeakChara, WeakTarget](FString& OutReason) -> EActionValidity
+	{
+		AOrionChara* Chara = WeakChara.Get();
+		if (!Chara) 
+		{
+			OutReason = TEXT("Character Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+
+		AActor* Target = WeakTarget.Get();
+		if (!IsValid(Target))
+		{
+			OutReason = TEXT("Target Destroyed");
+			return EActionValidity::PermanentInvalid;
+		}
+
+		// [Fix] Check if target is dead or incapacitated
+		if (const AOrionChara* TargetChara = Cast<AOrionChara>(Target))
+		{
+			if (TargetChara->CharaState == ECharaState::Dead || TargetChara->CharaState == ECharaState::Incapacitated)
+			{
+				OutReason = TEXT("Target is Dead or Incapacitated");
+				return EActionValidity::PermanentInvalid;
+			}
+		}
+
+		// [Fix] Also check AttributeComponent for non-Chara targets (buildings, structures, etc.)
+		if (const UOrionAttributeComponent* TargetAttr = Target->FindComponentByClass<UOrionAttributeComponent>())
+		{
+			if (!TargetAttr->IsAlive())
+			{
+				OutReason = TEXT("Target is Dead (AttributeComponent)");
+				return EActionValidity::PermanentInvalid;
+			}
+		}
+
+		return EActionValidity::Valid;
+	};
+
+	// [Fix] Add OnExit
+	auto ExitFunc = [WeakChara](bool bInterrupted)
+	{
+		if (AOrionChara* Chara = WeakChara.Get())
+		{
+			if (Chara->CombatComp) Chara->CombatComp->AttackOnCharaLongRangeStop();
+		}
+	};
+
 	FOrionAction AddingAction = FOrionAction(
 		ActionName,
 		EOrionAction::AttackOnChara,
-		[WeakChara, WeakTarget, inHitOffset = HitOffset](float DeltaTime) -> bool
-		{
-			AOrionChara* CharaPtr = WeakChara.Get();
-			AActor* TargetPtr = WeakTarget.Get();
-
-			if (CharaPtr && TargetPtr && CharaPtr->CombatComp)
-			{
-				return CharaPtr->CombatComp->AttackOnChara(DeltaTime, TargetPtr, inHitOffset);
-			}
-			return true;
-		}
+		ExecFunc,
+		CheckFunc,
+		nullptr,
+		ExitFunc // Pass ExitFunc
 	);
 
 	AddingAction.Params.HitOffset = HitOffset;
@@ -388,23 +376,82 @@ FOrionAction AOrionChara::InitActionInteractWithActor(const FString& ActionName,
 	TWeakObjectPtr<AOrionChara> WeakChara(this);
 	TWeakObjectPtr<AOrionActor> WeakTarget(TargetActor);
 
+	auto ExecFunc = [WeakChara, WeakTarget](float DeltaTime) -> EActionStatus
+	{
+		if (AOrionChara* CharaPtr = WeakChara.Get())
+		{
+			// If target is invalid, tell Character to stop interaction logic (clean up state)
+			if (!WeakTarget.IsValid())
+			{
+				// Can choose to call a cleanup function here, or directly return true
+				return EActionStatus::Finished;
+			}
+			bool bFinished = CharaPtr->InteractWithActor(DeltaTime, WeakTarget.Get());
+			
+			// [Refactor] Return Skipped instead of Finished to persist in Procedural Queue
+			// This ensures that "InteractWithActor" (e.g. mining) stays in the list until target is destroyed or user removes it.
+			EActionStatus Result = bFinished ? EActionStatus::Skipped : EActionStatus::Running;
+			
+			// UE_LOG(LogTemp, Log, TEXT("[InteractWithActor] InteractWithActor returned: %s -> ActionStatus: %s"), 
+			// 	bFinished ? TEXT("true (finished/idle)") : TEXT("false (running)"),
+			// 	(Result == EActionStatus::Skipped) ? TEXT("Skipped (Persist)") : TEXT("Running"));
+				
+			return Result;
+		}
+		return EActionStatus::Finished;
+	};
+
+	// [Fix 9] Updated CheckFunc signature to return EActionValidity
+	auto CheckFunc = [WeakChara, WeakTarget](FString& OutReason) -> EActionValidity
+	{
+		AOrionChara* Chara = WeakChara.Get();
+		if (!Chara) 
+		{
+			OutReason = TEXT("Character Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+		
+		AOrionActor* Target = WeakTarget.Get();
+		if (!IsValid(Target))
+		{
+			OutReason = TEXT("Target Destroyed");
+			return EActionValidity::PermanentInvalid; // Target destroyed -> permanently remove
+		}
+
+		if (Target->ActorStatus == EActorStatus::NotInteractable)
+		{
+			OutReason = TEXT("Target Not Interactable");
+			return EActionValidity::TemporarySkip; // Maybe can interact later? Usually suggest Skip.
+		}
+
+		return EActionValidity::Valid;
+	};
+
+	auto DescFunc = [WeakTarget]() -> FString
+	{
+		if (AOrionActor* Target = WeakTarget.Get())
+		{
+			return FString::Printf(TEXT("Interacting with %s"), *Target->GetName());
+		}
+		return TEXT("Interacting...");
+	};
+
+	// [Fix] Add OnExit
+	auto ExitFunc = [WeakChara](bool bInterrupted)
+	{
+		if (AOrionChara* Chara = WeakChara.Get())
+		{
+			Chara->InteractWithActorStop(Chara->InteractWithActorState);
+		}
+	};
+
 	FOrionAction AddingAction = FOrionAction(
 		ActionName,
 		EOrionAction::InteractWithActor,
-		[WeakChara, WeakTarget](float DeltaTime) -> bool
-		{
-			if (AOrionChara* CharaPtr = WeakChara.Get())
-			{
-				// If target is invalid, tell Character to stop interaction logic (clean up state)
-				if (!WeakTarget.IsValid())
-				{
-					// Can choose to call a cleanup function here, or directly return true
-					return true;
-				}
-				return CharaPtr->InteractWithActor(DeltaTime, WeakTarget.Get());
-			}
-			return true;
-		}
+		ExecFunc,
+		CheckFunc,
+		DescFunc,
+		ExitFunc // Pass ExitFunc
 	);
 
 	if (TargetActor)
@@ -422,20 +469,83 @@ FOrionAction AOrionChara::InitActionInteractWithProduction(const FString& Action
 	TWeakObjectPtr<AOrionChara> WeakChara(this);
 	TWeakObjectPtr<AOrionActorProduction> WeakTarget(TargetActor);
 
+	auto ExecFunc = [WeakChara, WeakTarget](float DeltaTime) -> EActionStatus
+	{
+		AOrionChara* CharaPtr = WeakChara.Get();
+		AOrionActorProduction* TargetPtr = WeakTarget.Get();
+
+		if (!CharaPtr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[InteractProduction] CharaPtr is null -> Returning Finished"));
+			return EActionStatus::Finished;
+		}
+		if (!TargetPtr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[InteractProduction] TargetPtr is null -> Returning Finished"));
+			return EActionStatus::Finished;
+		}
+
+		bool bFinished = CharaPtr->InteractWithProduction(DeltaTime, TargetPtr);
+		// [Change] Return Skipped instead of Finished to persist in Procedural Queue
+		// This allows the task to yield to lower priority tasks when done for now, but reactivate later.
+		EActionStatus Result = bFinished ? EActionStatus::Skipped : EActionStatus::Running;
+		// UE_LOG(LogTemp, Log, TEXT("[InteractProduction] InteractWithProduction returned: %s -> ActionStatus: %s"), 
+		// 	bFinished ? TEXT("true (finished/idle)") : TEXT("false (running)"),
+		// 	(Result == EActionStatus::Skipped) ? TEXT("Skipped (Persist)") : TEXT("Running"));
+		return Result;
+	};
+
+	// [Fix 9] Updated CheckFunc signature
+	auto CheckFunc = [WeakChara, WeakTarget](FString& OutReason) -> EActionValidity
+	{
+		AOrionChara* Chara = WeakChara.Get();
+		if (!Chara) 
+		{
+			OutReason = TEXT("Character Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+
+		AOrionActorProduction* Target = WeakTarget.Get();
+		if (!IsValid(Target))
+		{
+			OutReason = TEXT("Target Destroyed");
+			return EActionValidity::PermanentInvalid;
+		}
+
+		if (Target->ActorStatus == EActorStatus::NotInteractable)
+		{
+			OutReason = TEXT("Target Not Interactable");
+			return EActionValidity::TemporarySkip;
+		}
+
+		return EActionValidity::Valid;
+	};
+
+	auto DescFunc = [WeakTarget]() -> FString
+	{
+		if (AOrionActorProduction* Target = WeakTarget.Get())
+		{
+			return FString::Printf(TEXT("Managing Production: %s"), *Target->GetName());
+		}
+		return TEXT("Production Active");
+	};
+
+	// [Fix] Add OnExit - CRITICAL for Double Drop issue
+	auto ExitFunc = [WeakChara](bool bInterrupted)
+	{
+		if (AOrionChara* Chara = WeakChara.Get())
+		{
+			Chara->InteractWithProductionStop();
+		}
+	};
+
 	FOrionAction AddingAction = FOrionAction(
 		ActionName,
 		EOrionAction::InteractWithProduction,
-		[WeakChara, WeakTarget](float DeltaTime) -> bool
-		{
-			AOrionChara* CharaPtr = WeakChara.Get();
-			AOrionActorProduction* TargetPtr = WeakTarget.Get();
-
-			if (CharaPtr && TargetPtr)
-			{
-				return CharaPtr->InteractWithProduction(DeltaTime, TargetPtr);
-			}
-			return true;
-		}
+		ExecFunc,
+		CheckFunc,
+		DescFunc,
+		ExitFunc // Pass ExitFunc
 	);
 
 	if (TargetActor)
@@ -452,20 +562,118 @@ FOrionAction AOrionChara::InitActionCollectCargo(const FString& ActionName, AOri
 	TWeakObjectPtr<AOrionChara> WeakChara(this);
 	TWeakObjectPtr<AOrionActorStorage> WeakTarget(TargetActor);
 
+	// 1. Define execution logic (keep original logic)
+	auto ExecFunc = [WeakChara, WeakTarget](float DeltaTime) -> EActionStatus
+	{
+		AOrionChara* CharaPtr = WeakChara.Get();
+		AOrionActorStorage* TargetPtr = WeakTarget.Get();
+
+		if (!CharaPtr)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CollectCargo] CharaPtr is null -> Returning Finished"));
+			return EActionStatus::Finished;
+		}
+		if (!IsValid(TargetPtr))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[CollectCargo] TargetPtr is invalid -> Returning Finished"));
+			return EActionStatus::Finished;
+		}
+
+		if (CharaPtr->LogisticsComp)
+		{
+			bool bFinished = CharaPtr->LogisticsComp->CollectingCargo(TargetPtr);
+			EActionStatus Result = bFinished ? EActionStatus::Skipped : EActionStatus::Running;
+			// UE_LOG(LogTemp, Log, TEXT("[CollectCargo] CollectingCargo returned: %s -> ActionStatus: %s"), 
+			// 	bFinished ? TEXT("true (done)") : TEXT("false (running)"),
+			// 	(Result == EActionStatus::Skipped) ? TEXT("Skipped") : TEXT("Running"));
+			return Result;
+		}
+		UE_LOG(LogTemp, Warning, TEXT("[CollectCargo] LogisticsComp is null -> Returning Finished"));
+		return EActionStatus::Finished;
+	};
+
+	// 2. Define check logic (this is the reason shown to UI)
+	// [Fix 9] Updated CheckFunc signature
+	auto CheckFunc = [WeakChara, WeakTarget](FString& OutReason) -> EActionValidity
+	{
+		AOrionChara* Chara = WeakChara.Get();
+		if (!Chara) 
+		{
+			OutReason = TEXT("Character Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+		AOrionActorStorage* Target = WeakTarget.Get();
+
+		// Check 1: Target exists
+		if (!IsValid(Target))
+		{
+			OutReason = TEXT("Target Destroyed");
+			return EActionValidity::PermanentInvalid;
+		}
+
+		// Check 2: Target interactable
+		if (Target->ActorStatus == EActorStatus::NotInteractable)
+		{
+			OutReason = TEXT("Target Not Interactable");
+			return EActionValidity::TemporarySkip;
+		}
+
+		// Empty storage is fine, we want to put items into it.
+		// Full inventory is fine, we are going to unload at storage.
+
+		return EActionValidity::Valid; // Condition met
+	};
+
+	// [New] Status Description Function
+	auto DescFunc = [WeakChara]() -> FString
+	{
+		AOrionChara* Chara = WeakChara.Get();
+		if (!Chara || !Chara->LogisticsComp) return TEXT("");
+		
+		UOrionLogisticsComponent* Log = Chara->LogisticsComp;
+		if (Log->BIsTrading)
+		{
+			FString StepName = (Log->TradeStep == ETradingCargoState::ToSource) ? TEXT("Moving to Source") :
+							   (Log->TradeStep == ETradingCargoState::Pickup) ? TEXT("Picking up") :
+							   (Log->TradeStep == ETradingCargoState::ToDestination) ? TEXT("Moving to Dest") :
+							   TEXT("Dropping off");
+			
+			if (Log->TradeSegments.IsValidIndex(Log->CurrentSegIndex))
+			{
+				const auto& Seg = Log->TradeSegments[Log->CurrentSegIndex];
+				if (IsValid(Seg.Source) && IsValid(Seg.Destination))
+				{
+					if (Log->TradeStep == ETradingCargoState::ToSource || Log->TradeStep == ETradingCargoState::Pickup)
+						return FString::Printf(TEXT("%s: %s"), *StepName, *Seg.Source->GetName());
+					else
+						return FString::Printf(TEXT("%s: %s"), *StepName, *Seg.Destination->GetName());
+				}
+			}
+			return StepName;
+		}
+		return TEXT("Searching...");
+	};
+
+	// [Fix] Add OnExit - CRITICAL for Double Drop issue
+	auto ExitFunc = [WeakChara](bool bInterrupted)
+	{
+		if (AOrionChara* Chara = WeakChara.Get())
+		{
+			if (Chara->LogisticsComp)
+			{
+				Chara->LogisticsComp->CollectingCargoStop();
+			}
+		}
+	};
+
+	// 3. Construct Action (pass CheckFunc, DescFunc, and ExitFunc)
 	FOrionAction AddingAction = FOrionAction(
 		ActionName,
 		EOrionAction::CollectCargo,
-		[WeakChara, WeakTarget](float DeltaTime) -> bool
-		{
-			if (AOrionChara* CharaPtr = WeakChara.Get())
-			{
-				if (CharaPtr->LogisticsComp)
-				{
-					return CharaPtr->LogisticsComp->CollectingCargo(WeakTarget.Get());
-				}
-			}
-			return true;
-		}
+		ExecFunc,
+		CheckFunc,
+		DescFunc,
+		ExitFunc // Pass ExitFunc
 	);
 
 	if (TargetActor)
@@ -481,17 +689,30 @@ FOrionAction AOrionChara::InitActionCollectBullets(const FString& ActionName)
 {
 	TWeakObjectPtr<AOrionChara> WeakChara(this);
 
+	// [Fix 9] CheckFunc for CollectBullets
+	auto CheckFunc = [WeakChara](FString& OutReason) -> EActionValidity
+	{
+		if (!WeakChara.IsValid())
+		{
+			OutReason = TEXT("Character Invalid");
+			return EActionValidity::PermanentInvalid;
+		}
+		return EActionValidity::Valid;
+	};
+
 	FOrionAction AddingAction = FOrionAction(
 		ActionName,
 		EOrionAction::CollectBullets,
-		[WeakChara](float DeltaTime) -> bool
+		[WeakChara](float DeltaTime) -> EActionStatus
 		{
 			if (AOrionChara* CharaPtr = WeakChara.Get())
 			{
-				return CharaPtr->CollectBullets();
+				bool bFinished = CharaPtr->CollectBullets();
+				return bFinished ? EActionStatus::Finished : EActionStatus::Running;
 			}
-			return true;
-		}
+			return EActionStatus::Finished;
+		},
+		CheckFunc // [Fix 9] Pass CheckFunc
 	);
 
 	AddingAction.Params.OrionActionType = EOrionAction::CollectBullets;
@@ -531,7 +752,7 @@ bool AOrionChara::CollectBullets()
 	}
 
 	// 1) Initialization: pick nearest production actor that has bullets
-	if (!bIsCollectingBullets)
+	if (!IsCollectingBullets)
 	{
 		AOrionActor* Best = LogisticsComp ? LogisticsComp->FindClosetAvailableCargoContainer(BulletItemId) : nullptr;
 
@@ -540,14 +761,14 @@ bool AOrionChara::CollectBullets()
 			return true;
 		}
 
-		BulletSource = Best;
-		bIsCollectingBullets = true;
+		BulletSource = Best; // [Fix 3] WeakPtr assignment
+		IsCollectingBullets = true;
 	}
 
 	// 2) Abort if source destroyed
-	if (!IsValid(BulletSource))
+	if (!BulletSource.IsValid())
 	{
-		bIsCollectingBullets = false;
+		IsCollectingBullets = false;
 		return true;
 	}
 
@@ -556,16 +777,19 @@ bool AOrionChara::CollectBullets()
 		int32 Have = InventoryComp->GetItemQuantity(BulletItemId);
 		if (Have >= MaxCarry)
 		{
-			bIsCollectingBullets = false;
+			IsCollectingBullets = false;
 			return true;
 		}
 	}
 
 	// 4) Are we at the source?
 	bool bAtSource = false;
-	if (auto* Sphere = BulletSource->FindComponentByClass<USphereComponent>())
+	if (AOrionActor* SourcePtr = BulletSource.Get())
 	{
-		bAtSource = Sphere->IsOverlappingActor(this);
+		if (auto* Sphere = SourcePtr->FindComponentByClass<USphereComponent>())
+		{
+			bAtSource = Sphere->IsOverlappingActor(this);
+		}
 	}
 
 	if (bAtSource)
@@ -573,9 +797,9 @@ bool AOrionChara::CollectBullets()
 		if (MovementComp) MovementComp->MoveToLocationStop();
 
 		// if montage not yet playing, start it
-		if (!bBulletPickupAnimPlaying && BulletPickupMontage)
+		if (!IsBulletPickupAnimPlaying && BulletPickupMontage)
 		{
-			bBulletPickupAnimPlaying = true;
+			IsBulletPickupAnimPlaying = true;
 
 			// play at a rate so it finishes in BulletPickupDuration
 			float RawLength = BulletPickupMontage->GetPlayLength();
@@ -602,7 +826,10 @@ bool AOrionChara::CollectBullets()
 	}
 
 	// 5) Not at source yet → move toward it
-	if (MovementComp) MovementComp->MoveToLocation(BulletSource->GetActorLocation());
+	if (AOrionActor* SourcePtr = BulletSource.Get())
+	{
+		if (MovementComp) MovementComp->MoveToLocation(SourcePtr->GetActorLocation());
+	}
 	return false;
 }
 
@@ -611,16 +838,17 @@ void AOrionChara::OnBulletPickupFinished()
 	constexpr int32 BulletItemId = 3;
 	constexpr int32 MaxCarry = 300;
 
-	bBulletPickupAnimPlaying = false;
+	IsBulletPickupAnimPlaying = false;
 
 	// actually transfer as many as we can
-	if (!IsValid(BulletSource) || !InventoryComp)
+	AOrionActor* SourcePtr = BulletSource.Get();
+	if (!IsValid(SourcePtr) || !InventoryComp)
 	{
-		bIsCollectingBullets = false;
+		IsCollectingBullets = false;
 		return;
 	}
 
-	auto* SrcInv = BulletSource->InventoryComp;
+	auto* SrcInv = SourcePtr->InventoryComp;
 	int32 Available = SrcInv->GetItemQuantity(BulletItemId);
 	int32 Have = InventoryComp->GetItemQuantity(BulletItemId);
 	int32 SpaceLeft = MaxCarry - Have;
@@ -633,7 +861,7 @@ void AOrionChara::OnBulletPickupFinished()
 	}
 
 	// done!
-	bIsCollectingBullets = false;
+	IsCollectingBullets = false;
 }
 
 bool AOrionChara::InteractWithProduction(float DeltaTime,
@@ -675,10 +903,10 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 			TMap<AActor*, TMap<int32, int32>> Route;
 			Route.Add(this, {{RawItemId, NeedPerCycle}});
 			Route.Add(InTargetProduction, {{}});
-			if (LogisticsComp && !LogisticsComp->TradingCargo(Route))
-			{
-				return false; // Transport not completed, continue this Action
-			}
+		if (LogisticsComp && !LogisticsComp->TradingCargo(Route))
+		{
+			return false; // Transport not completed, continue this Action
+		}
 		}
 
 		// ③.2 Field container transport
@@ -687,19 +915,26 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		AOrionActorStorage* BestStore = nullptr;
 		float BestStoreDist = TNumericLimits<float>::Max();
 
+		// Get InventoryManager to access AllInventoryComponents
+		UOrionInventoryManager* InvManager = GetWorld() ? GetWorld()->GetGameInstance()->GetSubsystem<UOrionInventoryManager>() : nullptr;
+		if (!InvManager)
+		{
+			return true;
+		}
+
 		// If prioritize Storage
 		if (bPreferStorageFirst)
 		{
-			// Check Storage
-			for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
+			// Check Storage - Use InventoryManager instead of TActorIterator
+			for (UOrionInventoryComponent* Inv : InvManager->AllInventoryComponents)
 			{
-				auto* S = *It;
-				if (!IsValid(S))
-				{
-					continue;
-				}
-				auto* Inv = S->InventoryComp;
-				if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+				if (!IsValid(Inv)) continue;
+				
+				AOrionActorStorage* S = Cast<AOrionActorStorage>(Inv->GetOwner());
+				// [Fix] Add IsHidden check to filter out preview objects
+				if (!IsValid(S) || S->IsHidden()) continue;
+				
+				if (Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
 				{
 					continue;
 				}
@@ -714,15 +949,15 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 			// If no Storage, then check Ore
 			if (!BestStore)
 			{
-				for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
+				for (UOrionInventoryComponent* Inv : InvManager->AllInventoryComponents)
 				{
-					auto* O = *It;
-					if (!IsValid(O))
-					{
-						continue;
-					}
-					auto* Inv = O->InventoryComp;
-					if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+					if (!IsValid(Inv)) continue;
+					
+					AOrionActorOre* O = Cast<AOrionActorOre>(Inv->GetOwner());
+					// [Fix] Add IsHidden check to filter out preview objects
+					if (!IsValid(O) || O->IsHidden()) continue;
+					
+					if (Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
 					{
 						continue;
 					}
@@ -738,15 +973,15 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 		}
 		else // Priority Ore
 		{
-			for (TActorIterator<AOrionActorOre> It(GetWorld()); It; ++It)
+			for (UOrionInventoryComponent* Inv : InvManager->AllInventoryComponents)
 			{
-				auto* O = *It;
-				if (!IsValid(O))
-				{
-					continue;
-				}
-				auto* Inv = O->InventoryComp;
-				if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+				if (!IsValid(Inv)) continue;
+				
+				AOrionActorOre* O = Cast<AOrionActorOre>(Inv->GetOwner());
+				// [Fix] Add IsHidden check to filter out preview objects
+				if (!IsValid(O) || O->IsHidden()) continue;
+				
+				if (Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
 				{
 					continue;
 				}
@@ -760,15 +995,15 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 			}
 			if (!BestOre)
 			{
-				for (TActorIterator<AOrionActorStorage> It(GetWorld()); It; ++It)
+				for (UOrionInventoryComponent* Inv : InvManager->AllInventoryComponents)
 				{
-					auto* S = *It;
-					if (!IsValid(S))
-					{
-						continue;
-					}
-					auto* Inv = S->InventoryComp;
-					if (!Inv || Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
+					if (!IsValid(Inv)) continue;
+					
+					AOrionActorStorage* S = Cast<AOrionActorStorage>(Inv->GetOwner());
+					// [Fix] Add IsHidden check to filter out preview objects
+					if (!IsValid(S) || S->IsHidden()) continue;
+					
+					if (Inv->GetItemQuantity(RawItemId) < NeedPerCycle)
 					{
 						continue;
 					}
@@ -819,15 +1054,12 @@ bool AOrionChara::InteractWithProduction(float DeltaTime,
 void AOrionChara::InteractWithProductionStop()
 {
 	// If already in "formal interaction" stage, need to reduce production point worker count
-	UE_LOG(LogTemp, Warning, TEXT("[IP] 231331"));
 	if (IsInteractWithActor)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithProductionStop: bIsInteractProd = true"));
 		InteractWithActorStop(InteractWithActorState);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[IP] InteractWithProductionStop: bIsInteractProd = false"));
 		if (MovementComp) MovementComp->MoveToLocationStop();
 	}
 
@@ -837,6 +1069,12 @@ void AOrionChara::InteractWithProductionStop()
 
 	// Reset "preparing interaction" mark
 	bPreparingInteractProd = false;
+
+	// Ensure Logistics is stopped
+	if (LogisticsComp)
+	{
+		LogisticsComp->CollectingCargoStop();
+	}
 
 	// Clear current production target
 	//CurrentInteractProduction = nullptr;
@@ -867,9 +1105,13 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 	{
 	case EInteractWithActorState::Unavailable:
 		{
+			// [Fix] Ensure IsInteractWithActor is false in Unavailable state
+			IsInteractWithActor = false;
 			if (!bOverlapping)
 			{
 				InteractWithActorState = EInteractWithActorState::MovingToTarget;
+				// [Fix 8] Immediately start moving, no longer wait for next frame
+				if (MovementComp) MovementComp->MoveToLocation(InTarget->GetActorLocation());
 				return false;
 			}
 			/* Overlapped */
@@ -878,11 +1120,16 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 			CurrentInteractActor = InTarget;
 			const bool InitActionRes = InteractWithActorStart(InteractWithActorState);
 			InteractWithActorState = EInteractWithActorState::Interacting;
+			// [Fix] Immediately update IsInteractWithActor when entering Interacting state
+			// This ensures animation state machine gets the correct value even in procedural mode
+			IsInteractWithActor = true;
 			return InitActionRes;
 		}
 		break;
 	case EInteractWithActorState::MovingToTarget:
 		{
+			// [Fix] Ensure IsInteractWithActor is false while moving
+			IsInteractWithActor = false;
 			if (!bOverlapping)
 			{
 				if (MovementComp) MovementComp->MoveToLocation(InTarget->GetActorLocation());
@@ -892,6 +1139,9 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 			CurrentInteractActor = InTarget;
 			const bool InitActionRes = InteractWithActorStart(InteractWithActorState);
 			InteractWithActorState = EInteractWithActorState::Interacting;
+			// [Fix] Immediately update IsInteractWithActor when entering Interacting state
+			// This ensures animation state machine gets the correct value even in procedural mode
+			IsInteractWithActor = true;
 			return InitActionRes;
 		}
 		break;
@@ -903,6 +1153,9 @@ bool AOrionChara::InteractWithActor(float DeltaTime, AOrionActor* InTarget)
 				return true; // Interaction ended
 			}
 			/* Overlapped */
+			// [Fix] Ensure IsInteractWithActor remains true while interacting
+			// This is important for procedural mode where the function may not be called every frame
+			IsInteractWithActor = true;
 			return false;
 		}
 		break;
@@ -1002,41 +1255,19 @@ void AOrionChara::InteractWithActorStop(EInteractWithActorState& State)
 
 void AOrionChara::RemoveAllActions(const FString& Except)
 {
-	if (CurrentAction)
-	{
-		FString OngoingActionName = CurrentAction->Name;
-
-		if (OngoingActionName.Contains("ForceMoveToLocation") || OngoingActionName.Contains("MoveToLocation"))
-		{
-			if (MovementComp) MovementComp->MoveToLocationStop();
-		}
-
-		if (OngoingActionName.Contains("ForceAttackOnCharaLongRange") || OngoingActionName.Contains(
-			"AttackOnCharaLongRange"))
-		{
-			if (CombatComp)
-			{
-				CombatComp->AttackOnCharaLongRangeStop();
-			}
-		}
-
-		if (OngoingActionName.Contains("ForceInteractWithActor") || OngoingActionName.Contains("InteractWithActor"))
-		{
-			InteractWithActorStop(InteractWithActorState);
-		}
-
-		CurrentAction = nullptr;
-	}
-
-	CharacterActionQueue.Actions.Empty();
+	// Component will clear actions, and next frame Tick will detect Type change to Undefined,
+	// triggering OnActionTypeChangedHandler which calls SwitchingStateHandle to stop components.
+	if (ActionComp) ActionComp->RemoveAllActions(Except);
 }
 
-void AOrionChara::Die()
+void AOrionChara::OnActionNameChangedHandler(FString PrevName, FString CurrName)
 {
-	CharaState = ECharaState::Dead;
+	OnCharaActionChange.Broadcast(PrevName, CurrName);
+}
 
-	UE_LOG(LogTemp, Log, TEXT("AOrionChara::Die() called."));
-
+// [Fix 7] Unified cleanup function for Die and Incapacitate
+void AOrionChara::CleanupState()
+{
 	RemoveAllActions();
 	if (CombatComp)
 	{
@@ -1061,20 +1292,38 @@ void AOrionChara::Die()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("StimuliSourceComp is null in Die()."));
+		UE_LOG(LogTemp, Warning, TEXT("StimuliSourceComp is null in CleanupState()."));
 	}
 
-	// 3. StopAI control
-	if (AIController)
+	if (OrionAIControllerInstance)
 	{
-		AIController->StopMovement();
-		AIController->UnPossess();
-		UE_LOG(LogTemp, Log, TEXT("AIController stopped and unpossessed."));
+		OrionAIControllerInstance->StopMovement();
+		OrionAIControllerInstance->UnPossess();
+		UE_LOG(LogTemp, Log, TEXT("OrionAIControllerInstance stopped and unpossessed."));
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AIController is null in Die()."));
+		UE_LOG(LogTemp, Warning, TEXT("OrionAIControllerInstance is null in CleanupState()."));
 	}
+}
+
+void AOrionChara::HandleHealthZero(AActor* InstigatorActor)
+{
+	Incapacitate();
+}
+
+void AOrionChara::Die()
+{
+	// 终结时清理延迟死亡计时器
+	GetWorldTimerManager().ClearTimer(TimerHandle_DieAfterIncapacitated);
+
+	CharaState = ECharaState::Dead;
+
+	UE_LOG(LogTemp, Log, TEXT("AOrionChara::Die() called."));
+
+	CleanupState(); // Call unified cleanup
+
+	CleanAffiliatedObjects();
 
 	Destroy();
 	UE_LOG(LogTemp, Log, TEXT("AOrionChara destroyed."));
@@ -1084,43 +1333,7 @@ void AOrionChara::Incapacitate()
 {
 	CharaState = ECharaState::Incapacitated;
 
-	RemoveAllActions();
-	if (CombatComp)
-	{
-		CombatComp->AttackOnCharaLongRangeStop();
-	}
-	if (LogisticsComp)
-	{
-		LogisticsComp->CollectingCargoStop();
-	}
-
-	if (StimuliSourceComp)
-	{
-		if (UAISense_Sight::StaticClass())
-		{
-			StimuliSourceComp->UnregisterFromSense(UAISense_Sight::StaticClass());
-			UE_LOG(LogTemp, Log, TEXT("Unregistered from UAISense_Sight."));
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("UAISense_Sight::StaticClass() returned nullptr."));
-		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("StimuliSourceComp is null in Die()."));
-	}
-
-	if (AIController)
-	{
-		AIController->StopMovement();
-		AIController->UnPossess();
-		UE_LOG(LogTemp, Log, TEXT("AIController stopped and unpossessed."));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("AIController is null in Die()."));
-	}
+	CleanupState(); // Call unified cleanup
 
 	UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(
 		GetComponentByClass(UPrimitiveComponent::StaticClass()));
@@ -1133,6 +1346,15 @@ void AOrionChara::Incapacitate()
 	{
 		CharaCapsuleComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
+
+	// 进入失能状态后 2 秒自动死亡
+	GetWorldTimerManager().ClearTimer(TimerHandle_DieAfterIncapacitated);
+	GetWorldTimerManager().SetTimer(
+		TimerHandle_DieAfterIncapacitated,
+		this,
+		&AOrionChara::Die,
+		2.0f,
+		false);
 }
 
 
@@ -1152,9 +1374,16 @@ std::vector<AOrionChara*> AOrionChara::GetOtherCharasByProximity() const
 
 		if (AOrionChara* Other = Cast<AOrionChara>(Actor))
 		{
-			if (Other->CharaSide != CharaSide)
+			// [Refactor] Use Faction System via AttributeComp instead of CharaSide
+			if (AttributeComp && Other->AttributeComp)
 			{
-				Enemies.push_back(Other);
+				if (const UOrionFactionManager* FactionManager = GetGameInstance()->GetSubsystem<UOrionFactionManager>())
+				{
+					if (FactionManager->IsHostile(AttributeComp->ActorFaction, Other->AttributeComp->ActorFaction))
+					{
+						Enemies.push_back(Other);
+					}
+				}
 			}
 		}
 	}
@@ -1173,34 +1402,17 @@ std::vector<AOrionChara*> AOrionChara::GetOtherCharasByProximity() const
 
 void AOrionChara::ReorderProceduralAction(int32 DraggedIndex, int32 DropIndex)
 {
-	auto& CharaProcQueueActionsRef = CharacterProcActionQueue.Actions;
-
-	int32 Count = CharaProcQueueActionsRef.Num();
-	if (DraggedIndex < 0 || DraggedIndex >= Count)
+	if (ActionComp)
 	{
-		return;
+		ActionComp->ReorderProceduralAction(DraggedIndex, DropIndex);
 	}
-
-	FOrionAction ActionRef = MoveTemp(CharaProcQueueActionsRef[DraggedIndex]);
-	CharaProcQueueActionsRef.RemoveAt(DraggedIndex);
-
-	int32 NewIndex = DropIndex;
-	if (DropIndex > DraggedIndex)
-	{
-		NewIndex = DropIndex - 1;
-	}
-
-	NewIndex = FMath::Clamp(NewIndex, 0, CharaProcQueueActionsRef.Num());
-
-	CharaProcQueueActionsRef.Insert(MoveTemp(ActionRef), NewIndex);
 }
 
 void AOrionChara::RemoveProceduralActionAt(int32 Index)
 {
-	auto& CharaProcQueueActionsRef = CharacterProcActionQueue.Actions;
-	if (Index >= 0 && Index < CharaProcQueueActionsRef.Num())
+	if (ActionComp)
 	{
-		CharaProcQueueActionsRef.RemoveAt(Index);
+		ActionComp->RemoveProceduralActionAt(Index);
 	}
 }
 
@@ -1229,8 +1441,6 @@ bool AOrionChara::InteractWithInventory(AOrionActor* OrionActor)
 	{
 		if (MovementComp) MovementComp->MoveToLocationStop();
 
-		bIsInteractWithInventory = true;
-
 		OnInteractWithInventory.ExecuteIfBound(OrionActor);
 
 		return true;
@@ -1245,44 +1455,9 @@ float AOrionChara::TakeDamage(float DamageAmount, const FDamageEvent& DamageEven
 {
 	const float DamageApplied = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
-	CurrHealth -= DamageApplied;
-
-	//UE_LOG(LogTemp, Log, TEXT("AOrionChara took %f damage. Current Health: %f"), DamageApplied, CurrHealth);
-
-	/*
-	// 检查 DamageEvent 是否为径向伤害事件
-	if (DamageEvent.GetTypeID() == FRadialDamageEvent::ClassID)
+	if (AttributeComp)
 	{
-		UE_LOG(LogTemp, Log, TEXT("DamageEvent is a radial damage event."));
-		// 将 DamageEvent 转换为 FRadialDamageEvent
-		const FRadialDamageEvent& RadialDamageEvent = static_cast<const FRadialDamageEvent&>(DamageEvent);
-
-		// 计算角色与爆炸点的距离
-		float Distance = FVector::Dist(RadialDamageEvent.Origin, GetActorLocation());
-
-		// 计算力的大小
-		float MaxForce = DamageAmount; // 这里假设 DamageAmount 与最大力成正比
-		float ForceMagnitude = FMath::Max(0.f, MaxForce * (1 - Distance / RadialDamageEvent.Params.OuterRadius));
-
-		UE_LOG(LogTemp, Warning, TEXT("Calculated ForceMagnitude: %f at Distance: %f"), ForceMagnitude, Distance);
-
-		// 如果力超过阈值，调用 OnForceExceeded
-		if (ForceMagnitude > ForceThreshold)
-		{
-			// 计算力的方向
-			FVector ForceDirection = GetActorLocation() - RadialDamageEvent.Origin;
-			ForceDirection = ForceDirection.GetSafeNormal();
-
-			// 调用 OnForceExceeded，传递力向量
-			OnForceExceeded(ForceDirection * ForceMagnitude);
-		}
-	}
-	*/
-
-
-	if (CurrHealth <= 0.0f)
-	{
-		Incapacitate();
+		AttributeComp->ReceiveDamage(DamageApplied, EventInstigator ? EventInstigator->GetPawn() : DamageCauser);
 	}
 
 	return DamageApplied;
@@ -1308,9 +1483,11 @@ void AOrionChara::InitOrionCharaMovement()
 
 		// Configure character movement
 		MovementComponent->bOrientRotationToMovement = true;
-		MovementComponent->RotationRate = FRotator(0.f, 270.f * 1.2f, 0.f);
+		MovementComponent->RotationRate = FRotator(0.f, 270.f * 3.f, 0.f);
 		MovementComponent->bConstrainToPlane = true;
 		MovementComponent->bSnapToPlaneAtStart = true;
+
+		MovementComponent->MaxAcceleration = 10000.0f;
 
 		// Speed is now managed by MovementComp
 		if (MovementComp)

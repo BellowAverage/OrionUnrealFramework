@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Engine/GameInstance.h"
+#include "Engine/DataTable.h"
+#include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionSaveGame/OrionSaveGame.h"
 #include "OrionGameInstance.generated.h"
 
@@ -34,6 +36,10 @@ public:
 
 	UFUNCTION(BlueprintCallable)
 	void LoadGameWithDialog();
+
+	// 建筑数据表配置（可在编辑器中指定）
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Building Data", meta = (AllowedClasses = "DataTable"))
+	TObjectPtr<UDataTable> BuildingDataTable = nullptr;
 
 private:
 	static constexpr const TCHAR* SlotName = TEXT("OrionSlot");

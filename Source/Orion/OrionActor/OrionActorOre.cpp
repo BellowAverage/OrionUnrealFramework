@@ -2,6 +2,7 @@
 
 
 #include "OrionActorOre.h"
+#include "Orion/OrionGameInstance/OrionCharaManager.h"
 
 
 AOrionActorOre::AOrionActorOre()
@@ -13,13 +14,11 @@ void AOrionActorOre::BeginPlay()
 {
 	Super::BeginPlay();
 
-	/*checkf(InventoryComp, TEXT("[%s] InventoryComp is NULL!"), *GetName()); // 崩溃*/
-
 	if (InventoryComp && OreCategory == EOreCategory::StoneOre)
 	{
 		AvailableInventoryMap = {{2, 10}};
 		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
-		InventoryComp->ModifyItemQuantity(2, 5); // 初始存储 10 个石矿
+		InventoryComp->ModifyItemQuantity(2, 5);
 	}
 }
 
@@ -40,6 +39,40 @@ void AOrionActorOre::Tick(float DeltaTime)
 	{
 		ActorStatus = EActorStatus::Interactable;
 	}
+}
+
+void AOrionActorOre::ShowInteractOptions()
+{
+	UE_LOG(LogTemp, Log, TEXT("ShowInteractOptions called on Ore Actor: %s"), *GetName());
+}
+
+bool AOrionActorOre::ApplyInteractionToCharas(TArray<AOrionChara*> InteractedCharas, AOrionActor* InteractingActor)
+{
+	for (const auto& Chara : InteractedCharas)
+	{
+		if (Chara && Chara->ActionComp)
+		{
+			if (Chara->ActionComp->IsProcedural())
+			{
+				Chara->ActionComp->SetProcedural(false);
+			}
+
+			Chara->ActionComp->RemoveAllActions();
+
+			FString ActionName = FString::Printf(
+				TEXT("InteractWithActor_%s"), *InteractingActor->GetName());
+			FOrionAction AddingAction = Chara->InitActionInteractWithActor(
+				ActionName, InteractingActor);
+			Chara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+		}
+		else
+		{
+			return false;
+		}
+	}
+
+
+	return true;
 }
 
 void AOrionActorOre::ProductionProgressUpdate(float DeltaTime)

@@ -2,8 +2,6 @@
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
 
-// #include "Components/ArrowComponent.h"
-// #include "Components/BoxComponent.h"
 class UPrimitiveComponent;
 
 
@@ -22,6 +20,8 @@ const TMap<EOrionStructure, FVector> UOrionStructureComponent::StructureBoundMap
 	{EOrionStructure::Wall, {STRUCTURE_THICKNESS_BASE, STRUCTURE_LENGTH_BASE, STRUCTURE_HEIGHT_BASE}},
 	{EOrionStructure::DoubleWall, {STRUCTURE_THICKNESS_BASE, 2.f * STRUCTURE_LENGTH_BASE, STRUCTURE_HEIGHT_BASE}},
 	{EOrionStructure::BasicRoof, {STRUCTURE_LENGTH_BASE,STRUCTURE_LENGTH_BASE, STRUCTURE_LENGTH_BASE}},
+	{EOrionStructure::InclinedRoof, {STRUCTURE_LENGTH_BASE * (FMath::Sqrt(2.f)), STRUCTURE_LENGTH_BASE, STRUCTURE_THICKNESS_BASE}},
+	
 };
 
 
@@ -63,11 +63,11 @@ void UOrionStructureComponent::BeginPlay()
 	}
 
 
-	// 根据类型微调 Decay (如果蓝图没设的话)
+	// Decay Adjustment
 	if (OrionStructureType == EOrionStructure::Wall || OrionStructureType == EOrionStructure::DoubleWall)
-		StabilityDecay = 0.1f; // 墙壁很硬
+		StabilityDecay = 0.1f;
 	else 
-		StabilityDecay = 0.25f; // 屋顶/地板比较脆
+		StabilityDecay = 0.25f;
 
 	if (bAutoRegisterSockets && !BIsPreviewStructure)
 	{
@@ -79,7 +79,7 @@ void UOrionStructureComponent::BeginPlay()
 
 
 // ---------------------------------------------------------
-// [Core] 稳定性算法
+// [Core] Stability Calculation
 // ---------------------------------------------------------	 
 void UOrionStructureComponent::UpdateStability()
 {
@@ -219,7 +219,13 @@ void UOrionStructureComponent::SocketsRegistryHandler() const
 		break;
 	case EOrionStructure::DoubleWall: RegisterDoubleWallSockets(StructureLocation, StructureRotation);
 		break;
-	default: break;
+	case EOrionStructure::InclinedRoof: RegisterInclinedRoofSockets(StructureLocation, StructureRotation);
+		break;
+	default:
+		{
+			UE_LOG(LogTemp, Warning, TEXT("OrionStructureComponent::SocketsRegistryHandler: Unsupported structure type for socket registration."));
+			break;
+		}
 	}
 }
 
@@ -292,6 +298,18 @@ void UOrionStructureComponent::RegisterSquareFoundationSockets(const FVector& St
 			StructureRotation + SquareFoundation2WallRotationOffset[i],
 			EOrionStructure::Wall, false, GetWorld(), GetOwner(), SquareFoundation2WallScaleOffset[i]);
 	}
+}
+
+void UOrionStructureComponent::RegisterInclinedRoofSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const
+{
+	/*const FVector InclinedRoofBound = GetStructureBounds(EOrionStructure::InclinedRoof);
+	const FVector SquareBound = GetStructureBounds(EOrionStructure::BasicSquareFoundation);
+	const FVector WallBound = GetStructureBounds(EOrionStructure::Wall);*/
+
+	BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::InclinedRoof,
+		true, GetWorld(), GetOwner());
+
+	/* InclinedRoof -> Wall */
 }
 
 void UOrionStructureComponent::RegisterTriangleFoundationSockets(const FVector& StructureLocation,
@@ -385,6 +403,8 @@ void UOrionStructureComponent::RegisterWallSockets(const FVector& StructureLocat
 	const FVector TriangleFoundationBound = GetStructureBounds(EOrionStructure::BasicTriangleFoundation);
 	const float TriEdgeLength = 2.f * GetStructureBounds(EOrionStructure::BasicTriangleFoundation).Y;
 
+	const FVector InclinedRoofBound = GetStructureBounds(EOrionStructure::InclinedRoof);
+
 	BuildingManager->RegisterSocket(StructureLocation, StructureRotation, EOrionStructure::Wall,
 	                                true, GetWorld(), GetOwner());
 
@@ -411,6 +431,17 @@ void UOrionStructureComponent::RegisterWallSockets(const FVector& StructureLocat
 	BuildingManager->RegisterSocket(
 		RearWorld, StructureRotation,
 		EOrionStructure::BasicSquareFoundation,
+		false, GetWorld(), GetOwner());
+
+	/* Wall -> InclinedRoof */
+	BuildingManager->RegisterSocket(
+		FrontWorld + FVector(0.f, 0.f, 0.5f * InclinedRoofBound.Y), StructureRotation + FRotator(0.f,  -90.f, 0.f),
+		EOrionStructure::InclinedRoof,
+		false, GetWorld(), GetOwner());
+
+	BuildingManager->RegisterSocket(
+		RearWorld + FVector(0.f, 0.f, 0.5f * InclinedRoofBound.Y), StructureRotation + FRotator(0.f, 90.f, 0.f),
+		EOrionStructure::InclinedRoof,
 		false, GetWorld(), GetOwner());
 
 	/* Wall -> TriangleFloor (TriangleFoundation) */
@@ -478,6 +509,8 @@ void UOrionStructureComponent::RegisterDoubleWallSockets(const FVector& Structur
 		}
 	}
 }
+
+
 
 FVector UOrionStructureComponent::GetStructureBounds(const EOrionStructure Type)
 {

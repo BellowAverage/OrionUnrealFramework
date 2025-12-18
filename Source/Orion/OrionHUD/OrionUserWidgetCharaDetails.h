@@ -50,15 +50,15 @@ public:
 					{
 						if (!InventoryComponent || !TargetInventoryComponent)
 						{
-							UE_LOG(LogTemp, Warning, TEXT("InventoryComponent or TargetInventoryComponent is null!"));
+							// UE_LOG(LogTemp, Warning, TEXT("InventoryComponent or TargetInventoryComponent is null!"));
 							return;
 						}
 
-						UE_LOG(LogTemp, Warning,
-						       TEXT(
-							       "Cargo item clicked, ItemId = %d, InventoryComponent Owner = %s, TargetInventoryComponent Owner = %s"
-						       ), ItemId, *InventoryComponent->GetOwner()->GetName(),
-						       *TargetInventoryComponent->GetOwner()->GetName());
+						// UE_LOG(LogTemp, Warning,
+						//        TEXT(
+						// 	       "Cargo item clicked, ItemId = %d, InventoryComponent Owner = %s, TargetInventoryComponent Owner = %s"
+						//        ), ItemId, *InventoryComponent->GetOwner()->GetName(),
+						//        *TargetInventoryComponent->GetOwner()->GetName());
 
 
 						if (InventoryComponent && TargetInventoryComponent)

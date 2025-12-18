@@ -1,9 +1,10 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "OrionActor.h"
 #include "Orion/OrionComponents/OrionInventoryComponent.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
+#include "Orion/OrionComponents/OrionAttributeComponent.h"
 
 AOrionActor::AOrionActor()
 {
@@ -28,12 +29,14 @@ AOrionActor::AOrionActor()
 	// 3. Game logics supporting components.
 	InventoryComp = CreateDefaultSubobject<UOrionInventoryComponent>(TEXT("InventoryComp"));
 	StructureComponent = CreateDefaultSubobject<UOrionStructureComponent>(TEXT("StructureComponent"));
+	AttributeComp = CreateDefaultSubobject<UOrionAttributeComponent>(TEXT("AttributeComp"));
 }
 
 TArray<FString> AOrionActor::TickShowHoveringInfo()
 {
+	float CurrentHealth = AttributeComp ? AttributeComp->Health : 0.0f;
 	return TArray<FString>{ FString::Printf(TEXT("Name: %s"), *GetName()),
-		FString::Printf(TEXT("CurrHealth: %d"), CurrHealth) };
+		FString::Printf(TEXT("CurrHealth: %.0f"), CurrentHealth) };
 }
 
 void AOrionActor::BeginPlay()
@@ -45,7 +48,14 @@ void AOrionActor::BeginPlay()
 	if (InventoryComp)
 	{
 		InventoryComp->AvailableInventoryMap = AvailableInventoryMap;
-		InventoryComp->ModifyItemQuantity(2, +2);
+		InventoryComp->ModifyItemQuantity(2, +50);
+	}
+
+	if (AttributeComp)
+	{
+		AttributeComp->MaxHealth = MaxHealth;
+		AttributeComp->SetHealth(MaxHealth);
+		AttributeComp->OnHealthZero.AddDynamic(this, &AOrionActor::HandleHealthZero);
 	}
 }
 
@@ -65,15 +75,19 @@ void AOrionActor::Tick(float DeltaTime)
 
 float AOrionActor::TakeDamage(float DamageAmount,
                               const FDamageEvent& /*Event*/,
-                              AController* /*Instigator*/,
+                              AController* InstigatorController,
                               AActor* /*Causer*/)
 {
-	CurrHealth -= FMath::RoundToInt(DamageAmount);
-	if (CurrHealth <= 0)
+	if (AttributeComp)
 	{
-		Die();
+		AttributeComp->ReceiveDamage(DamageAmount, InstigatorController ? InstigatorController->GetPawn() : nullptr);
 	}
 	return DamageAmount;
+}
+
+void AOrionActor::HandleHealthZero(AActor* InstigatorActor)
+{
+	Die();
 }
 
 void AOrionActor::Die()
@@ -87,12 +101,9 @@ void AOrionActor::Die()
 
 void AOrionActor::SpawnDeathEffect_Implementation(FVector Location)
 {
-	if (!DeathEffectClass)
-	{
-		return;
-	}
+	UE_LOG(LogTemp, Log, TEXT("OrionActor::SpawnDeathEffect_Implementation: Spawning death effect at location %s."), *Location.ToString());
 
-	if (UWorld* World = GetWorld())
+	if (UWorld* World = GetWorld(); DeathEffectClass)
 	{
 		FActorSpawnParameters P;
 		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;

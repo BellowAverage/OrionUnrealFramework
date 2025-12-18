@@ -1,4 +1,4 @@
-﻿#include "OrionHUD.h"
+#include "OrionHUD.h"
 
 /* UE Utils */
 #include "Engine/Canvas.h"
@@ -10,7 +10,13 @@
 #include "Orion/OrionChara/OrionChara.h"
 #include "Orion/OrionGameInstance/OrionGameInstance.h"
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
+#include "Orion/OrionGameInstance/OrionFactionManager.h"
+#include "Orion/OrionGameInstance/OrionInventoryManager.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
+#include "Orion/OrionGameMode/OrionGameMode.h"
+// [Fix] Include ActionComponent
+#include "Orion/OrionComponents/OrionActionComponent.h"
+#include "Orion/OrionComponents/OrionAttributeComponent.h"
 
 void AOrionHUD::BeginPlay()
 {
@@ -29,29 +35,31 @@ void AOrionHUD::BeginPlay()
 	/* 1. Developer Debug UI Layer */
 	if (WB_DeveloperUIBase)
 	{
-		UOrionUserWidgetUIBase* DeveloperUIBase = CreateWidget<UOrionUserWidgetUIBase>(GetWorld(), WB_DeveloperUIBase);
+		DeveloperUIBase = CreateWidget<UOrionUserWidgetUIBase>(GetWorld(), WB_DeveloperUIBase);
+
+		checkf(DeveloperUIBase, TEXT("OrionHUD::BeginPlay: Failed to CreateWidget for DeveloperUIBase."));
 
 		DeveloperUIBase->OnViewLevelUp.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: View Level Up"));
+			// UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: View Level Up"));
 			OrionPlayerControllerInstance->ViewLevel++;
 		});
 
 		DeveloperUIBase->OnViewLevelDown.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: View Level Down"));
+			// UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: View Level Down"));
 			if (OrionPlayerControllerInstance->ViewLevel > 0) OrionPlayerControllerInstance->ViewLevel--;
 		});
 
 		DeveloperUIBase->OnSaveGame.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: Save Game"));
+			// UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: Save Game"));
 			GetWorld()->GetGameInstance<UOrionGameInstance>()->SaveGame("Developer");
 		});
 
 		DeveloperUIBase->OnLoadGame.BindLambda([this]()
 		{
-			UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: Load Game"));
+			// UE_LOG(LogTemp, Log, TEXT("OrionHUD::BeginPlay: Load Game"));
 			GetWorld()->GetGameInstance<UOrionGameInstance>()->LoadGame("Developer");
 		});
 
@@ -59,7 +67,7 @@ void AOrionHUD::BeginPlay()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("OrionHUD::BeginPlay: WB_DeveloperUIBase has not been set in Editor."));
+		// UE_LOG(LogTemp, Error, TEXT("OrionHUD::BeginPlay: WB_DeveloperUIBase has not been set in Editor."));
 	}
 
 	/* 2. Character Info UI Layer */
@@ -74,10 +82,20 @@ void AOrionHUD::BeginPlay()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("OrionHUD::BeginPlay: WB_CharaInfoPanel has not been set in Editor."));
+		// UE_LOG(LogTemp, Error, TEXT("OrionHUD::BeginPlay: WB_CharaInfoPanel has not been set in Editor."));
 	}
 
 	HideCharaInfoPanel();
+
+	/* 3. Managers */
+	InventoryManagerInstance = GetGameInstance()->GetSubsystem<UOrionInventoryManager>();
+	checkf(InventoryManagerInstance, TEXT("OrionHUD::BeginPlay: Unable to acquire OrionInventoryManager Subsystem."));
+
+	FactionManagerInstance = GetGameInstance()->GetSubsystem<UOrionFactionManager>();
+	checkf(FactionManagerInstance, TEXT("OrionHUD::BeginPlay: Unable to acquire OrionFactionManager Subsystem."));
+
+	/* 4. Bind Events */
+
 }
 
 void AOrionHUD::Tick(float DeltaTime)
@@ -85,6 +103,16 @@ void AOrionHUD::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	TickCharaInfoPanel();
+}
+
+void AOrionHUD::UpdatePlayerFactionResourceDisplay()
+{
+	if (!DeveloperUIBase) return;
+
+	const auto CurrInventoryMap = InventoryManagerInstance->GetPlayerFactionInventoryMap();
+	DeveloperUIBase->BulletNum->SetText(FText::AsNumber(CurrInventoryMap.FindRef(3)));
+	DeveloperUIBase->StoneNum->SetText(FText::AsNumber(CurrInventoryMap.FindRef(2)));
+	DeveloperUIBase->GoldNum->SetText(FText::AsNumber(FactionManagerInstance->FactionsDataMap[EFaction::PlayerFaction].Gold));
 }
 
 void AOrionHUD::TickCharaInfoPanel()
@@ -101,7 +129,6 @@ void AOrionHUD::TickCharaInfoPanel()
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("OrionHUD:Tick: Hide Chara Info Panel"));
 			HideCharaInfoPanel();
 		}
 
@@ -153,6 +180,15 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 {
 	if (!OrionPlayerControllerInstance || !Canvas) return;
 
+	// 检查GameMode中的控制变量
+	if (AOrionGameMode* GameMode = Cast<AOrionGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		if (!GameMode->bShowOrionCharaDebugInfo)
+		{
+			return;
+		}
+	}
+
 	TArray<AActor*> FoundActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), FoundActors);
 
@@ -168,14 +204,22 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 		FString CurrObjectName = OrionChara->GetName();
 		FString CurrObjectLocation = OrionChara->GetActorLocation().ToString();
 
+		// [Fix] Access ActionQueue via ActionComp
 		FString ActionQueueContent;
-		for (const auto& Action : OrionChara->CharacterActionQueue.Actions)
+		if (OrionChara->ActionComp)
 		{
-			ActionQueueContent += Action.Name + TEXT(" ");
+			// Determine which queue to show based on mode? Or show both?
+			// Usually RealTime queue if not procedural, or Proc if procedural.
+			// For simplicity, let's show the one that's active or RealTime as default.
+			// Replicating original logic which showed "CharacterActionQueue" (RealTime).
+			for (const auto& Action : OrionChara->ActionComp->RealTimeActionQueue.Actions)
+			{
+				ActionQueueContent += Action.Name + TEXT(" ");
+			}
 		}
-		FString CurrActionDebug = OrionChara->CurrentAction ? OrionChara->CurrentAction->Name : TEXT("None");
 
-		FString CurrHealthDebug = FString::Printf(TEXT("Health: %f"), OrionChara->CurrHealth);
+		float CurrentHealth = OrionChara->AttributeComp ? OrionChara->AttributeComp->Health : 0.0f;
+		FString CurrHealthDebug = FString::Printf(TEXT("Health: %f"), CurrentHealth);
 
 		FString CurrUnifiedAction = OrionChara->GetUnifiedActionName();
 
@@ -221,8 +265,8 @@ void AOrionHUD::TickDrawOrionActorInfoInPlace() const
 
 			Canvas->DrawText(
 				RenderFont,
-				FStringView(*CombinedText), // <- Pass FString instead of FStringView
-				//CombinedText,
+				//FStringView(*CombinedText), // <- Pass FString instead of FStringView
+				CombinedText,
 				ScreenPos.X,
 				ScreenPos.Y,
 				1.5f,
@@ -258,8 +302,8 @@ void AOrionHUD::TickShowInfoAtMouse()
 
 		Canvas->DrawText(
 			RenderFont,
-			FStringView(*Line),
-			//Line,
+			//FStringView(*Line),
+			Line,
 			MouseX + XOffset,
 			CurrentY,
 			1.5f,
@@ -301,7 +345,7 @@ void AOrionHUD::ShowBuildingMenu()
 {
 	if (!WB_BuildingMenu)
 	{
-		UE_LOG(LogTemp, Error, TEXT("OrionHUD::ShowBuildingMenu: WB_BuildingMenu has not been set in Editor."));
+		// UE_LOG(LogTemp, Error, TEXT("OrionHUD::ShowBuildingMenu: WB_BuildingMenu has not been set in Editor."));
 		return;
 	}
 
@@ -309,7 +353,7 @@ void AOrionHUD::ShowBuildingMenu()
 		GetWorld(), WB_BuildingMenu);
 
 
-	BuildingMenu->InitBuildingMenu(BuildingManagerInstance->OrionDataBuildings);
+	BuildingMenu->InitBuildingMenu(BuildingManagerInstance->GetOrionDataBuildings());
 
 	BuildingMenu->OnBuildingOptionSelected.BindLambda(
 		[&](const int32 InBuildingId, const bool bIsChecked)
@@ -337,6 +381,6 @@ void AOrionHUD::HideBuildingMenu()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("Building Menu is null!"));
+		// UE_LOG(LogTemp, Error, TEXT("Building Menu is null!"));
 	}
 }

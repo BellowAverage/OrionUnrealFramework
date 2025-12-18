@@ -1,6 +1,7 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "OrionActorProduction.h"
+#include "Orion/OrionComponents/OrionAttributeComponent.h"
 
 AOrionActorProduction::AOrionActorProduction()
 {
@@ -103,7 +104,8 @@ TArray<FString> AOrionActorProduction::TickShowHoveringInfo()
 	Lines.Add(FString::Printf(TEXT("CurrNumOfWorkers: %d"), CurrWorkers));
 	Lines.Add(FString::Printf(TEXT("ProductionProgress: [%s] %.1f%%"), *Bar, Progress));
 
-	Lines.Add(FString::Printf(TEXT("CurrHealth: %d"), CurrHealth));
+	float CurrentHealth = AttributeComp ? AttributeComp->Health : 0.0f;
+	Lines.Add(FString::Printf(TEXT("CurrHealth: %.0f"), CurrentHealth));
 
 	return Lines;
 }

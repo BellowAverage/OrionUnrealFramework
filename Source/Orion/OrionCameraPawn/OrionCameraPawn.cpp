@@ -5,6 +5,7 @@
 #include "Components/InputComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Orion/OrionPlayerController/OrionPlayerController.h"
+#include "TimerManager.h"
 #include "Orion/OrionChara/OrionChara.h"
 
 void AOrionCameraPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -31,28 +32,28 @@ AOrionCameraPawn::AOrionCameraPawn()
 
 	PrimaryActorTick.bTickEvenWhenPaused = true;
 
-	// 1) 根组件
+	// 1) Root component
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	RootComponent = SceneRoot;
 
-	// 2) 伸缩臂
+	// 2) Spring arm
 	SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
 	SpringArm->SetupAttachment(SceneRoot);
 	SpringArm->SetRelativeRotation(FRotator(-60.f, 0.f, 0.f));
 	SpringArm->bDoCollisionTest = false;
 	SpringArm->TargetArmLength = TargetArmLength;
 
-	// 3) 相机
+	// 3) Camera
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(SpringArm);
 
-	// 4) 浮动移动组件
+	// 4) Floating movement component
 	Movement = CreateDefaultSubobject<UFloatingPawnMovement>(TEXT("FloatingPawnMovement"));
 	Movement->Acceleration = 8000.f;
 	Movement->Deceleration = 8000.f;
 	Movement->MaxSpeed = 3000.f;
 
-	//bAddDefaultMovementBindings = false;   // 我们手动绑定 WASD
+	//bAddDefaultMovementBindings = false;   // We manually bind WASD
 }
 
 void AOrionCameraPawn::BeginPlay()
@@ -75,6 +76,18 @@ void AOrionCameraPawn::BeginPlay()
 			ViewportClient->SetMouseCaptureMode(EMouseCaptureMode::CapturePermanently);
 		}
 	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(this, &AOrionCameraPawn::SimulateInitialRotateKick);
+	}
+}
+
+void AOrionCameraPawn::SimulateInitialRotateKick()
+{
+	// Trigger middle button press/release logic once to ensure initial mouse state matches manual drag
+	StartRotate();
+	StopRotate();
 }
 
 void AOrionCameraPawn::Tick(float DeltaSeconds)
@@ -83,16 +96,16 @@ void AOrionCameraPawn::Tick(float DeltaSeconds)
 
 	UpdateTimeDilationCompensation();
 
-	// 平滑插值到目标长度
+	// Smoothly interpolate to target length
 	const float Current = SpringArm->TargetArmLength;
 	const float NewLength = FMath::FInterpTo(Current, TargetArmLength, DeltaSeconds, ZoomInterpSpeed);
 	SpringArm->TargetArmLength = NewLength;
 
 
-	// 1. 若目标失效则自动脱锁
+	// 1. If target is invalid, automatically unlock
 	StopFollowIfTargetInvalid();
 
-	// 2. 执行位置跟随
+	// 2. Execute position following
 	if (IsFollowing && FollowTarget)
 	{
 		const FVector Desired =
@@ -115,12 +128,12 @@ void AOrionCameraPawn::UpdateTimeDilationCompensation()
 
 		if (!FMath::IsNearlyEqual(CustomTimeDilation, Wanted))
 		{
-			CustomTimeDilation = Wanted; // 抵消全局 Time Dilation
+			CustomTimeDilation = Wanted; // Compensate for global Time Dilation
 		}
 	}
 }
 
-/* ------------ 移动 ------------ */
+/* ------------ Movement ------------ */
 void AOrionCameraPawn::MoveForward(float Value)
 {
 	if (!FMath::IsNearlyZero(Value))
@@ -137,7 +150,7 @@ void AOrionCameraPawn::MoveRight(float Value)
 	}
 }
 
-/* ------------ 缩放 ------------ */
+/* ------------ Zoom ------------ */
 void AOrionCameraPawn::Zoom(float AxisValue)
 {
 	if (!FMath::IsNearlyZero(AxisValue))
@@ -147,7 +160,7 @@ void AOrionCameraPawn::Zoom(float AxisValue)
 	}
 }
 
-/* ------------ 旋转 ------------ */
+/* ------------ Rotation ------------ */
 void AOrionCameraPawn::StartRotate()
 {
 	bRotatingCamera = true;
@@ -208,14 +221,14 @@ void AOrionCameraPawn::CameraPitch(float Value)
 
 void AOrionCameraPawn::ToggleFollow()
 {
-	if (IsFollowing) // 已锁定 → 解除
+	if (IsFollowing) // Already locked → unlock
 	{
 		IsFollowing = false;
 		FollowTarget = nullptr;
 		return;
 	}
 
-	// 尚未锁定：检查当前是否只有 1 个选中的角色
+	// Not locked yet: check if there is only 1 selected character
 	if (AOrionPlayerController* PC = Cast<AOrionPlayerController>(GetController()))
 	{
 		if (PC->OrionCharaSelection.Num() == 1)

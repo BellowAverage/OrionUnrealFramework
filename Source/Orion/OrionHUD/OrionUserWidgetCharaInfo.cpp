@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "OrionUserWidgetCharaInfo.h"
 #include "OrionUserWidgetProceduralAction.h"
@@ -6,6 +6,9 @@
 #include "Orion/OrionChara/OrionChara.h"
 #include "OrionUserWidgetCharaDetails.h"
 #include "Orion/OrionComponents/OrionMovementComponent.h"
+// [Fix] Include ActionComponent
+#include "Orion/OrionComponents/OrionActionComponent.h"
+#include "Orion/OrionComponents/OrionAttributeComponent.h"
 
 
 void UOrionUserWidgetCharaInfo::NativeConstruct()
@@ -45,7 +48,7 @@ void UOrionUserWidgetCharaInfo::NativeConstruct()
 	if (CheckbIsCharaProcedural)
 	{
 		CheckbIsCharaProcedural->OnCheckStateChanged.AddDynamic(
-			this, &UOrionUserWidgetCharaInfo::OnCheckbIsCharaProceduralChanged);
+			this, &UOrionUserWidgetCharaInfo::OnCheckIsCharaProceduralChanged);
 	}
 
 
@@ -123,7 +126,7 @@ void UOrionUserWidgetCharaInfo::BindInventoryEvents(AOrionChara* NewChara)
 
 void UOrionUserWidgetCharaInfo::BroadcastCharaActionChange(FString PrevActionName, FString CurrActionName)
 {
-	UE_LOG(LogTemp, Log, TEXT("bActorDetailShow: %s"), bActorDetailShow ? TEXT("true") : TEXT("false"));
+	// UE_LOG(LogTemp, Log, TEXT("bActorDetailShow: %s"), bActorDetailShow ? TEXT("true") : TEXT("false"));
 	if (CharaRef)
 	{
 		if (bActorDetailShow && PrevActionName.IsEmpty() && !CurrActionName.IsEmpty())
@@ -141,28 +144,25 @@ void UOrionUserWidgetCharaInfo::BroadcastInventoryChanged()
 {
 	if (CharaRef && bCharaDetailShow && CharaDetailsClass && BorderCharaDetails)
 	{
-		UE_LOG(LogTemp, Log, TEXT("CN1M"));
 		BorderCharaDetails->ClearChildren();
 
-		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
+		if (auto* CharaDetails = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
 		{
 			if (bActorDetailShow && InventoryInteractActorRef && InventoryInteractActorRef->InventoryComp)
 			{
-				W->InitCargoItemPanelParams(CharaRef->InventoryComp, InventoryInteractActorRef->InventoryComp);
+				CharaDetails->InitCargoItemPanelParams(CharaRef->InventoryComp, InventoryInteractActorRef->InventoryComp);
 			}
 			else if (!InventoryInteractActorRef)
 			{
-				W->InitCargoItemPanelParams(CharaRef->InventoryComp, nullptr);
+				CharaDetails->InitCargoItemPanelParams(CharaRef->InventoryComp, nullptr);
 			}
-			BorderCharaDetails->AddChild(W);
+			BorderCharaDetails->AddChild(CharaDetails);
 			bCharaDetailShow = true;
 		}
 	}
 
 	if (bActorDetailShow && BorderActorDetails)
 	{
-		UE_LOG(LogTemp, Log, TEXT("CNM"));
-
 		BorderActorDetails->ClearChildren();
 		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
 
@@ -189,29 +189,33 @@ void UOrionUserWidgetCharaInfo::UpdateProcActionQueue(AOrionChara* InChara)
 	SelectedIndex = INDEX_NONE;
 	ProceduralActionBox->ClearChildren();
 
-	const auto& Q = InChara->CharacterProcActionQueue.Actions;
-	for (int32 i = 0; i < Q.Num(); ++i)
+	// [Fix] 从 ActionComp 获取 ProceduralActionQueue
+	if (InChara->ActionComp)
 	{
-		const FOrionAction& Act = Q[i];
-		auto* Item = CreateWidget<UOrionUserWidgetProceduralAction>(
-			this, ProceduralActionItemClass);
-		Item->SetupActionItem(Act.Name, i);
-		Item->OnActionSelected.AddDynamic(this, &UOrionUserWidgetCharaInfo::OnProcSelected);
-		ProceduralActionBox->AddChild(Item);
+		const auto& Q = InChara->ActionComp->ProceduralActionQueue.Actions;
+		for (int32 i = 0; i < Q.Num(); ++i)
+		{
+			const FOrionAction& Act = Q[i];
+			auto* Item = CreateWidget<UOrionUserWidgetProceduralAction>(
+				this, ProceduralActionItemClass);
+			Item->SetupActionItem(Act.Name, i, InChara);
+			Item->OnActionSelected.AddDynamic(this, &UOrionUserWidgetCharaInfo::OnProcSelected);
+			ProceduralActionBox->AddChild(Item);
+		}
 	}
 
 	RefreshHighlight();
 }
 
-void UOrionUserWidgetCharaInfo::OnProcSelected(int32 ItemIndex)
+void UOrionUserWidgetCharaInfo::OnProcSelected(const int32 ItemIndex)
 {
 	SelectedIndex = ItemIndex;
 	RefreshHighlight();
 }
 
-void UOrionUserWidgetCharaInfo::RefreshHighlight()
+void UOrionUserWidgetCharaInfo::RefreshHighlight() const
 {
-	int32 Count = ProceduralActionBox->GetChildrenCount();
+	const int32 Count = ProceduralActionBox->GetChildrenCount();
 	for (int32 i = 0; i < Count; ++i)
 	{
 		if (auto* W = Cast<UOrionUserWidgetProceduralAction>(
@@ -238,15 +242,13 @@ void UOrionUserWidgetCharaInfo::OnMoveUpClicked()
 
 void UOrionUserWidgetCharaInfo::OnMoveDownClicked()
 {
-	if (!CharaRef)
-	{
-		return;
-	}
-	int32 Count = CharaRef->CharacterProcActionQueue.Actions.Num();
+	if (!CharaRef) return;
+	// [Fix] 获取队列长度需通过 Component
+	int32 Count = 0;
+	if (CharaRef->ActionComp) Count = CharaRef->ActionComp->ProceduralActionQueue.Actions.Num();
 	if (SelectedIndex >= 0 && SelectedIndex < Count - 1)
 	{
 		CharaRef->ReorderProceduralAction(SelectedIndex, SelectedIndex + 2);
-		// 注意 Reorder proceduralAction(OldIdx, DropIdx) 的 DropIdx 逻辑
 		++SelectedIndex;
 		UpdateProcActionQueue(CharaRef);
 	}
@@ -254,18 +256,23 @@ void UOrionUserWidgetCharaInfo::OnMoveDownClicked()
 
 void UOrionUserWidgetCharaInfo::OnDeleteClicked()
 {
-	if (!CharaRef)
+	if (!CharaRef) return;
+	
+	int32 Count = 0;
+	if (CharaRef->ActionComp) Count = CharaRef->ActionComp->ProceduralActionQueue.Actions.Num();
+	if (SelectedIndex >= 0 && SelectedIndex < Count)
 	{
-		return;
-	}
-	if (SelectedIndex >= 0 &&
-		SelectedIndex < CharaRef->CharacterProcActionQueue.Actions.Num())
-	{
-		if (SelectedIndex == 0)
-		{
-			CharaRef->CurrentProcAction = nullptr;
-		}
-
+		// [Refactor] 如果删除了当前正在执行的动作，Logic 需要清理 CurrentProcAction
+		// CharaRef->RemoveProceduralActionAt 会调用 Component->RemoveAt
+		// 但我们需要注意 Component 内部是否处理了 CurrentProcAction 的重置？
+		// 我们的 Component 代码中 RemoveAt 是数组操作，下一帧 Tick 会重新 Evaluate，
+		// 如果删的是 index 0 (Current)，下一帧 Loop 会发现 CurrentProcAction 指针失效或内容变了。
+		// 实际上我们使用的是裸指针 `FOrionAction* CurrentProcAction` 指向数组元素。
+		// 当数组 RemoveAt 发生内存移动时，指针会失效！这是一个潜在的 Crash 点。
+		// 幸好我们在 Component 的 RemoveProceduralActionAt 中并没有特别处理指针。
+		// 建议：在 Component 中，RemoveAt 操作后，应该重置 CurrentProcAction = nullptr 以强制重新评估。
+		// 不过这里我们只负责调用。
+		
 		CharaRef->RemoveProceduralActionAt(SelectedIndex);
 		UpdateProcActionQueue(CharaRef);
 	}
@@ -278,7 +285,7 @@ void UOrionUserWidgetCharaInfo::InitCharaInfoPanelParams(AOrionChara* InChara)
 		return;
 	}
 
-	BindInventoryEvents(InChara); // ★ 改动：在这里做绑定
+	BindInventoryEvents(InChara); // Change: Bind here
 
 	if (SliderSpeed)
 	{
@@ -301,19 +308,19 @@ void UOrionUserWidgetCharaInfo::InitCharaInfoPanelParams(AOrionChara* InChara)
 	}
 	if (CheckUnavailable)
 	{
-		CheckUnavailable->SetIsChecked(InChara->CharaAIState == EAIState::Unavailable);
+		CheckUnavailable->SetIsChecked(InChara->CharaAIState == EAIState::Passive);
 	}
 	bSuppressCheckEvents = false;
 
 	if (CheckbIsCharaProcedural)
 	{
-		CheckbIsCharaProcedural->SetIsChecked(InChara->bIsCharaProcedural);
+		if (InChara->ActionComp) CheckbIsCharaProcedural->SetIsChecked(InChara->ActionComp->IsProcedural());
 	}
 }
 
 void UOrionUserWidgetCharaInfo::NativeDestruct()
 {
-	BindInventoryEvents(nullptr); // 自动解绑
+	BindInventoryEvents(nullptr); // Auto unbind
 	Super::NativeDestruct();
 }
 
@@ -324,27 +331,32 @@ void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 		return;
 	}
 
-	if (InChara != CharaRef) // 角色切换时也要重新绑定
+	if (InChara != CharaRef) // Rebind when character switches
 	{
 		BindInventoryEvents(InChara);
 	}
 
 	CharaRef = InChara;
 
-	static TArray<FString> CachedProcNames; // 上一次的名称列表缓存
+	static TArray<FString> CachedProcNames; 
 
-	// 构造当前的名称列表
 	TArray<FString> CurrProcNames;
-	CurrProcNames.Reserve(InChara->CharacterProcActionQueue.Actions.Num());
-	for (const auto& Act : InChara->CharacterProcActionQueue.Actions)
+	
+	// [Fix] Access via ActionComp
+	if (InChara->ActionComp)
 	{
-		CurrProcNames.Add(Act.Name);
+		const auto& Actions = InChara->ActionComp->ProceduralActionQueue.Actions;
+		CurrProcNames.Reserve(Actions.Num());
+		for (const auto& Act : Actions)
+		{
+			CurrProcNames.Add(Act.Name);
+		}
 	}
 
-	// 对比：如果不一样，刷新并更新缓存
+	// Compare: if different, refresh and update cache
 	if (CurrProcNames != CachedProcNames)
 	{
-		UE_LOG(LogTemp, Log, TEXT("Procedural queue changed: updating UI"));
+		// UE_LOG(LogTemp, Log, TEXT("Procedural queue changed: updating UI"));
 		UpdateProcActionQueue(InChara);
 		CachedProcNames = MoveTemp(CurrProcNames);
 	}
@@ -357,7 +369,8 @@ void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 
 	if (TextCurrHealth)
 	{
-		TextCurrHealth->SetText(FText::FromString(FString::Printf(TEXT("Current Health: %f"), InChara->CurrHealth)));
+		float CurrentHealth = InChara->AttributeComp ? InChara->AttributeComp->Health : 0.0f;
+		TextCurrHealth->SetText(FText::FromString(FString::Printf(TEXT("Current Health: %f"), CurrentHealth)));
 	}
 
 	if (SliderSpeed)
@@ -369,9 +382,12 @@ void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 	if (TextActionQueue)
 	{
 		FString ActionQueueContent;
-		for (const auto& Action : InChara->CharacterActionQueue.Actions)
+		if (InChara->ActionComp)
 		{
-			ActionQueueContent += Action.Name + TEXT(" | ");
+			for (const auto& Action : InChara->ActionComp->RealTimeActionQueue.Actions)
+			{
+				ActionQueueContent += Action.Name + TEXT(" | ");
+			}
 		}
 
 		if (ActionQueueContent.Len() > 0)
@@ -388,7 +404,7 @@ void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 
 	if (CheckbIsCharaProcedural)
 	{
-		CheckbIsCharaProcedural->SetIsChecked(InChara->bIsCharaProcedural);
+		if (InChara->ActionComp) CheckbIsCharaProcedural->SetIsChecked(InChara->ActionComp->IsProcedural());
 	}
 
 	//UpdateProcActionQueue(InChara);
@@ -396,7 +412,7 @@ void UOrionUserWidgetCharaInfo::UpdateCharaInfo(AOrionChara* InChara)
 
 void UOrionUserWidgetCharaInfo::OnSliderChange(float InValue)
 {
-	UE_LOG(LogTemp, Log, TEXT("Slider Value Changed: %f"), InValue);
+	// UE_LOG(LogTemp, Log, TEXT("Slider Value Changed: %f"), InValue);
 	if (CharaRef)
 	{
 		CharaRef->ChangeMaxWalkSpeed(InValue);
@@ -471,11 +487,11 @@ void UOrionUserWidgetCharaInfo::OnUnavailableChanged(bool bIsChecked)
 
 	if (bIsChecked && CharaRef)
 	{
-		CharaRef->CharaAIState = EAIState::Unavailable;
+		CharaRef->CharaAIState = EAIState::Passive;
 	}
 }
 
-void UOrionUserWidgetCharaInfo::OnCheckbIsCharaProceduralChanged(bool bIsChecked)
+void UOrionUserWidgetCharaInfo::OnCheckIsCharaProceduralChanged(bool bIsChecked)
 {
 	if (bSuppressCheckEvents)
 	{
@@ -484,7 +500,7 @@ void UOrionUserWidgetCharaInfo::OnCheckbIsCharaProceduralChanged(bool bIsChecked
 
 	if (CharaRef)
 	{
-		CharaRef->bIsCharaProcedural = bIsChecked;
+		CharaRef->ActionComp->SetProcedural(bIsChecked);
 	}
 }
 
@@ -497,7 +513,7 @@ void UOrionUserWidgetCharaInfo::OnBagClicked()
 
 	if (!bCharaDetailShow)
 	{
-		// 打开：先清空，再新建
+		// Open: clear first, then create new
 		BorderCharaDetails->ClearChildren();
 
 		if (auto* W = CreateWidget<UOrionUserWidgetCharaDetails>(this, CharaDetailsClass))
@@ -516,7 +532,7 @@ void UOrionUserWidgetCharaInfo::OnBagClicked()
 	}
 	else
 	{
-		// 关闭
+		// Close
 		BorderCharaDetails->ClearChildren();
 		bCharaDetailShow = false;
 	}
@@ -524,7 +540,7 @@ void UOrionUserWidgetCharaInfo::OnBagClicked()
 
 void UOrionUserWidgetCharaInfo::BroadcastOnInteractWithInventory(AOrionActor* OrionActor)
 {
-	UE_LOG(LogTemp, Log, TEXT("WHATTHE FKJ Interact with inventory: %s"), *OrionActor->GetName());
+	// UE_LOG(LogTemp, Log, TEXT("WHATTHE FKJ Interact with inventory: %s"), *OrionActor->GetName());
 
 	if (!CharaRef || !CharaDetailsClass || !BorderActorDetails)
 	{
@@ -579,7 +595,7 @@ void UOrionUserWidgetCharaInfo::BroadcastOnInteractWithInventory(AOrionActor* Or
 	}
 	else
 	{
-		// 关闭
+		// Close
 		BorderActorDetails->ClearChildren();
 		ImageTradeIcon->SetVisibility(ESlateVisibility::Hidden);
 		bActorDetailShow = false;

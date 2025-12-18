@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -14,6 +14,7 @@
 // Serialization
 #include "Misc/Guid.h"
 #include "Orion/OrionInterface/OrionInterfaceHoverable.h"
+#include "Orion/OrionInterface/OrionInterfaceInteractable.h"
 
 // UE Reflection
 #include "OrionActor.generated.h"
@@ -104,10 +105,10 @@ public:
 
 	/* --- 属性 --- */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
-	int32 MaxHealth = 30;
+	float MaxHealth = 30.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
-	int32 CurrHealth = 30;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	class UOrionAttributeComponent* AttributeComp;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
 	TSubclassOf<AActor> DeathEffectClass;
@@ -133,6 +134,9 @@ protected:
 	UFUNCTION(BlueprintNativeEvent, Category = "Basics")
 	void SpawnDeathEffect(FVector DeathLocation);
 	virtual void SpawnDeathEffect_Implementation(FVector DeathLocation);
+
+	UFUNCTION()
+	void HandleHealthZero(AActor* InstigatorActor);
 
 public:
 	virtual void Tick(float DeltaTime) override;

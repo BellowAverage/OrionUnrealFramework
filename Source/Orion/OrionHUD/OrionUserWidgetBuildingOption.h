@@ -54,7 +54,7 @@ public:
 			return;
 		}
 
-		// —— 1) 准备基础背景刷子 —— 
+		// —— 1) Prepare base background brush —— 
 		FSlateBrush BaseBrush;
 		if (UTexture2D* BackgroundTexture = LoadObject<UTexture2D>(nullptr, *InBuildingData.BuildingImageReference))
 		{
@@ -62,14 +62,14 @@ public:
 		}
 		BaseBrush.ImageSize = FVector2D(200.f, 200.f);
 
-		// —— 2) 构造未选中态 —— 
+		// —— 2) Construct unchecked state —— 
 		FSlateBrush Unchecked = BaseBrush;
 		FSlateBrush UncheckedHover = BaseBrush;
 		UncheckedHover.TintColor = FSlateColor{FLinearColor(1, 1, 1, 0.8f)};
 		FSlateBrush UncheckedPressed = BaseBrush;
 		UncheckedPressed.TintColor = FSlateColor{FLinearColor(1, 1, 1, 0.6f)};
 
-		// —— 3) 构造选中态（带蓝色高亮）—— 
+		// —— 3) Construct checked state (with blue highlight) —— 
 		FLinearColor CheckedTint(0.2f, 0.6f, 1.f, 1.f);
 		FSlateBrush Checked = BaseBrush;
 		Checked.TintColor = FSlateColor{CheckedTint};
@@ -78,7 +78,7 @@ public:
 		FSlateBrush CheckedPressed = Checked;
 		CheckedPressed.TintColor = FSlateColor{CheckedTint * FLinearColor(1, 1, 1, 0.6f)};
 
-		// —— 4) 应用到 CheckBoxStyle —— 
+		// —— 4) Apply to CheckBoxStyle —— 
 		FCheckBoxStyle NewStyle = BuildingOptionCheckBox->GetWidgetStyle();
 
 		NewStyle.SetUncheckedImage(Unchecked);

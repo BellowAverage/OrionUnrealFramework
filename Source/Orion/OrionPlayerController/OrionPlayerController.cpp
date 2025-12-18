@@ -1,4 +1,4 @@
-﻿#include "OrionPlayerController.h"
+#include "OrionPlayerController.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Components/InputComponent.h"
@@ -11,13 +11,14 @@
 #include <algorithm>
 #include "Orion/OrionActor/OrionActorOre.h"
 #include "Orion/OrionInterface/OrionInterfaceSelectable.h"
-#include "Orion/OrionAIController/OrionAIController.h"
 #include "Orion/OrionHUD/OrionHUD.h"
 #include "Orion/OrionActor/OrionActor.h"
 #include "Orion/OrionGameMode/OrionGameMode.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "Orion/OrionStructure/OrionStructureFoundation.h"
 #include "Orion/OrionInterface/OrionInterfaceHoverable.h"
+#include "Orion/OrionChara/OrionChara.h"
+#include "Orion/OrionGameInstance/OrionFactionManager.h"
 
 AOrionPlayerController::AOrionPlayerController()
 {
@@ -42,8 +43,10 @@ void AOrionPlayerController::SetupInputComponent()
 		InputComponent->BindAction("BPressed", IE_Pressed, this, &AOrionPlayerController::OnBPressed);
 
 		InputComponent->BindAction("Key4Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey4Pressed);
+
 		InputComponent->BindAction("Key5Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey5Pressed);
 		InputComponent->BindAction("Key6Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey6Pressed);
+
 		InputComponent->BindAction("Key7Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey7Pressed);
 		InputComponent->BindAction("Key8Pressed", IE_Pressed, this, &AOrionPlayerController::OnKey8Pressed);
 
@@ -86,7 +89,7 @@ void AOrionPlayerController::SwitchFromPlacingStructures(const int32 InBuildingI
 		return;
 	}
 
-	if (const FOrionDataBuilding* FoundInfo = BuildingManager->OrionDataBuildingsMap.Find(InBuildingId))
+	if (const FOrionDataBuilding* FoundInfo = BuildingManager->GetOrionDataBuildingsMap().Find(InBuildingId))
 	{
 		if (IsDemolishingMode)
 		{
@@ -103,6 +106,7 @@ void AOrionPlayerController::SwitchFromPlacingStructures(const int32 InBuildingI
 			}
 			IsPlacingStructure = false;
 			IsStructureSnapped = false;
+			CachedPreviewBuildingId = -1; // Clear cached BuildingId
 			return;
 		}
 
@@ -120,10 +124,13 @@ void AOrionPlayerController::SwitchFromPlacingStructures(const int32 InBuildingI
 			PreviewStructure->SetActorEnableCollision(false);
 			IsPlacingStructure = true;
 			IsStructureSnapped = false;
+			// Cache the BuildingId when preview is successfully created
+			CachedPreviewBuildingId = FoundInfo->BuildingId;
 		}
 		else
 		{
 			UE_LOG(LogTemp, Error, TEXT("OrionPlayerController::SwitchFromPlacingStructure: Failed to spawn preview structure actor."));
+			CachedPreviewBuildingId = -1; // Clear cached BuildingId on failure
 		}
 	}
 }
@@ -139,11 +146,18 @@ void AOrionPlayerController::OnKey4Pressed()
 
 void AOrionPlayerController::OnKey5Pressed()
 {
-	UE_LOG(LogTemp, Log, TEXT("Key 5 Pressed"));
+	if (AOrionGameMode* GM = Cast<AOrionGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GM->OnTestKey5Pressed();
+	}
+}
 
-	//BuildBP = WallBP;
-
-	//TogglePlacingStructure(BuildBP, PreviewStructure);
+void AOrionPlayerController::OnKey6Pressed()
+{
+	if (AOrionGameMode* GM = Cast<AOrionGameMode>(GetWorld()->GetAuthGameMode()))
+	{
+		GM->OnTestKey6Pressed();
+	}
 }
 
 void AOrionPlayerController::OnKey7Pressed()
@@ -160,11 +174,6 @@ void AOrionPlayerController::OnKey8Pressed()
 	UE_LOG(LogTemp, Log, TEXT("Key 8 Pressed"));
 	//BuildBP = DoubleWallBP;
 	//TogglePlacingStructure(BuildBP, PreviewStructure);
-}
-
-void AOrionPlayerController::OnKey6Pressed()
-{
-	UE_LOG(LogTemp, Log, TEXT("Key 6 Pressed"));
 }
 
 void AOrionPlayerController::OnBPressed()
@@ -196,6 +205,7 @@ void AOrionPlayerController::OnBPressed()
 		}
 		IsPlacingStructure = false;
 		IsStructureSnapped = false;
+		CachedPreviewBuildingId = -1; // Clear cached BuildingId
 
 		if (CachedOrionCharaSelection.Num() > 0) // Restore previous character selection before entering building mode
 		{
@@ -588,6 +598,7 @@ void AOrionPlayerController::TickPlacingStructure(AActor*& Preview)
 
 void AOrionPlayerController::ConfirmPlaceStructure(AActor*& PreviewPtr)
 {
+
 	if (!IsPlacingStructure || !PreviewPtr)
 	{
 		return;
@@ -596,12 +607,39 @@ void AOrionPlayerController::ConfirmPlaceStructure(AActor*& PreviewPtr)
 	const TSubclassOf<AActor> CachedClass = PreviewPtr->GetClass();
 
 	/* ---------- ① Component pointer ---------- */
-	const UOrionStructureComponent* StructComp =
-		PreviewPtr->FindComponentByClass<UOrionStructureComponent>();
+	const UOrionStructureComponent* StructComp = PreviewPtr->FindComponentByClass<UOrionStructureComponent>();
 	if (!StructComp)
 	{
 		return; // Preview has no structure component → Direct free placement
 	}
+
+
+	/* Check Fraction Affordability */
+	UOrionFactionManager* FactionManager = GetGameInstance()->GetSubsystem<UOrionFactionManager>();
+	if (FactionManager)
+	{
+		// Use cached BuildingId instead of reverse lookup by OrionStructureType
+		if (CachedPreviewBuildingId > 0)
+		{
+			if (!FactionManager->AffordBuildingCost(CachedPreviewBuildingId))
+			{
+				UE_LOG(LogTemp, Error, TEXT("OrionPlayerController::ConfirmPlaceStructure: Failed to deduct resources for BuildingId %d."), CachedPreviewBuildingId);
+				return; // Cannot afford, abort placement
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("OrionPlayerController::ConfirmPlaceStructure: CachedPreviewBuildingId is invalid (%d). Resource deduction skipped."), CachedPreviewBuildingId);
+			return;
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("OrionPlayerController::ConfirmPlaceStructure: FactionManager not found. Resource deduction skipped."));
+		return;
+	}
+
+
 
 	const EOrionStructure Kind = StructComp->OrionStructureType;
 
@@ -683,6 +721,7 @@ void AOrionPlayerController::OnToggleDemolishingMode(const bool bIsChecked)
 		}
 		IsPlacingStructure = false;
 		IsStructureSnapped = false;
+		CachedPreviewBuildingId = -1; // Clear cached BuildingId
 	}
 
 	IsDemolishingMode = bIsChecked;
@@ -875,6 +914,7 @@ void AOrionPlayerController::EmptyOrionCharaSelection(TObservableArray<AOrionCha
 	{
 		for (AOrionChara* SelectedChara : OrionCharaSelectionRef)
 		{
+			// Bug to be fixed: Sometimes Selectable Interface is not initialized properly, causing crash here.
 			IOrionInterfaceSelectable* SelectedCharaSelectable = Cast<IOrionInterfaceSelectable>(
 				SelectedChara);
 			SelectedCharaSelectable->OnRemoveFromSelection(this);
@@ -915,7 +955,7 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 			{
 				EmptyOrionCharaSelection(OrionCharaSelection);
 
-				OrionPawnSelection.Empty();
+				//OrionPawnSelection.Empty();
 				ClickedOnOrionActor = nullptr;
 				UE_LOG(LogTemp, Log, TEXT("No OrionChara or Vehicle selected. Selection cleared."));
 			}
@@ -938,7 +978,7 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 			if (!bIsShiftPressed)
 			{
 				EmptyOrionCharaSelection(OrionCharaSelection);
-				OrionPawnSelection.Empty();
+				//OrionPawnSelection.Empty();
 			}
 
 			return;
@@ -975,10 +1015,10 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 					}
 				}
 
-				if (!OrionPawnSelection.IsEmpty())
+				/*if (!OrionPawnSelection.IsEmpty())
 				{
 					OrionPawnSelection.Empty();
-				}
+				}*/
 
 				break;
 			}
@@ -988,36 +1028,6 @@ void AOrionPlayerController::SingleSelectionUnderCursor()
 				{
 					ClickedOnOrionActor = ClickedOrionActor;
 					//OnOrionActorSelectionChanged.ExecuteIfBound(ClickedOnOrionActor);
-				}
-				break;
-			}
-		case ESelectable::VehiclePawn:
-			{
-				if (AWheeledVehiclePawn* HitPawn = Cast<AWheeledVehiclePawn>(HitActor))
-				{
-					EmptyOrionCharaSelection(OrionCharaSelection);
-
-
-					OrionPawnSelection.Empty();
-					if (bIsShiftPressed)
-					{
-						if (!OrionPawnSelection.Contains(HitPawn))
-						{
-							OrionPawnSelection.Add(HitPawn);
-							EmptyOrionCharaSelection(OrionCharaSelection);
-							UE_LOG(LogTemp, Log, TEXT("Added APawn to selection: %s"), *HitPawn->GetName());
-						}
-						else
-						{
-							OrionPawnSelection.Remove(HitPawn);
-							UE_LOG(LogTemp, Log, TEXT("Removed APawn from selection: %s"), *HitPawn->GetName());
-						}
-					}
-					else
-					{
-						OrionPawnSelection.Empty();
-						OrionPawnSelection.Add(HitPawn);
-					}
 				}
 				break;
 			}
@@ -1055,17 +1065,17 @@ void AOrionPlayerController::OnRightMouseUp()
 			}
 			else
 			{
-				for (const auto& EachChara : OrionCharaSelection)
+			for (const auto& EachChara : OrionCharaSelection)
+			{
+				if (EachChara && EachChara->ActionComp)
 				{
-					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
-					{
-						FString ActionName = FString::Printf(
-							TEXT("CollectingCargo_%s"), *StorageActorInstance->GetName());
-						FOrionAction AddingAction = IActionable->
-							InitActionCollectCargo(ActionName, StorageActorInstance);
-						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
-					}
+					FString ActionName = FString::Printf(
+						TEXT("CollectingCargo_%s"), *StorageActorInstance->GetName());
+					FOrionAction AddingAction = EachChara->
+						InitActionCollectCargo(ActionName, StorageActorInstance);
+					EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
 				}
+			}
 			}
 		}
 		else if (AOrionActorProduction* ProductionActorInstance = Cast<AOrionActorProduction>(
@@ -1075,21 +1085,21 @@ void AOrionPlayerController::OnRightMouseUp()
 			{
 				for (const auto& EachChara : OrionCharaSelection)
 				{
-					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					if (EachChara && EachChara->ActionComp)
 					{
-						if (IActionable->GetIsCharaProcedural())
+						if (EachChara->ActionComp->IsProcedural())
 						{
-							IActionable->SetIsCharaProcedural(false);
+							EachChara->ActionComp->SetProcedural(false);
 						}
 
 
-						IActionable->RemoveAllActions();
+						EachChara->ActionComp->RemoveAllActions();
 
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
-						FOrionAction AddingAction = IActionable->InitActionInteractWithProduction(
+						FOrionAction AddingAction = EachChara->InitActionInteractWithProduction(
 							ActionName, ProductionActorInstance);
-						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 					}
 				}
 			}
@@ -1097,13 +1107,13 @@ void AOrionPlayerController::OnRightMouseUp()
 			{
 				for (const auto& EachChara : OrionCharaSelection)
 				{
-					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					if (EachChara && EachChara->ActionComp)
 					{
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithProduction_%s"), *ProductionActorInstance->GetName());
-						FOrionAction AddingAction = IActionable->InitActionInteractWithProduction(
+						FOrionAction AddingAction = EachChara->InitActionInteractWithProduction(
 							ActionName, ProductionActorInstance);
-						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
 					}
 				}
 			}
@@ -1114,20 +1124,20 @@ void AOrionPlayerController::OnRightMouseUp()
 			{
 				for (const auto& EachChara : OrionCharaSelection)
 				{
-					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					if (EachChara && EachChara->ActionComp)
 					{
-						if (IActionable->GetIsCharaProcedural())
+						if (EachChara->ActionComp->IsProcedural())
 						{
-							IActionable->SetIsCharaProcedural(false);
+							EachChara->ActionComp->SetProcedural(false);
 						}
 
-						IActionable->RemoveAllActions();
+						EachChara->ActionComp->RemoveAllActions();
 
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
-						FOrionAction AddingAction = IActionable->InitActionInteractWithActor(
+						FOrionAction AddingAction = EachChara->InitActionInteractWithActor(
 							ActionName, OreActorInstance);
-						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 					}
 				}
 			}
@@ -1136,13 +1146,13 @@ void AOrionPlayerController::OnRightMouseUp()
 			{
 				for (const auto& EachChara : OrionCharaSelection)
 				{
-					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					if (EachChara && EachChara->ActionComp)
 					{
 						FString ActionName = FString::Printf(
 							TEXT("InteractWithActor_%s"), *OreActorInstance->GetName());
-						FOrionAction AddingAction = IActionable->InitActionInteractWithActor(
+						FOrionAction AddingAction = EachChara->InitActionInteractWithActor(
 							ActionName, OreActorInstance);
-						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
+						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::Procedural, -1);
 					}
 				}
 			}
@@ -1273,18 +1283,18 @@ void AOrionPlayerController::OnRightMouseDown()
 			{
 				for (const auto& EachChara : OrionCharaSelection)
 				{
-					if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+					if (EachChara && EachChara->ActionComp)
 					{
-						if (IActionable->GetIsCharaProcedural())
+						if (EachChara->ActionComp->IsProcedural())
 						{
-							IActionable->SetIsCharaProcedural(false);
+							EachChara->ActionComp->SetProcedural(false);
 						}
 
-						IActionable->RemoveAllActions();
+						EachChara->ActionComp->RemoveAllActions();
 
-						FOrionAction AddingAction = IActionable->InitActionMoveToLocation(
+						FOrionAction AddingAction = EachChara->InitActionMoveToLocation(
 							TEXT("MoveToLocation"), HitResult.Location);
-						IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+						EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 					}
 				}
 			}
@@ -1294,11 +1304,11 @@ void AOrionPlayerController::OnRightMouseDown()
 			// If OrionChara or OrionPawn selected => move them to the clicked location
 			for (const auto& EachChara : OrionCharaSelection)
 			{
-				if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+				if (EachChara && EachChara->ActionComp)
 				{
-					FOrionAction AddingAction = IActionable->InitActionMoveToLocation(
+					FOrionAction AddingAction = EachChara->InitActionMoveToLocation(
 						TEXT("MoveToLocation"), HitResult.Location);
-					IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+					EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 				}
 			}
 		}
@@ -1319,31 +1329,31 @@ void AOrionPlayerController::OnRightMouseDown()
 				{
 					for (const auto& EachChara : OrionCharaSelection)
 					{
-						if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+						if (EachChara && EachChara->ActionComp)
 						{
-							if (IActionable->GetIsCharaProcedural())
+							if (EachChara->ActionComp->IsProcedural())
 							{
-								IActionable->SetIsCharaProcedural(false);
+								EachChara->ActionComp->SetProcedural(false);
 							}
 
 
-							if (IActionable->GetUnifiedActionName() == ActionName)
+							if (EachChara->GetUnifiedActionName() == ActionName)
 							{
 								UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
 								continue;
 							}
 
-							/* else if (IActionable->GetUnifiedActionName().Contains("AttackOnCharaLongRange"))
+							/* else if (EachChara->GetUnifiedActionName().Contains("AttackOnCharaLongRange"))
 							{
 								UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
 								continue;
 							} */
 
-							IActionable->RemoveAllActions();
+							EachChara->ActionComp->RemoveAllActions();
 
-							FOrionAction AddingAction = IActionable->InitActionAttackOnChara(
+							FOrionAction AddingAction = EachChara->InitActionAttackOnChara(
 								ActionName, HitActor, HitOffset);
-							IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+							EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 						}
 					}
 				}
@@ -1358,11 +1368,11 @@ void AOrionPlayerController::OnRightMouseDown()
 				{
 					for (const auto& EachChara : OrionCharaSelection)
 					{
-						if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+						if (EachChara && EachChara->ActionComp)
 						{
-							FOrionAction AddingAction = IActionable->InitActionAttackOnChara(
+							FOrionAction AddingAction = EachChara->InitActionAttackOnChara(
 								ActionName, HitActor, HitOffset);
-							IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+							EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 						}
 					}
 				}
@@ -1429,37 +1439,37 @@ void AOrionPlayerController::OnShiftReleased()
 
 void AOrionPlayerController::RequestAttackOnOrionActor(FVector HitOffset, ECommandType inCommandType)
 {
-	if (!CachedActionSubjects.IsEmpty() && !CachedActionObjects && !OrionCharaSelection.IsEmpty())
+	if (!CachedActionSubjects.IsEmpty() && CachedActionObjects && !OrionCharaSelection.IsEmpty())
 	{
 		for (const auto& EachChara : OrionCharaSelection)
 		{
-			if (IOrionInterfaceActionable* IActionable = Cast<IOrionInterfaceActionable>(EachChara))
+			if (EachChara && EachChara->ActionComp)
 			{
-				if (IActionable->GetIsCharaProcedural())
+				if (EachChara->ActionComp->IsProcedural())
 				{
-					IActionable->SetIsCharaProcedural(false);
+					EachChara->ActionComp->SetProcedural(false);
 				}
 
 				FString ActionName = FString::Printf(
 					TEXT("AttackOnCharaLongRange-%s"), *CachedActionObjects->GetName());
 
-				if (IActionable->GetUnifiedActionName() == ActionName)
+				if (EachChara->GetUnifiedActionName() == ActionName)
 				{
 					UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
 					continue;
 				}
 
-				/* else if (IActionable->GetUnifiedActionName().Contains("AttackOnCharaLongRange"))
+				/* else if (EachChara->GetUnifiedActionName().Contains("AttackOnCharaLongRange"))
 				{
 					UE_LOG(LogTemp, Log, TEXT("Action already exists: %s"), *ActionName);
 					continue;
 				} */
 
-				IActionable->RemoveAllActions();
+				EachChara->ActionComp->RemoveAllActions();
 
-				FOrionAction AddingAction = IActionable->InitActionAttackOnChara(
+				FOrionAction AddingAction = EachChara->InitActionAttackOnChara(
 					ActionName, CachedActionObjects, HitOffset);
-				IActionable->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
+				EachChara->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, -1);
 			}
 		}
 	}
@@ -1488,12 +1498,16 @@ void AOrionPlayerController::CallBackRequestDistributor(FName CallBackRequest)
 			FOrionAction AddingAction(
 				ActionName,
 				EOrionAction::InteractWithStorage,
-				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](float DeltaTime) -> bool
+				[charPtr = OrionCharaSelection[0], targetActor = CachedActionObjects](float DeltaTime) -> EActionStatus
 				{
-					return charPtr->InteractWithInventory(targetActor);
+					bool bFinished = charPtr->InteractWithInventory(targetActor);
+					return bFinished ? EActionStatus::Finished : EActionStatus::Running;
 				});
 			AddingAction.Params.OrionActionType = EOrionAction::InteractWithStorage;
-			OrionCharaSelection[0]->CharacterActionQueue.Actions.Add(AddingAction);
+			if (OrionCharaSelection[0])
+			{
+				OrionCharaSelection[0]->InsertOrionActionToQueue(AddingAction, EActionExecution::RealTime, INDEX_NONE);
+			}
 		}
 		else
 		{

@@ -5,6 +5,8 @@
 #include "NavigationPath.h"
 #include "DrawDebugHelpers.h"
 #include "AIController.h" // Still needed for checking if controller exists
+#include "Kismet/GameplayStatics.h"
+#include "Engine/World.h"
 
 UOrionMovementComponent::UOrionMovementComponent()
 {
@@ -35,6 +37,16 @@ bool UOrionMovementComponent::MoveToLocation(const FVector& InTargetLocation)
     AOrionChara* Owner = GetOrionOwner();
     if (!Owner) return true;
 
+	// --- [Fix] Detect if target has changed significantly ---
+	// If currently has a destination, and new target is more than 10cm away from old target, treat as new command
+	if (bHasMoveDestination && FVector::DistSquared(InTargetLocation, LastMoveDestination) > 100.0f)
+	{
+		// UE_LOG(LogTemp, Log, TEXT("[Movement] Target changed, resetting path."));
+		NavPathPoints.Empty(); // Clear path, force next code to recalculate path
+		CurrentNavPointIndex = 0;
+	}
+	// --- [Fix End] ---
+
 	// Record target for "replan" use
 	LastMoveDestination = InTargetLocation;
 	bHasMoveDestination = true;
@@ -42,18 +54,29 @@ bool UOrionMovementComponent::MoveToLocation(const FVector& InTargetLocation)
 	constexpr float AcceptanceRadius = 50.f;
 	const FVector SearchExtent(500.f, 500.f, 500.f);
 
-    // AIController check here is to ensure the character is controlled, not to use MoveTo
+    // OrionAIControllerInstance check here is to ensure the character is controlled, not to use MoveTo
 	if (!Owner->GetController())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No Controller -> treat as arrived"));
+		// UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No Controller -> treat as arrived"));
 		return true;
 	}
 
 	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
 	if (!NavSys)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No NavigationSystem -> treat as arrived"));
+		// UE_LOG(LogTemp, Warning, TEXT("[MoveToLocation] No NavigationSystem -> treat as arrived"));
 		return true;
+	}
+	
+	// Check if stuck and need to reroute
+	if (bEnableAvoidance && CheckAndHandleStuck(GetWorld()->GetDeltaSeconds()))
+	{
+		// Force path recalculation when stuck
+		NavPathPoints.Empty();
+		CurrentNavPointIndex = 0;
+		bIsCurrentlyStuck = false;
+		StuckTimer = 0.0f;
+		// UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Character stuck, recalculating path..."));
 	}
 
 	// If path hasn't been generated yet, sync calculate once
@@ -76,24 +99,15 @@ bool UOrionMovementComponent::MoveToLocation(const FVector& InTargetLocation)
 		}
 		NavPathPoints = Path->PathPoints;
 		CurrentNavPointIndex = 1; // Skip start point
-
-        // Debug Draw (original code preserved)
-		for (int32 i = 0; i < NavPathPoints.Num(); ++i)
-		{
-			DrawDebugSphere(GetWorld(), NavPathPoints[i], 20.f, 12, FColor::Green, false, 5.f);
-			if (i > 0)
-			{
-				DrawDebugLine(GetWorld(), NavPathPoints[i - 1], NavPathPoints[i], FColor::Green, false, 5.f, 0, 2.f);
-			}
-		}
+		
+		// Debug Draw removed
 	}
 
 	// Current target point
 	FVector TargetPoint = NavPathPoints[CurrentNavPointIndex];
 	float Dist2D = FVector::Dist2D(Owner->GetActorLocation(), TargetPoint);
 	
-    // Verbose Log
-	// UE_LOG(LogTemp, Verbose, TEXT("[MoveToLocation] NextPt=%s, Dist2D=%.1f"), *TargetPoint.ToString(), Dist2D);
+    // Verbose Log removed
 
 	// After reaching current path point, advance to next
 	if (Dist2D <= AcceptanceRadius)
@@ -104,7 +118,7 @@ bool UOrionMovementComponent::MoveToLocation(const FVector& InTargetLocation)
 			// All points reached, stop moving
 			NavPathPoints.Empty();
 			CurrentNavPointIndex = 0;
-			UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Arrived at final destination"));
+			// UE_LOG(LogTemp, Log, TEXT("[MoveToLocation] Arrived at final destination"));
 			return true;
 		}
 	}
@@ -112,6 +126,18 @@ bool UOrionMovementComponent::MoveToLocation(const FVector& InTargetLocation)
 	// Move by adding input: toward next path point
 	FVector Dir = (TargetPoint - Owner->GetActorLocation()).GetSafeNormal2D();
     
+	// Apply avoidance if enabled
+	if (bEnableAvoidance)
+	{
+		FVector AvoidanceDir = CalculateAvoidanceVector(Dir);
+		
+		// Blend desired direction with avoidance
+		if (!AvoidanceDir.IsNearlyZero())
+		{
+			Dir = (Dir * (1.0f - AvoidanceWeight) + AvoidanceDir * AvoidanceWeight).GetSafeNormal2D();
+		}
+	}
+	
     // [Key modification] Call Owner's AddMovementInput
 	Owner->AddMovementInput(Dir, 1.0f, true);
 
@@ -146,7 +172,7 @@ void UOrionMovementComponent::ReRouteMoveToLocation()
 	NavPathPoints.Empty();
 	CurrentNavPointIndex = 0;
     
-    // Original code's ReRoute used AIController->MoveTo, but here to maintain consistency (since you don't want to use AIC),
+    // Original code's ReRoute used OrionAIControllerInstance->MoveTo, but here to maintain consistency (since you don't want to use AIC),
     // we only need to clear path points, because MoveToLocation function will automatically pathfind if NavPathPoints is empty.
     // This is safer than the original ReRoute mixed logic.
     
@@ -163,4 +189,191 @@ void UOrionMovementComponent::ChangeMaxWalkSpeed(float InValue)
             MoveComp->MaxWalkSpeed = InValue;
         }
     }
+}
+
+TArray<AOrionChara*> UOrionMovementComponent::GetNearbyCharacters() const
+{
+	TArray<AOrionChara*> NearbyCharacters;
+	
+	AOrionChara* Owner = GetOrionOwner();
+	if (!Owner)
+	{
+		return NearbyCharacters;
+	}
+	
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return NearbyCharacters;
+	}
+	
+	const FVector MyLocation = Owner->GetActorLocation();
+	
+	// Get all OrionChara actors
+	TArray<AActor*> AllCharas;
+	UGameplayStatics::GetAllActorsOfClass(World, AOrionChara::StaticClass(), AllCharas);
+	
+	for (AActor* Actor : AllCharas)
+	{
+		if (Actor == Owner)
+		{
+			continue; // Skip self
+		}
+		
+		AOrionChara* OtherChara = Cast<AOrionChara>(Actor);
+		if (!OtherChara)
+		{
+			continue;
+		}
+		
+		// Check if character is alive
+		if (OtherChara->CharaState != ECharaState::Alive)
+		{
+			continue;
+		}
+		
+		// Check distance
+		float Distance = FVector::Dist(MyLocation, OtherChara->GetActorLocation());
+		if (Distance < AvoidanceRadius)
+		{
+			NearbyCharacters.Add(OtherChara);
+		}
+	}
+	
+	return NearbyCharacters;
+}
+
+FVector UOrionMovementComponent::CalculateAvoidanceVector(const FVector& DesiredDirection) const
+{
+	AOrionChara* Owner = GetOrionOwner();
+	if (!Owner)
+	{
+		return FVector::ZeroVector;
+	}
+	
+	const FVector MyLocation = Owner->GetActorLocation();
+	const FVector MyVelocity = Owner->GetVelocity();
+	
+	TArray<AOrionChara*> NearbyCharacters = GetNearbyCharacters();
+	
+	if (NearbyCharacters.Num() == 0)
+	{
+		return DesiredDirection;
+	}
+	
+	FVector TotalAvoidance = FVector::ZeroVector;
+	int32 AvoidanceCount = 0;
+	
+	for (AOrionChara* OtherChara : NearbyCharacters)
+	{
+		const FVector OtherLocation = OtherChara->GetActorLocation();
+		const FVector ToOther = OtherLocation - MyLocation;
+		const float Distance = ToOther.Size2D();
+		
+		// Skip if too far (shouldn't happen but safety check)
+		if (Distance > AvoidanceRadius || Distance < KINDA_SMALL_NUMBER)
+		{
+			continue;
+		}
+		
+		// Calculate avoidance direction (away from the other character)
+		FVector AwayFromOther = -ToOther.GetSafeNormal2D();
+		
+		// Stronger avoidance when closer
+		float AvoidanceStrength = 1.0f - (Distance / AvoidanceRadius);
+		AvoidanceStrength = FMath::Square(AvoidanceStrength); // Exponential falloff
+		
+		// Extra strong avoidance when within minimum separation distance
+		if (Distance < MinSeparationDistance)
+		{
+			AvoidanceStrength = FMath::Max(AvoidanceStrength, 1.0f);
+			
+			// Add a perpendicular component to help characters slide past each other
+			FVector Perpendicular = FVector::CrossProduct(AwayFromOther, FVector::UpVector).GetSafeNormal2D();
+			
+			// Choose perpendicular direction based on desired direction
+			float DotProduct = FVector::DotProduct(DesiredDirection, Perpendicular);
+			if (DotProduct < 0)
+			{
+				Perpendicular = -Perpendicular;
+			}
+			
+			// Blend perpendicular direction with away direction
+			AwayFromOther = (AwayFromOther + Perpendicular * 0.5f).GetSafeNormal2D();
+		}
+		
+		// Consider the other character's velocity for predictive avoidance
+		const FVector OtherVelocity = OtherChara->GetVelocity();
+		if (!OtherVelocity.IsNearlyZero())
+		{
+			// Predict future position
+			const float PredictionTime = 0.5f;
+			const FVector PredictedOtherPos = OtherLocation + OtherVelocity * PredictionTime;
+			const FVector ToPredicted = PredictedOtherPos - MyLocation;
+			const float PredictedDist = ToPredicted.Size2D();
+			
+			if (PredictedDist < Distance && PredictedDist < AvoidanceRadius)
+			{
+				// Other is getting closer, add extra avoidance
+				FVector AwayFromPredicted = -ToPredicted.GetSafeNormal2D();
+				AwayFromOther = (AwayFromOther + AwayFromPredicted * 0.5f).GetSafeNormal2D();
+				AvoidanceStrength *= 1.2f;
+			}
+		}
+		
+		TotalAvoidance += AwayFromOther * AvoidanceStrength;
+		AvoidanceCount++;
+	}
+	
+	if (AvoidanceCount == 0)
+	{
+		return DesiredDirection;
+	}
+	
+	// Average the avoidance vectors
+	TotalAvoidance /= AvoidanceCount;
+	
+	// Combine with desired direction
+	FVector FinalDirection = DesiredDirection + TotalAvoidance;
+	
+	// Ensure we still have forward progress (don't completely override desired direction)
+	float ForwardComponent = FVector::DotProduct(FinalDirection, DesiredDirection);
+	if (ForwardComponent < 0.2f)
+	{
+		// If avoidance is pushing us backward too much, add more forward bias
+		FinalDirection = DesiredDirection * 0.3f + FinalDirection;
+	}
+	
+	return FinalDirection.GetSafeNormal2D();
+}
+
+bool UOrionMovementComponent::CheckAndHandleStuck(float DeltaTime)
+{
+	AOrionChara* Owner = GetOrionOwner();
+	if (!Owner)
+	{
+		return false;
+	}
+	
+	const FVector CurrentPosition = Owner->GetActorLocation();
+	const float DistanceMoved = FVector::Dist2D(CurrentPosition, LastPositionForStuckCheck);
+	
+	if (DistanceMoved < StuckDistanceThreshold)
+	{
+		StuckTimer += DeltaTime;
+		
+		if (StuckTimer >= StuckTimeThreshold)
+		{
+			bIsCurrentlyStuck = true;
+			return true;
+		}
+	}
+	else
+	{
+		StuckTimer = 0.0f;
+		bIsCurrentlyStuck = false;
+	}
+	
+	LastPositionForStuckCheck = CurrentPosition;
+	return false;
 }

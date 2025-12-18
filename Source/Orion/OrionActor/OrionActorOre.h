@@ -21,7 +21,7 @@ enum class EOreCategory : uint8
 };
 
 UCLASS()
-class ORION_API AOrionActorOre : public AOrionActor
+class ORION_API AOrionActorOre : public AOrionActor, public IOrionInterfaceInteractable
 {
 	GENERATED_BODY()
 
@@ -31,15 +31,18 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
 
+	virtual void ShowInteractOptions();
+	virtual bool ApplyInteractionToCharas(TArray<AOrionChara*> InteractedCharas, AOrionActor* InteractingActor);
+
 	/* --- 配置 --- */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
 	EOreCategory OreCategory = EOreCategory::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
-	int32 ProductionTimeCost = 20; // 秒
+	int32 ProductionTimeCost = 20;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category = "Basics")
-	float ProductionProgress = 0.f; // 0-100
+	float ProductionProgress = 0.f;
 
 	/* --- 逻辑 --- */
 	UFUNCTION(BlueprintCallable, Category = "Basics")

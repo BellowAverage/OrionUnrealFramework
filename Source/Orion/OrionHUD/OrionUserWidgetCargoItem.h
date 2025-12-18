@@ -47,7 +47,7 @@ public:
 
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override
 	{
-		UE_LOG(LogTemp, Warning, TEXT("CargoItem Clicked!"));
+		// UE_LOG(LogTemp, Warning, TEXT("CargoItem Clicked!"));
 
 		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 		{
@@ -60,7 +60,7 @@ public:
 	{
 		if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 		{
-			// 弹起时再执行原来的业务：触发委托，最终由 CharaDetails 做 Clear/Update
+			// Execute original business on release: trigger delegate, finally CharaDetails does Clear/Update
 			OnCargoItemClicked.ExecuteIfBound();
 			return FReply::Handled();
 		}
@@ -88,7 +88,7 @@ public:
 				UTexture2D* Texture = TexturePtr->Get();
 				if (!Texture)
 				{
-					// 同步加载
+					// Synchronous load
 					Texture = TexturePtr->LoadSynchronous();
 				}
 				if (Texture)

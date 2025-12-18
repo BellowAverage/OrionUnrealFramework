@@ -6,9 +6,13 @@
 #include "EngineUtils.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Orion/OrionSaveGame/OrionSaveGame.h"
+#include "Engine/DataTable.h"
+#include "Engine/Texture2D.h"
+#include "UObject/SoftObjectPath.h"
 
 
 class AOrionStructure;
+class AActor;
 class UOrionStructureComponent;
 class FBuildingObjectsPool;
 
@@ -23,6 +27,7 @@ enum class EOrionStructure : uint8
 	Wall,
 	DoubleWall,
 	BasicRoof,
+	InclinedRoof,
 };
 
 USTRUCT(BlueprintType)
@@ -39,6 +44,43 @@ struct FOrionDataBuilding
 	FString BuildingBlueprintReference;
 
 	EOrionStructure BuildingPlacingRule = EOrionStructure::None;
+};
+
+// DataTable 行结构（用于编辑器配置）
+USTRUCT(BlueprintType)
+struct FOrionDataBuildingRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building Data")
+	int32 BuildingId = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building Data")
+	FName BuildingDisplayName;
+
+	// 使用 TSoftObjectPtr 以便在编辑器中直接选择图片资产
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building Data", meta = (AllowedClasses = "Texture2D"))
+	TSoftObjectPtr<UTexture2D> BuildingImageReference;
+
+	// 使用 TSoftClassPtr 以便在编辑器中直接选择蓝图类资产
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building Data", meta = (AllowedClasses = "Actor"))
+	TSoftClassPtr<AActor> BuildingBlueprintReference;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Building Data")
+	EOrionStructure BuildingPlacingRule = EOrionStructure::None;
+
+	// 转换为 FOrionDataBuilding（将软引用转换为字符串路径）
+	FOrionDataBuilding ToDataBuilding() const
+	{
+		FOrionDataBuilding Result;
+		Result.BuildingId = BuildingId;
+		Result.BuildingDisplayName = BuildingDisplayName;
+		// 将软引用转换为字符串路径
+		Result.BuildingImageReference = BuildingImageReference.ToSoftObjectPath().ToString();
+		Result.BuildingBlueprintReference = BuildingBlueprintReference.ToSoftObjectPath().ToString();
+		Result.BuildingPlacingRule = BuildingPlacingRule;
+		return Result;
+	}
 };
 
 
@@ -103,7 +145,15 @@ class ORION_API UOrionBuildingManager : public UGameInstanceSubsystem
 public:
 	UOrionBuildingManager();
 
+	// 数据获取方法：优先使用 DataTable，如果未指定则使用硬编码数据
+	const TArray<FOrionDataBuilding>& GetOrionDataBuildings() const;
+	const TMap<int32, FOrionDataBuilding>& GetOrionDataBuildingsMap() const;
+
+	// 向后兼容：保留静态访问方式（已废弃，建议使用 GetOrionDataBuildings）
+	UE_DEPRECATED(5.0, "Use GetOrionDataBuildings() instead")
 	static const TArray<FOrionDataBuilding> OrionDataBuildings;
+	
+	UE_DEPRECATED(5.0, "Use GetOrionDataBuildingsMap() instead")
 	static const TMap<int32, FOrionDataBuilding> OrionDataBuildingsMap;
 
 	static const TMap<EOrionStructure, FVector> StructureOriginalScaleMap;
@@ -192,6 +242,19 @@ private:
 	void OnWorldInitializedActors(const FActorsInitializedParams& ActorsInitializedParams);
 	virtual void Initialize(FSubsystemCollectionBase&) override;
 
+	// 数据加载方法
+	void LoadBuildingDataFromDataTable();
+	const TArray<FOrionDataBuilding>& GetHardcodedBuildings() const;
+
+	// DataTable 引用（从 GameInstance 获取）
+	UPROPERTY()
+	TObjectPtr<UDataTable> BuildingDataTable = nullptr;
+
+	// 缓存的数据（运行时使用）
+	mutable TArray<FOrionDataBuilding> CachedBuildingData;
+	mutable TMap<int32, FOrionDataBuilding> CachedBuildingDataMap;
+	mutable bool bDataLoaded = false;
+
 	// virtual void Deinitialize() override;
 
 };
@@ -224,7 +287,7 @@ public:
 	{
 		if (!World || !GetOwner()) return;
 
-		for (auto& Each : GetOwner()->OrionDataBuildingsMap)
+		for (auto& Each : GetOwner()->GetOrionDataBuildingsMap())
 		{
 			const int32 BuildingId = Each.Value.BuildingId;
 

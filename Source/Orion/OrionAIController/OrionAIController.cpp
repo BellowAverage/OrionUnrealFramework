@@ -1,13 +1,15 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 
 #include "OrionAIController.h"
 #include "GameFramework/Actor.h"
-//#include "Perception/AIPerceptionStimuliSourceComponent.h"
-//#include "Perception/AISense_Sight.h"
-#include "Orion/OrionInterface/OrionInterfaceActionable.h"
-#include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
+#include "Orion/OrionComponents/OrionActionComponent.h"
+#include "Orion/OrionComponents/OrionAttributeComponent.h"
+#include "Orion/OrionGameInstance/OrionFactionManager.h"
+#include "Orion/OrionChara/OrionChara.h"
+#include "Orion/OrionActor/OrionActor.h"
+#include "Orion/OrionStructure/OrionStructure.h"
 
 AOrionAIController::AOrionAIController()
 {
@@ -16,10 +18,10 @@ AOrionAIController::AOrionAIController()
 
 	SightConfig = CreateDefaultSubobject<UAISenseConfig_Sight>(TEXT("SightConfig"));
 
-	SightConfig->SightRadius = 1500.f; // 能看到的最大距离
-	SightConfig->LoseSightRadius = 1600.f; // 失去目标的距离
-	SightConfig->PeripheralVisionAngleDegrees = 90.f; // 左右视野(一侧)角度
-	SightConfig->SetMaxAge(5.f); // 感知保留时长
+	SightConfig->SightRadius = 1500.f;
+	SightConfig->LoseSightRadius = 1600.f;
+	SightConfig->PeripheralVisionAngleDegrees = 90.f;
+	SightConfig->SetMaxAge(5.f);
 
 	SightConfig->DetectionByAffiliation.bDetectEnemies = true;
 	SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
@@ -61,20 +63,28 @@ void AOrionAIController::Tick(float DeltaTime)
 		if (CachedAIState != EAIState::Defensive)
 		{
 			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::Tick: Entering Defensive state"));
-
-			//ControlledPawn->SpawnWeaponActor();
-			//ControlledPawn->bIsCharaArmed = true;
 		}
-
-		// 1) if we have ammo, enqueue an attack action
-		if (ControlledPawn->InventoryComp->GetItemQuantity(3) > 0)
+		// [Fix] 通过 ActionComp 访问队列和当前动作
+		// 检查是否空闲：ActionComp 存在 && RealTime 队列为空 && 当前没有正在运行的 RealTime 动作
+		bool bIsIdle = false;
+		if (ControlledPawn->ActionComp)
 		{
-			RegisterDefensiveAIActon();
+			// [Fix] Use GetCurrentAction() instead of CurrentAction pointer
+			bIsIdle = ControlledPawn->ActionComp->GetCurrentAction() == nullptr && 
+					  ControlledPawn->ActionComp->RealTimeActionQueue.Actions.IsEmpty();
 		}
-		// 2) if we're out of ammo, enqueue a fetch‐ammo action
-		else
+		if (bIsIdle)
 		{
-			RegisterFetchingAmmoEvent();
+			// 1) if we have ammo, enqueue an attack action
+			if (ControlledPawn->InventoryComp->GetItemQuantity(3) > ControlledPawn->LowAmmoThreshold)
+			{
+				RegisterDefensiveAIActon();
+			}
+			// 2) if we're out of ammo, enqueue a fetch‐ammo action
+			else
+			{
+				RegisterFetchingAmmoEvent();
+			}
 		}
 	}
 
@@ -93,59 +103,72 @@ void AOrionAIController::OnPossess(APawn* InPawn)
 		return;
 	}
 
-	ControlledPawnActionableInterface = Cast<IOrionInterfaceActionable>(ControlledPawn);
 
-	if (!ControlledPawnActionableInterface)
+	if (ControlledPawn->ActionComp)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ControlledPawnActionableInterface is nullptr"));
+		ActionComponent = ControlledPawn->ActionComp;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("ControlledPawn has no Action Component. "));
 	}
 }
 
 void AOrionAIController::RegisterFetchingAmmoEvent()
 {
-	// only if nothing else is queued or running
-	if (ControlledPawn->CharaState == ECharaState::Alive
-		&& ControlledPawn->CurrentAction == nullptr
-		&& ControlledPawn->CharacterActionQueue.Actions.IsEmpty())
+	// 确保只在 Defensive 状态下执行
+	if (!ControlledPawn || ControlledPawn->CharaAIState != EAIState::Defensive)
+	{
+		return;
+	}
+
+	// [Fix] 通过 ActionComp 检查状态
+	bool bIsIdle = false;
+	if (ControlledPawn->ActionComp)
+	{
+		// [Fix] Use GetCurrentAction() instead of CurrentAction pointer
+		bIsIdle = ControlledPawn->ActionComp->GetCurrentAction() == nullptr && 
+				  ControlledPawn->ActionComp->RealTimeActionQueue.Actions.IsEmpty();
+	}
+	if (ControlledPawn->CharaState == ECharaState::Alive && bIsIdle)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Enqueuing FetchAmmo action"));
 
-		if (ControlledPawnActionableInterface)
-		{
-			const FOrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionCollectBullets(
-				TEXT("AC_CollectAmmo"));
-			ControlledPawnActionableInterface->InsertOrionActionToQueue(
-				AddingOrionAction, EActionExecution::RealTime, -1);
-		}
+		const FOrionAction AddingOrionAction = ControlledPawn->InitActionCollectBullets(TEXT("AC_CollectAmmo"));
+		ControlledPawn->InsertOrionActionToQueue(AddingOrionAction, EActionExecution::RealTime, -1);
 	}
 }
 
 
 void AOrionAIController::RegisterDefensiveAIActon()
 {
-	if (ControlledPawn->CharaState == ECharaState::Alive && ControlledPawn->CurrentAction == nullptr && ControlledPawn
-		->CharacterActionQueue.Actions.IsEmpty() && ControlledPawn->InventoryComp->GetItemQuantity(3) > 0)
+	// 确保只在 Defensive 状态下执行
+	if (!ControlledPawn || ControlledPawn->CharaAIState != EAIState::Defensive)
 	{
-		if (AOrionChara* TargetOrionChara = GetClosestOrionCharaByRelation(
-			ERelation::Hostile, ControlledPawn->HostileGroupsIndex, ControlledPawn->FriendlyGroupsIndex))
+		return;
+	}
+
+	// [Fix] 通过 ActionComp 检查状态
+	bool bIsIdle = false;
+	if (ControlledPawn->ActionComp)
+	{
+		// [Fix] Use GetCurrentAction() instead of CurrentAction pointer
+		bIsIdle = ControlledPawn->ActionComp->GetCurrentAction() == nullptr && 
+				  ControlledPawn->ActionComp->RealTimeActionQueue.Actions.IsEmpty();
+	}
+	if (ControlledPawn->CharaState == ECharaState::Alive && bIsIdle && ControlledPawn->InventoryComp->GetItemQuantity(3) > ControlledPawn->LowAmmoThreshold)
+	{
+		if (AActor* TargetActor = GetClosestHostileActor())
 		{
-			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::RegisterDefensiveAIActon: Found target %s"),
-			       *TargetOrionChara->GetName());
+			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::RegisterDefensiveAIActon: Found target %s"), *TargetActor->GetName());
+			const FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange|%s"), *TargetActor->GetName());
 
-			const FString ActionName = FString::Printf(TEXT("AttackOnCharaLongRange|%s"), *TargetOrionChara->GetName());
-
-
-			if (ControlledPawnActionableInterface)
-			{
-				const FOrionAction AddingOrionAction = ControlledPawnActionableInterface->InitActionAttackOnChara(
-					ActionName, TargetOrionChara, FVector());
-				ControlledPawnActionableInterface->InsertOrionActionToQueue(
-					AddingOrionAction, EActionExecution::RealTime, -1);
-			}
+			const FOrionAction AddingOrionAction = ControlledPawn->InitActionAttackOnChara(ActionName, TargetActor, FVector());
+			ControlledPawn->InsertOrionActionToQueue(AddingOrionAction, EActionExecution::RealTime, -1);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Log, TEXT("AOrionAIController::RegisterDefensiveAIActon: No available target found"));
+			// UE_LOG(LogTemp, Log, TEXT("AOrionAIController::RegisterDefensiveAIActon: No available target found"));
 		}
 	}
 }
@@ -170,97 +193,138 @@ void AOrionAIController::OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus St
 	}
 }
 
+AActor* AOrionAIController::GetClosestHostileActor() const
+{
+	AOrionChara* MyControlledPawn = Cast<AOrionChara>(GetPawn());
+	if (!MyControlledPawn || !MyControlledPawn->AttributeComp)
+	{
+		return nullptr;
+	}
+
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	UOrionFactionManager* FactionManager = nullptr;
+	if (UGameInstance* GI = World->GetGameInstance())
+	{
+		FactionManager = GI->GetSubsystem<UOrionFactionManager>();
+	}
+	
+	if (!FactionManager)
+	{
+		return nullptr;
+	}
+
+	const EFaction MyFaction = MyControlledPawn->AttributeComp->ActorFaction;
+	const FVector MyLocation = MyControlledPawn->GetActorLocation();
+
+	// 分别跟踪非 BaseStorage 和 BaseStorage 的最近目标
+	AActor* ClosestNonBaseStorageActor = nullptr;
+	float MinDistSquaredNonBaseStorage = FLT_MAX;
+	AActor* ClosestBaseStorageActor = nullptr;
+	float MinDistSquaredBaseStorage = FLT_MAX;
+
+	// Helper lambda to process actor
+	auto ProcessActor = [&](AActor* Actor)
+	{
+		if (!Actor || Actor == MyControlledPawn) return;
+
+		// Check for AttributeComponent
+		const UOrionAttributeComponent* TargetAttr = Actor->FindComponentByClass<UOrionAttributeComponent>();
+		if (!TargetAttr || !TargetAttr->IsAlive()) return;
+
+		// Check Faction
+		if (!FactionManager->IsHostile(MyFaction, TargetAttr->ActorFaction)) return;
+
+		// Check Distance
+		float Dist2 = FVector::DistSquared(MyLocation, Actor->GetActorLocation());
+		
+		// 根据 IsBaseStorage 分类处理
+		if (TargetAttr->IsBaseStorage)
+		{
+			// BaseStorage 目标：只有在没有非 BaseStorage 目标时才考虑
+			if (Dist2 < MinDistSquaredBaseStorage)
+			{
+				MinDistSquaredBaseStorage = Dist2;
+				ClosestBaseStorageActor = Actor;
+			}
+		}
+		else
+		{
+			// 非 BaseStorage 目标：优先选择
+			if (Dist2 < MinDistSquaredNonBaseStorage)
+			{
+				MinDistSquaredNonBaseStorage = Dist2;
+				ClosestNonBaseStorageActor = Actor;
+			}
+		}
+	};
+
+	// 1. Iterate OrionCharas
+	TArray<AActor*> AllCharas;
+	UGameplayStatics::GetAllActorsOfClass(World, AOrionChara::StaticClass(), AllCharas);
+	for (AActor* Actor : AllCharas)
+	{
+		// Skip dead/incapacitated logic is inside ProcessActor (via IsAlive)
+		// But AOrionChara has specific state (Incapacitated) which might not set Health <= 0 yet?
+		// Actually IsAlive() checks Health > 0.
+		// However, OrionChara::Tick skips logic if Dead/Incapacitated.
+		// Let's assume IsAlive is sufficient or add extra check if needed.
+		// Previous code checked CharaState.
+		if (AOrionChara* Chara = Cast<AOrionChara>(Actor))
+		{
+			if (Chara->CharaState == ECharaState::Dead || Chara->CharaState == ECharaState::Incapacitated) continue;
+		}
+		ProcessActor(Actor);
+	}
+
+	// 2. Iterate OrionActors (Buildings/Ore/etc that have AttributeComponent)
+	// Note: AOrionActor is base for Buildings. Ore might also be AOrionActor.
+	// If the user wants "any object with attribute component", iterating AOrionActor covers most.
+	TArray<AActor*> AllOrionActors;
+	UGameplayStatics::GetAllActorsOfClass(World, AOrionActor::StaticClass(), AllOrionActors);
+	for (AActor* Actor : AllOrionActors)
+	{
+		ProcessActor(Actor);
+	}
+
+	// 3. Iterate standalone OrionStructure actors (not derived from AOrionActor)
+	TArray<AActor*> AllStructures;
+	UGameplayStatics::GetAllActorsOfClass(World, AOrionStructure::StaticClass(), AllStructures);
+	for (AActor* Actor : AllStructures)
+	{
+		// Skip preview/ghost structures to avoid targeting placement previews
+		if (const AOrionStructure* Structure = Cast<AOrionStructure>(Actor))
+		{
+			if (Structure->StructureComponent && Structure->StructureComponent->BIsPreviewStructure)
+			{
+				continue;
+			}
+		}
+		ProcessActor(Actor);
+	}
+
+	// 优先返回非 BaseStorage 目标，只有在没有其他目标时才返回 BaseStorage 目标
+	if (ClosestNonBaseStorageActor)
+	{
+		return ClosestNonBaseStorageActor;
+	}
+	
+	// 如果没有非 BaseStorage 目标，返回 BaseStorage 目标（如果有的话）
+	return ClosestBaseStorageActor;
+}
+
+/*
 AOrionChara* AOrionAIController::GetClosestOrionCharaByRelation(
 	ERelation Relation,
 	const TArray<int32>& HostileGroups,
 	const TArray<int32>& FriendlyGroups
 ) const
 {
-	if (!ControlledPawn)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GetClosest] ControlledPawn is nullptr"));
-		return nullptr;
-	}
-
-	/* 
-	UE_LOG(LogTemp, Log, TEXT("[GetClosest] Relation: %s"),
-	       Relation == ERelation::Hostile ? TEXT("Hostile") :
-	       Relation == ERelation::Friendly ? TEXT("Friendly") : TEXT("Neutral"));
-	UE_LOG(LogTemp, Log, TEXT("[GetClosest] HostileGroups (%d): %s"),
-	       HostileGroups.Num(),
-	       *FString::JoinBy(HostileGroups, TEXT(","), [](int32 Side) { return FString::FromInt(Side); })
-	);
-	UE_LOG(LogTemp, Log, TEXT("[GetClosest] FriendlyGroups (%d): %s"),
-	       FriendlyGroups.Num(),
-	       *FString::JoinBy(FriendlyGroups, TEXT(","), [](int32 Side) { return FString::FromInt(Side); })
-	);
-	*/
-
-	TArray<AActor*> AllActors;
-	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AOrionChara::StaticClass(), AllActors);
-
-	AOrionChara* Closest = nullptr;
-	float MinDistSquared = FLT_MAX;
-	const FVector MyLocation = ControlledPawn->GetActorLocation();
-
-	for (AActor* Actor : AllActors)
-	{
-		if (Actor == ControlledPawn)
-		{
-			continue;
-		}
-
-		AOrionChara* Other = Cast<AOrionChara>(Actor);
-		if (!Other)
-		{
-			continue;
-		}
-
-		int32 OtherSide = Other->CharaSide;
-
-		bool bMatch = false;
-		switch (Relation)
-		{
-		case ERelation::Hostile:
-			bMatch = HostileGroups.Contains(OtherSide);
-			break;
-
-		case ERelation::Friendly:
-			bMatch = FriendlyGroups.Contains(OtherSide);
-			break;
-
-		case ERelation::Neutral:
-			bMatch = !HostileGroups.Contains(OtherSide)
-				&& !FriendlyGroups.Contains(OtherSide);
-			break;
-		}
-
-		if (!bMatch)
-		{
-			UE_LOG(LogTemp, Verbose, TEXT("  - Skipped: relation mismatch"));
-			continue;
-		}
-
-		float Dist2 = FVector::DistSquared(MyLocation, Other->GetActorLocation());
-
-		if (Dist2 < MinDistSquared)
-		{
-			MinDistSquared = Dist2;
-			Closest = Other;
-		}
-	}
-
-	/*
-	if (Closest)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[GetClosest] Final Closest = %s (Dist2=%.2f)"),
-		       *Closest->GetName(), MinDistSquared);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("[GetClosest] No matching AOrionChara found"));
-	}
-	*/
-
-	return Closest;
+	// DEPRECATED IMPLEMENTATION REMOVED FOR BREvITY
+	return nullptr;
 }
+*/

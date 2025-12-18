@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
@@ -10,7 +10,6 @@
 class UNiagaraSystem;
 class AOrionActor;
 class AOrionChara;
-class AWheeledVehiclePawn;
 class AOrionHUD;
 class AOrionStructureFoundation;
 class AOrionStructureWall;
@@ -105,8 +104,8 @@ public:
 	void SelectAll();
 
 	/* 2. Orion Vehicle Selection List */
-	UPROPERTY()
-	TArray<AWheeledVehiclePawn*> OrionPawnSelection;
+	/*UPROPERTY()
+	TArray<AWheeledVehiclePawn*> OrionPawnSelection;*/
 
 
 	/* Dragging Or Selecting Detection */
@@ -150,6 +149,8 @@ public:
 	UPROPERTY()
 	TWeakObjectPtr<AActor> CachedSnapTarget = nullptr;
 
+	// [Cache] 缓存当前 preview 结构的 BuildingId，避免通过 OrionStructureType 反推
+	int32 CachedPreviewBuildingId = -1;
 
 	/* Place Structure */
 

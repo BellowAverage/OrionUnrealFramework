@@ -6,6 +6,7 @@
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "Orion/OrionChara/OrionChara.h"
 #include "OrionUserWidgetProceduralAction.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(
@@ -22,14 +23,37 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* TextActionName = nullptr;
 
+	// Save reference to owner character
+	UPROPERTY(BlueprintReadOnly)
+	AOrionChara* OwnerChara = nullptr;
+
 	UFUNCTION(BlueprintCallable)
-	void SetupActionItem(const FString& InName, int32 InIndex)
+	void SetupActionItem(const FString& InName, int32 InIndex, AOrionChara* InChara)
 	{
 		if (TextActionName)
 		{
 			TextActionName->SetText(FText::FromString(InName));
 		}
 		ItemIndex = InIndex;
+		OwnerChara = InChara;
+	}
+
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override
+	{
+		Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+		UpdateValidityTooltip();
+	}
+
+	void UpdateValidityTooltip()
+	{
+		if (!OwnerChara || ItemIndex == INDEX_NONE)
+		{
+			SetToolTipText(FText::GetEmpty());
+			return;
+		}
+		// Call C++ interface to get extended status (Executing, Blocked, or Condition Not Met)
+		FString StatusStr = OwnerChara->GetActionStatusString(ItemIndex, true);
+		SetToolTipText(FText::FromString(StatusStr));
 	}
 
 

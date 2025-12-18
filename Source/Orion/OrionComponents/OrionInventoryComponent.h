@@ -7,6 +7,8 @@
 #include "OrionInventoryComponent.generated.h"
 
 
+class UOrionInventoryManager;
+
 USTRUCT(BlueprintType)
 struct FOrionInventorySerializable
 {
@@ -32,6 +34,10 @@ class ORION_API UOrionInventoryComponent : public UActorComponent
 
 public:
 	UOrionInventoryComponent();
+
+	/* External Resources References */
+	UPROPERTY() UOrionInventoryManager* InventoryManagerInstance;
+
 
 	const TMap<int32, int32>& GetInventoryMap() const { return InventoryMap; }
 	const TMap<int32, int32>& GetAvailableInventoryMap() const { return AvailableInventoryMap; }

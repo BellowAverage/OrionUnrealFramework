@@ -18,7 +18,4 @@ class ORION_API AOrionStructureFoundation : public AOrionStructure
 
 public:
 	AOrionStructureFoundation();
-	//virtual void OnConstruction(const FTransform& Transform) override;
-
-	virtual void BeginPlay() override;
 };

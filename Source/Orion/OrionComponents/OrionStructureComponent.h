@@ -35,6 +35,7 @@ public:
 	void RegisterTriangleFoundationSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterWallSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 	void RegisterDoubleWallSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
+	void RegisterInclinedRoofSockets(const FVector& StructureLocation, const FRotator& StructureRotation) const;
 
 	/* Orion Structure Rule Type */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Config (Non-null)")

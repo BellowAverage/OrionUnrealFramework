@@ -27,6 +27,7 @@ protected:
 
 private:
 	void UpdateTimeDilationCompensation();
+	void SimulateInitialRotateKick();
 
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	USceneComponent* SceneRoot = nullptr;

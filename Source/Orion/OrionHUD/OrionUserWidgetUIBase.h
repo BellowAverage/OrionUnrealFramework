@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "OrionUserWidgetUIBase.generated.h"
 
 DECLARE_DELEGATE(FOnViewLevelUp);
@@ -29,6 +30,18 @@ public:
 
 	UPROPERTY(meta = (BindWidget))
 	UButton* LoadGame;
+
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* BulletNum = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* StoneNum = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* GoldNum = nullptr;
+
+	UPROPERTY(meta = (BindWidget))
+	UTextBlock* GameClock = nullptr;
 
 	FOnSaveGame OnSaveGame;
 	FOnLoadGame OnLoadGame;
@@ -83,5 +96,10 @@ public:
 		{
 			LoadGame->OnClicked.AddDynamic(this, &UOrionUserWidgetUIBase::OnLoadGameClicked);
 		}
+
+
+		if (BulletNum) BulletNum->SetText(FText::AsNumber(1));
+		if (StoneNum) StoneNum->SetText(FText::AsNumber(12));
+		if (GoldNum) GoldNum->SetText(FText::AsNumber(100));
 	}
 };

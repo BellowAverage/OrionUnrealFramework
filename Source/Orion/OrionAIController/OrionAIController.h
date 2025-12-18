@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -7,7 +7,6 @@
 #include "Orion/OrionChara/OrionChara.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AISenseConfig_Sight.h"
-#include "Orion/OrionInterface/OrionInterfaceActionable.h"
 #include "OrionAIController.generated.h"
 
 UENUM(BlueprintType)
@@ -35,18 +34,18 @@ protected:
 
 	/* Deprecated */
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Orion|AI")
 	UAIPerceptionComponent* AIPerceptionComp;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Orion|AI")
 	UAISenseConfig_Sight* SightConfig;
 
 	UFUNCTION()
 	void OnTargetPerceptionUpdated(AActor* Actor, FAIStimulus Stimulus);
 
-	// AIController Utility Functions
+	// OrionAIControllerInstance Utility Functions
 
-	IOrionInterfaceActionable* ControlledPawnActionableInterface;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Orion|Component") UOrionActionComponent* ActionComponent;
 
 	UPROPERTY()
 	AOrionChara* ControlledPawn;
@@ -58,6 +57,8 @@ protected:
 		const TArray<int>& HostileGroups,
 		const TArray<int>& FriendlyGroups
 	) const;
+
+	AActor* GetClosestHostileActor() const;
 
 	void RegisterDefensiveAIActon();
 	void RegisterFetchingAmmoEvent();

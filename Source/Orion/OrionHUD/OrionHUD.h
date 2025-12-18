@@ -8,6 +8,8 @@
 #include "Orion/OrionHUD/OrionUserWidgetCharaInfo.h"
 #include "OrionHUD.generated.h"
 
+class UOrionFactionManager;
+class UOrionInventoryManager;
 class AOrionPlayerController;
 class UOrionBuildingManager;
 
@@ -24,9 +26,17 @@ public:
 
 	virtual void Tick(float DeltaTime) override;
 
+	UFUNCTION() void UpdatePlayerFactionResourceDisplay();
+
 	/* Reference to External Game Resources */
 	UPROPERTY()
 	UOrionBuildingManager* BuildingManagerInstance;
+
+	UPROPERTY()
+	UOrionInventoryManager* InventoryManagerInstance;
+
+	UPROPERTY()
+	UOrionFactionManager* FactionManagerInstance;
 
 	UPROPERTY()
 	AOrionPlayerController* OrionPlayerControllerInstance;
@@ -47,7 +57,10 @@ public:
 	TSubclassOf<UOrionUserWidgetBuildingMenu> WB_BuildingMenu;
 
 	UPROPERTY()
-	UOrionUserWidgetBuildingMenu* BuildingMenu = nullptr;;
+	UOrionUserWidgetBuildingMenu* BuildingMenu = nullptr;
+
+	UPROPERTY()
+	UOrionUserWidgetUIBase* DeveloperUIBase = nullptr;
 
 	/* Player Operation Menu */
 

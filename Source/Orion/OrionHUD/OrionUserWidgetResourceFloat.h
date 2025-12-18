@@ -17,17 +17,17 @@ class ORION_API UOrionUserWidgetResourceFloat : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	/** 在蓝图中绑定动画 */
+	/** Bind animation in Blueprint */
 	UPROPERTY(Transient, meta = (BindWidgetAnim))
 	UWidgetAnimation* FloatUp;
 
-	/** 在蓝图中绑定控件 */
+	/** Bind widget in Blueprint */
 	UPROPERTY(meta = (BindWidget))
 	UImage* Icon;
 	UPROPERTY(meta = (BindWidget))
 	UTextBlock* DeltaText;
 
-	/** C++ 调用：设置图标 */
+	/** C++ call: Set icon */
 	UFUNCTION(BlueprintCallable)
 	void SetIcon(UTexture2D* InTex) { Icon->SetBrushFromTexture(InTex); }
 
@@ -35,25 +35,25 @@ public:
 	virtual void NativeConstruct() override
 	{
 		Super::NativeConstruct();
-		// 不再使用 BindToAnimationFinished，改为定时销毁
+		// No longer using BindToAnimationFinished, changed to timed destruction
 	}
 
 	UFUNCTION(BlueprintCallable)
 	void PlayFloat()
 	{
 		PlayAnimation(FloatUp);
-		// 动画时长固定 0.8s，0.8s 后自动从父级移除
+		// Animation duration is fixed at 0.8s, automatically remove from parent after 0.8s
 		if (UWorld* World = GetWorld())
 		{
 			FTimerHandle TimerHandle;
 			FTimerDelegate TimerDel;
-			// 直接调用 RemoveFromParent()
+			// Directly call RemoveFromParent()
 			TimerDel.BindUFunction(this, FName("RemoveFromParent"));
 			World->GetTimerManager().SetTimer(
 				TimerHandle,
 				TimerDel,
-				0.8f, // 延迟 0.8 秒
-				false // 不循环
+				0.8f, // Delay 0.8 seconds
+				false // No loop
 			);
 		}
 	}

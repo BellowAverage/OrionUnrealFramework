@@ -2,14 +2,19 @@
 
 
 #include "Orion/OrionGameInstance/OrionBuildingManager.h"
+#include "Orion/OrionGameInstance/OrionGameInstance.h"
 #include "Orion/OrionComponents/OrionStructureComponent.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
 #include "Engine/OverlapResult.h"
 #include "Components/StaticMeshComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Engine/DataTable.h"
 
-const TArray<FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildings = {
+// 硬编码数据（作为后备，当 DataTable 未指定时使用）
+const TArray<FOrionDataBuilding>& UOrionBuildingManager::GetHardcodedBuildings() const
+{
+	static const TArray<FOrionDataBuilding> HardcodedBuildings = {
 	{
 		1, FName(TEXT("SquareFoundation")),
 		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/SquareFoundationSnapshot.SquareFoundationSnapshot")),
@@ -36,12 +41,12 @@ const TArray<FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildings = {
 		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureDoubleWall.BP_OrionStructureDoubleWall_C")),
 		EOrionStructure::DoubleWall
 	},
-	{
+	/*{
 		5, FName(TEXT("BasicRoof")),
 		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/BasicRoofSnapShot.BasicRoofSnapShot")),
 		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureBasicRoof.BP_OrionStructureBasicRoof_C")),
 		EOrionStructure::BasicRoof
-	},
+	},*/
 	{
 		6, FName(TEXT("OrionActorOre")),
 		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorOreSnapshot.OrionActorOreSnapshot")),
@@ -60,7 +65,87 @@ const TArray<FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildings = {
 		FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorStorage.BP_OrionActorStorage_C")),
 		EOrionStructure::None
 	},
-};
+	{
+		9, FName(TEXT("InclinedRoof")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/InclinedRoofSnapshot.InclinedRoofSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureInclinedRoof.BP_OrionStructureInclinedRoof_C")),
+		EOrionStructure::InclinedRoof
+	},
+		{
+		10, FName(TEXT("OrionContainer")),
+		FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionContainerSnapshot.OrionContainerSnapshot")),
+		FString(TEXT("/Game/_Orion/Blueprints/Props/BP_OrionContainer.BP_OrionContainer_C")),
+		EOrionStructure::None
+	},
+	};
+	return HardcodedBuildings;
+}
+
+// 向后兼容的静态成员（已废弃，仅用于向后兼容）
+const TArray<FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildings = []()
+{
+	// 注意：这个静态成员在类实例化之前初始化，无法访问 DataTable
+	// 因此只返回硬编码数据，实际使用应通过 GetOrionDataBuildings() 方法
+	static const TArray<FOrionDataBuilding> StaticBuildings = {
+		{
+			1, FName(TEXT("SquareFoundation")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/SquareFoundationSnapshot.SquareFoundationSnapshot")),
+			FString(TEXT(
+				"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureSquareFoundation.BP_OrionStructureSquareFoundation_C")),
+			EOrionStructure::BasicSquareFoundation
+		},
+		{
+			2, FName(TEXT("TriangleFoundation")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/TriangleFoundationSnapshot.TriangleFoundationSnapshot")),
+			FString(TEXT(
+				"/Game/_Orion/Blueprints/Buildings/BP_OrionStructureTriangleFoundation.BP_OrionStructureTriangleFoundation_C")),
+			EOrionStructure::BasicTriangleFoundation
+		},
+		{
+			3, FName(TEXT("Wall")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/WallSnapshot.WallSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureWall.BP_OrionStructureWall_C")),
+			EOrionStructure::Wall
+		},
+		{
+			4, FName(TEXT("DoubleWallDoor")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/DoubleWallSnapshot.DoubleWallSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureDoubleWall.BP_OrionStructureDoubleWall_C")),
+			EOrionStructure::DoubleWall
+		},
+		{
+			6, FName(TEXT("OrionActorOre")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorOreSnapshot.OrionActorOreSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorOre.BP_OrionActorOre_C")),
+			EOrionStructure::None
+		},
+		{
+			7, FName(TEXT("OrionActorProduction")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorProductionSnapshot.OrionActorProductionSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorProduction.BP_OrionActorProduction_C")),
+			EOrionStructure::None
+		},
+		{
+			8, FName(TEXT("OrionActorStorage")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionActorStorageSnapshot.OrionActorStorageSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/BP_OrionActorStorage.BP_OrionActorStorage_C")),
+			EOrionStructure::None
+		},
+		{
+			9, FName(TEXT("InclinedRoof")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/InclinedRoofSnapshot.InclinedRoofSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/Buildings/BP_OrionStructureInclinedRoof.BP_OrionStructureInclinedRoof_C")),
+			EOrionStructure::InclinedRoof
+		},
+		{
+			10, FName(TEXT("OrionContainer")),
+			FString(TEXT("/Game/_Orion/UI/BuildingSnapshots/OrionContainerSnapshot.OrionContainerSnapshot")),
+			FString(TEXT("/Game/_Orion/Blueprints/Props/BP_OrionContainer.BP_OrionContainer_C")),
+			EOrionStructure::None
+		},
+	};
+	return StaticBuildings;
+}();
 
 const TMap<int32, FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildingsMap = []()
 {
@@ -70,7 +155,6 @@ const TMap<int32, FOrionDataBuilding> UOrionBuildingManager::OrionDataBuildingsM
 		Map.Add(Data.BuildingId, Data);
 	}
 	return Map;
-
 }();
 
 const TMap<EOrionStructure, FVector> UOrionBuildingManager::StructureOriginalScaleMap = {
@@ -79,6 +163,7 @@ const TMap<EOrionStructure, FVector> UOrionBuildingManager::StructureOriginalSca
 	{EOrionStructure::Wall, FVector(1.0f, 1.25f, 1.0f)},
 	{EOrionStructure::DoubleWall, FVector(1.0f, 1.25f, 1.0f)},
 	{EOrionStructure::BasicRoof, FVector(1.25f, 1.25f, 1.0f)},
+	{EOrionStructure::InclinedRoof, FVector(1.25f, 1.25f, 1.0f)},
 };
 
 UOrionBuildingManager::UOrionBuildingManager()
@@ -89,6 +174,15 @@ UOrionBuildingManager::UOrionBuildingManager()
 void UOrionBuildingManager::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
+
+	// 从 GameInstance 获取 DataTable 配置
+	if (UOrionGameInstance* GameInstance = Cast<UOrionGameInstance>(GetGameInstance()))
+	{
+		BuildingDataTable = GameInstance->BuildingDataTable;
+	}
+
+	// 加载建筑数据（优先从 DataTable，否则使用硬编码数据）
+	LoadBuildingDataFromDataTable();
 
 	FWorldDelegates::OnWorldInitializedActors.AddUObject(this, &UOrionBuildingManager::OnWorldInitializedActors);
 }
@@ -592,4 +686,75 @@ TArray<UOrionStructureComponent*> UOrionBuildingManager::GetConnectedNeighbors(A
 	}
 
 	return Result;
+}
+
+// 从 DataTable 加载建筑数据
+void UOrionBuildingManager::LoadBuildingDataFromDataTable()
+{
+	CachedBuildingData.Empty();
+	CachedBuildingDataMap.Empty();
+
+	// 如果指定了 DataTable，优先使用 DataTable 数据
+	if (BuildingDataTable)
+	{
+		TArray<FOrionDataBuildingRow*> Rows;
+		BuildingDataTable->GetAllRows<FOrionDataBuildingRow>(TEXT("LoadBuildingDataFromDataTable"), Rows);
+
+		if (Rows.Num() > 0)
+		{
+			for (const FOrionDataBuildingRow* Row : Rows)
+			{
+				if (Row)
+				{
+					FOrionDataBuilding BuildingData = Row->ToDataBuilding();
+					CachedBuildingData.Add(BuildingData);
+					CachedBuildingDataMap.Add(BuildingData.BuildingId, BuildingData);
+				}
+			}
+
+			UE_LOG(LogTemp, Log, TEXT("[BuildingManager] Loaded %d buildings from DataTable: %s"), 
+				CachedBuildingData.Num(), *BuildingDataTable->GetName());
+			bDataLoaded = true;
+			return;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BuildingManager] DataTable %s is empty, falling back to hardcoded data."), 
+				*BuildingDataTable->GetName());
+		}
+	}
+
+	// 如果未指定 DataTable 或 DataTable 为空，使用硬编码数据
+	const TArray<FOrionDataBuilding>& HardcodedData = GetHardcodedBuildings();
+	CachedBuildingData = HardcodedData;
+	
+	for (const FOrionDataBuilding& Data : HardcodedData)
+	{
+		CachedBuildingDataMap.Add(Data.BuildingId, Data);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[BuildingManager] Using hardcoded building data (%d buildings)."), HardcodedData.Num());
+	bDataLoaded = true;
+}
+
+// 获取建筑数据数组
+const TArray<FOrionDataBuilding>& UOrionBuildingManager::GetOrionDataBuildings() const
+{
+	if (!bDataLoaded)
+	{
+		// 如果数据未加载，立即加载（这种情况不应该发生，但作为安全措施）
+		const_cast<UOrionBuildingManager*>(this)->LoadBuildingDataFromDataTable();
+	}
+	return CachedBuildingData;
+}
+
+// 获取建筑数据映射
+const TMap<int32, FOrionDataBuilding>& UOrionBuildingManager::GetOrionDataBuildingsMap() const
+{
+	if (!bDataLoaded)
+	{
+		// 如果数据未加载，立即加载（这种情况不应该发生，但作为安全措施）
+		const_cast<UOrionBuildingManager*>(this)->LoadBuildingDataFromDataTable();
+	}
+	return CachedBuildingDataMap;
 }

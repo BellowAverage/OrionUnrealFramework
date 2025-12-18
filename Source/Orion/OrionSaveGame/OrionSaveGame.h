@@ -5,8 +5,9 @@
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
 #include "Orion/OrionActor/OrionActor.h"
-#include "Orion/OrionGlobals/EOrionAction.h"
 #include "OrionSaveGame.generated.h"
+
+struct FOrionCharaSerializable;
 
 USTRUCT()
 struct FOrionStructureRecord
